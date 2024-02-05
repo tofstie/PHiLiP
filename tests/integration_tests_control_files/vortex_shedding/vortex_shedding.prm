@@ -64,7 +64,8 @@ subsection flow_solver
   set constant_time_step = 0.05
   #set courant_friedrichs_lewy_number = 0.005
   subsection grid
-    set input_mesh_filename = /home/tyson/t1
+    set input_mesh_filename = ../../meshes/2d_cylinder
+    # FIX file input name
     set use_gmsh_mesh = true
     set grid_degree = 2
   end
