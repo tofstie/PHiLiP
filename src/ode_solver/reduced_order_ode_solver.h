@@ -29,6 +29,9 @@ public:
 
     /// Evaluate steady state solution.
     int steady_state () override;
+    
+    /// Evaluate entropy stable solution
+    int entropy_stable ();
 
     /// Function to evaluate solution update
     void step_in_time(real dt, const bool pseudotime) override;

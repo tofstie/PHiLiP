@@ -36,6 +36,7 @@ set(TESTS_SOURCE
     khi_robustness.cpp
     bound_preserving_limiter_tests.cpp
     naca0012_unsteady_check_quick.cpp
+    vortex_shedding.cpp
     )
 
 foreach(dim RANGE 1 3)
