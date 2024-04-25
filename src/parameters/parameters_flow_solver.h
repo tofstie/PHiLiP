@@ -33,7 +33,8 @@ public:
         leblanc_shock_tube,
         shu_osher_problem,
         advection_limiter,
-        burgers_limiter
+        burgers_limiter,
+        reflective_shock_tube
         };
     FlowCaseType flow_case_type; ///< Selected FlowCaseType from the input file
 

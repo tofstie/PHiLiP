@@ -1,0 +1,43 @@
+# Listing of Parameters
+# ---------------------
+
+set test_type = adaptive_sampling_testing
+
+# Number of dimensions
+set dimension = 1
+
+# The PDE we want to solve.
+set pde_type  = euler
+set run_type = flow_simulation
+# DG formulation
+set use_weak_form = true
+set flux_nodes_type = GL
+
+# Euler
+subsection euler
+  set mach_infinity = 0.1
+end
+
+# Flow Solver
+subsection flow_solver
+    set flow_case_type = reflective_shock_tube
+    set poly_degree = 1
+    set final_time = 0.7
+    set courant_friedrichs_lewy_number = 0.75
+    set adaptive_time_step = true
+    subsection grid
+        set grid_left_bound = -1
+        set grid_right_bound = 1
+        set number_of_grid_elements_per_dimension = 2500
+    end
+end
+
+# ODE solver
+subsection ODE solver
+  set ode_output = quiet
+  set ode_solver_type = runge_kutta
+  set initial_time_step = 0.01
+  #set output_solution_every_x_steps = 100
+  set output_solution_every_dt_time_intervals = 0.025
+  set runge_kutta_method = ssprk3_ex 
+end

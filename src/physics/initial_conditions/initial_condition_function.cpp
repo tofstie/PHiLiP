@@ -650,6 +650,41 @@ real InitialConditionFunction_ShuOsherProblem<dim, nstate, real>
 }
 
 // ========================================================
+// EULER REFLECTED SHOCK INITIAL CONDITION
+// SEE CHAN, ENTROPY STABLE REDUCED ORDER ... , PG 18
+// ========================================================
+template <int dim, int nstate, typename real>
+InitialConditionFunction_ReflectedShock<dim, nstate, real>
+::InitialConditionFunction_ReflectedShock(
+    Parameters::AllParameters const* const param)
+    : InitialConditionFunction_EulerBase<dim, nstate, real>(param)
+    , gamma_gas(param->euler_param.gamma_gas)
+{}
+
+template <int dim, int nstate, typename real>
+real InitialConditionFunction_ReflectedShock<dim, nstate, real>
+::primitive_value(const dealii::Point<dim, real>& point, const unsigned int istate) const
+{
+    real value = 0.0;
+    if constexpr (dim == 1 && nstate == (dim + 2)) {
+        const real x = point[0];
+
+        if (istate == 0) {
+            // density
+            value = 2+0.5*exp(-100*pow(x-0.5,2));
+        }
+        else if (istate == 1) {
+            // x-velocity
+            value = 0.1*exp(-100*pow(x-0.5,2));
+        }
+        else if (istate == 2) {
+            // pressure
+            value = pow(2+0.5*exp(-100*pow(x-0.5,2)),this->gamma_gas); //SET CORRECT GAMMA, double check this
+        }
+    }
+    return value;
+}
+// ========================================================
 // ZERO INITIAL CONDITION
 // ========================================================
 template <int dim, int nstate, typename real>
@@ -734,6 +769,8 @@ InitialConditionFactory<dim,nstate, real>::create_InitialConditionFunction(
         if constexpr (dim==1 && nstate==dim+2)  return std::make_shared<InitialConditionFunction_LeblancShockTube<dim,nstate,real> > (param);
     } else if (flow_type == FlowCaseEnum::shu_osher_problem) {
         if constexpr (dim == 1 && nstate == dim + 2)  return std::make_shared<InitialConditionFunction_ShuOsherProblem<dim, nstate, real> >(param);
+    } else if (flow_type == FlowCaseEnum::reflective_shock_tube) {
+        if constexpr (dim == 1 && nstate == dim + 2) return std::make_shared<InitialConditionFunction_ReflectedShock<dim, nstate, real> > (param);
     } else if (flow_type == FlowCaseEnum::advection_limiter) {
         if constexpr (dim < 3 && nstate == 1)  return std::make_shared<InitialConditionFunction_Advection<dim, nstate, real> >();
     } else if (flow_type == FlowCaseEnum::burgers_limiter) {
@@ -765,6 +802,7 @@ template class InitialConditionFunction_EulerBase <PHILIP_DIM,PHILIP_DIM+2,doubl
 template class InitialConditionFunction_SodShockTube <PHILIP_DIM,PHILIP_DIM+2,double>;
 template class InitialConditionFunction_LeblancShockTube <PHILIP_DIM,PHILIP_DIM+2,double>;
 template class InitialConditionFunction_ShuOsherProblem <PHILIP_DIM, PHILIP_DIM + 2, double>;
+template class InitialConditionFunction_ReflectedShock <PHILIP_DIM, PHILIP_DIM + 2, double>;
 #endif
 #if PHILIP_DIM==3
 template class InitialConditionFunction_TaylorGreenVortex <PHILIP_DIM, PHILIP_DIM+2, double>;

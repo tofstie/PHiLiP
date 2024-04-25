@@ -42,9 +42,11 @@ std::shared_ptr<Triangulation> NonPeriodicCubeFlow<dim,nstate>::generate_grid() 
 
     if (flow_case_type == flow_case_enum::sod_shock_tube
         || flow_case_type == flow_case_enum::leblanc_shock_tube) {
-        left_boundary_id = 1001;
+        left_boundary_id = 1001; 
     } else if (flow_case_type == flow_case_enum::shu_osher_problem) {
         left_boundary_id = 1004;
+    } else if (flow_case_type == flow_case_enum::reflective_shock_tube) {
+        left_boundary_id = 1001; // wall bc // Maybe moe this into if statement above, talk to Sruthi
     }
 
 
