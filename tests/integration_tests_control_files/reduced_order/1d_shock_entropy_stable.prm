@@ -8,7 +8,8 @@ set dimension = 1
 
 # The PDE we want to solve.
 set pde_type  = euler
-set run_type = flow_simulation
+set run_type = integration_test
+set test_type = pod_unsteady
 # DG formulation
 set use_weak_form = true
 set flux_nodes_type = GL

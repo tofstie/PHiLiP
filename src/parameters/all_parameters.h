@@ -201,7 +201,8 @@ public:
         naca0012_unsteady_check_quick,
         homogeneous_isotropic_turbulence_initialization_check,
         low_density,
-        vortex_shedding
+        vortex_shedding,
+        pod_unsteady
     };
     /// Store selected TestType from the input file.
     TestType test_type;
