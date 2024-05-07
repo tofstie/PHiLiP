@@ -46,6 +46,49 @@ void OnlinePOD<dim>::addSnapshot(dealii::LinearAlgebra::distributed::Vector<doub
 }
 
 template <int dim>
+void OnlinePOD<dim>::addEntropySnapshot(dealii::LinearAlgebra::distributed::Vector<double> dg_poly_snapshot,
+                                        dealii::LinearAlgebra::distributed::Vector<double> entropy_varibles_at_q,
+                                        int nstate,
+                                        int n_quad_pts){
+    pcout << "Adding new entropy snapshot to snapshot matrix..." << std::endl;
+    dealii::LinearAlgebra::ReadWriteVector<double> read_snapshot(dg_poly_snapshot.size()+entropy_varibles_at_q.size());
+    VectorXd snapshot(dg_poly_snapshot.size()+entropy_varibles_at_q.size());
+    bool dg_values = true;
+    int poly_idx = 0;
+    int entropy_idx = 0;
+    for(unsigned int i = 0 ; i < snapshot.size(); i++){
+        if(dg_values){
+            snapshot(i) = dg_poly_snapshot(poly_idx);
+            poly_idx++;
+            if(poly_idx % (nstate*n_quad_pts) == 0){
+                dg_values = false;
+            }
+        } else {
+            snapshot(i) = entropy_varibles_at_q(entropy_idx);
+            entropy_idx++;
+            if(entropy_idx % (nstate*n_quad_pts) == 0){
+                dg_values = true;
+            }
+        }
+    }
+    VectorXd eigen_snapshot(snapshot.size());
+    for(unsigned int i = 0 ; i < snapshot.size() ; i++){
+        eigen_snapshot(i) = snapshot(i);
+    }
+    snapshotMatrix.conservativeResize(snapshot.size(), snapshotMatrix.cols()+1);
+    snapshotMatrix.col(snapshotMatrix.cols()-1) = eigen_snapshot;
+
+    //Copy snapshot matrix to dealii Lapack matrix for easy printing to file
+    dealiiSnapshotMatrix.reinit(snapshotMatrix.rows(), snapshotMatrix.cols());
+    for (unsigned int m = 0; m < snapshotMatrix.rows(); m++) {
+        for (unsigned int n = 0; n < snapshotMatrix.cols(); n++) {
+            dealiiSnapshotMatrix.set(m, n, snapshotMatrix(m, n));
+        }
+    }
+
+}
+
+template <int dim>
 void OnlinePOD<dim>::computeBasis() {
     pcout << "Computing POD basis..." << std::endl;
 

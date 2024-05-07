@@ -34,6 +34,9 @@ public:
     /// Maximum value of parameters
     std::vector<double> parameter_max_values;
 
+    /// Number of timesteps before snapshot should be added as snapshot
+    int output_snapshot_every_x_timesteps;
+
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
     /// Parses input file and sets the variables.

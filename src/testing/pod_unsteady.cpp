@@ -8,6 +8,7 @@
 #include "flow_solver/flow_solver.h"
 #include "flow_solver/flow_solver_factory.h"
 #include <cmath>
+#include "operators/operators.h"
 #include "reduced_order/rbf_interpolation.h"
 #include "ROL_Algorithm.hpp"
 #include "ROL_LineSearchStep.hpp"
@@ -19,6 +20,9 @@
 #include <deal.II/base/timer.h>
 #include "tests.h"
 
+// FOR TESTING TYPES
+#include <typeinfo>
+
 namespace PHiLiP {
 namespace Tests {
 
@@ -29,17 +33,17 @@ PODUnsteady<dim,nstate>::PODUnsteady(
     : TestsBase::TestsBase(parameters_input)
     , parameter_handler(parameter_handler_input)
     {
-        pcout << "Initializing POD Test" << std::endl;
+ 
         flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(all_parameters, parameter_handler);
-        pcout << "Flow solver made" << std::endl;
+
         //const bool compute_dRdW = true;
         //flow_solver->dg->assemble_residual(compute_dRdW);
-        pcout << "Assembled Residual" << std::endl;
+
         std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix = std::make_shared<dealii::TrilinosWrappers::SparseMatrix>();
         system_matrix->copy_from(flow_solver->dg->system_matrix);
-        pcout << "System matrix made" << std::endl;
+
         current_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
-        pcout << "Online POD made" << std::endl;
+
     }
 
 template <int dim, int nstate>
@@ -52,7 +56,9 @@ int PODUnsteady<dim,nstate>
 //    , number_of_fixed_times_to_output_solution(ode_param.number_of_fixed_times_to_output_solution)
 //    , output_solution_at_exact_fixed_times(ode_param.output_solution_at_exact_fixed_times):
 const {
-
+    // TOMORROW (7th) 
+    // Look at BC
+    // Get Entropy Varis into a distributed matrix and change the online basis and test
     auto all_param = *this->all_parameters;
     auto flow_solver_param = all_param.flow_solver_param;
     auto ode_param = all_param.ode_solver_param;
@@ -61,9 +67,39 @@ const {
     auto output_solution_at_exact_fixed_times = ode_param.output_solution_at_exact_fixed_times;
     auto final_time = flow_solver_param.final_time;
 
-    int output_snapshot_every_x_timesteps = 100;
+    int output_snapshot_every_x_timesteps = all_param.reduced_order_param.output_snapshot_every_x_timesteps;
     int number_of_timesteps = 0;
     int iteration = 0;
+    dealii::LinearAlgebra::distributed::Vector<double> entropy_snapshots(flow_solver->dg->solution);
+    dealii::QGauss<dim> quad_extra(flow_solver->dg->max_degree);
+    const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
+    dealii::FEValues<dim,dim> fe_values_extra(mapping, flow_solver->dg->fe_collection[flow_solver_param.poly_degree], quad_extra, 
+        dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
+    const unsigned int n_quad_pts  = flow_solver->dg->volume_quadrature_collection[flow_solver_param.poly_degree].size();
+    const unsigned int n_dofs_cell = flow_solver->dg->fe_collection[flow_solver_param.poly_degree].dofs_per_cell;
+    const unsigned int n_shape_fns = n_dofs_cell / nstate; 
+    
+    const Parameters::AllParameters::Flux_Reconstruction FR_Type = all_param.flux_reconstruction_type;
+    // Build Operator Basis
+    OPERATOR::basis_functions<dim,2*dim,double> soln_basis(1, flow_solver->dg->max_degree, flow_solver->dg->high_order_grid->fe_system.tensor_degree());
+    OPERATOR::vol_projection_operator_FR<dim,2*dim,double> soln_basis_projection_oper(1,flow_solver->dg->max_degree, flow_solver->dg->high_order_grid->fe_system.tensor_degree(),
+                                                                                   FR_Type, true);
+    // Build Volume Operators
+    soln_basis.build_1D_volume_operator(flow_solver->dg->oneD_fe_collection_1state[flow_solver->dg->max_degree], flow_solver->dg->oneD_quadrature_collection[flow_solver->dg->max_degree]);
+    soln_basis.build_1D_gradient_operator(flow_solver->dg->oneD_fe_collection_1state[flow_solver->dg->max_degree], flow_solver->dg->oneD_quadrature_collection[flow_solver->dg->max_degree]);
+    soln_basis.build_1D_surface_operator(flow_solver->dg->oneD_fe_collection_1state[flow_solver->dg->max_degree], flow_solver->dg->oneD_face_quadrature);
+    soln_basis.build_1D_surface_gradient_operator(flow_solver->dg->oneD_fe_collection_1state[flow_solver->dg->max_degree], flow_solver->dg->oneD_face_quadrature);
+
+    soln_basis_projection_oper.build_1D_volume_operator(flow_solver->dg->oneD_fe_collection_1state[flow_solver->dg->max_degree], flow_solver->dg->oneD_quadrature_collection[flow_solver->dg->max_degree]);
+    // Build Physics Object
+    Physics::Euler<dim,nstate,double> euler_physics_double
+    = Physics::Euler<dim, nstate, double>(
+            this->all_parameters,
+            all_param.euler_param.ref_length,
+            all_param.euler_param.gamma_gas,
+            all_param.euler_param.mach_inf,
+            all_param.euler_param.angle_of_attack,
+            all_param.euler_param.side_slip_angle);
     dealii::Table<1,double> output_solution_fixed_times;
         // For outputting solution at fixed times
     if(do_output_solution_at_fixed_times && (number_of_fixed_times_to_output_solution > 0)) {
@@ -120,7 +156,7 @@ const {
 
         double next_time_step = time_step;
         pcout << "Advancing solution in time... " << std::endl;
-        pcout << "Timer starting. Test file " << std::endl;
+        pcout << "Timer starting." << std::endl;
         dealii::Timer timer(this->mpi_communicator,false);
         timer.start();
         while(flow_solver->ode_solver->current_time < final_time)
@@ -192,9 +228,73 @@ const {
                     }
                 }
             }
+            // Outputing Snapshots
             if(number_of_timesteps == output_snapshot_every_x_timesteps){
                 number_of_timesteps = 0;
-                current_pod->addSnapshot(flow_solver->dg->solution);
+                unsigned int entropy_idx = 0;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+                for(auto cell = flow_solver->dg->dof_handler.begin_active(); cell != flow_solver->dg->dof_handler.end(); ++cell){
+                    // Calculate Solution at quad poins
+                    std::array<std::vector<double>,nstate> soln_coeff;
+                    std::vector<dealii::types::global_dof_index> current_dofs_indices;
+                    current_dofs_indices.resize(n_dofs_cell);
+                    cell->get_dof_indices (current_dofs_indices);
+                    for (unsigned int idof = 0; idof < n_dofs_cell; ++idof) {
+                        const unsigned int istate = flow_solver->dg->fe_collection[flow_solver_param.poly_degree].system_to_component_index(idof).first;
+                        const unsigned int ishape = flow_solver->dg->fe_collection[flow_solver_param.poly_degree].system_to_component_index(idof).second;
+                        if(ishape == 0)
+                            soln_coeff[istate].resize(n_shape_fns);
+                        soln_coeff[istate][ishape] = flow_solver->dg->solution(current_dofs_indices[idof]);
+                    }
+                    std::array<std::vector<double>,nstate> soln_at_q;
+                    std::vector<std::array<double,nstate>> soln_at_q_for_max_CFL(n_quad_pts);//Need soln written in a different for to use pre-existing max CFL function
+                    // Interpolate each state to the quadrature points using sum-factorization
+                    // with the basis functions in each reference direction.
+                    for(int istate=0; istate<nstate; istate++){
+                        soln_at_q[istate].resize(n_quad_pts);
+                        soln_basis.matrix_vector_mult_1D(soln_coeff[istate], soln_at_q[istate],
+                                                        soln_basis.oneD_vol_operator);
+                        for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+                            soln_at_q_for_max_CFL[iquad][istate] = soln_at_q[istate][iquad];
+                        }
+                    }
+                    //get entropy projected variables
+                    
+                    std::array<std::vector<double>,nstate> entropy_var_at_q;
+                    std::array<std::vector<double>,nstate> projected_entropy_var_at_q;
+                    if (all_param.use_split_form || all_param.use_curvilinear_split_form){
+                        for(int istate=0; istate<nstate; istate++){
+                            entropy_var_at_q[istate].resize(n_quad_pts);
+                            projected_entropy_var_at_q[istate].resize(n_quad_pts);
+                        }
+                        for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+                            std::array<double,nstate> soln_state;
+                            for(int istate=0; istate<nstate; istate++){
+                                soln_state[istate] = soln_at_q[istate][iquad];
+                            }
+                            std::array<double,nstate> entropy_var;
+                            entropy_var = euler_physics_double.compute_entropy_variables(soln_state);
+                            for(int istate=0; istate<nstate; istate++){
+                                entropy_var_at_q[istate][iquad] = entropy_var[istate];
+                            }
+                        }
+                        for(int istate=0; istate<nstate; istate++){
+                            std::vector<double> entropy_var_coeff(n_shape_fns);
+                            soln_basis_projection_oper.matrix_vector_mult_1D(entropy_var_at_q[istate],
+                                                                            entropy_var_coeff,
+                                                                            soln_basis_projection_oper.oneD_vol_operator);
+                            soln_basis.matrix_vector_mult_1D(entropy_var_coeff,
+                                                            projected_entropy_var_at_q[istate],
+                                                            soln_basis.oneD_vol_operator);
+                        }
+                    }
+                    for (unsigned int iquad=0;iquad<n_quad_pts;iquad++){
+                        for (int istate =0; istate < nstate; istate++){
+                            entropy_snapshots(entropy_idx) = projected_entropy_var_at_q[istate][iquad];
+                            entropy_idx++;
+                        }
+                    }
+                }
+                current_pod->addEntropySnapshot(flow_solver->dg->solution,entropy_snapshots,nstate,n_quad_pts);
                 outputSnapshotData(iteration);
                 iteration++;
                 pcout << "Outputed Snapshot Data" << std::endl;

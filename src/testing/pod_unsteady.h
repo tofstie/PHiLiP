@@ -30,8 +30,8 @@ public:
 
     /// Most up to date POD basis
     std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> current_pod;
-    
 
+    
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver;
     /// Number of time steps for every snapshots
     mutable int snapshots_every_x_steps;

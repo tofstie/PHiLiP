@@ -480,7 +480,7 @@ int FlowSolver<dim,nstate>::run() const
         //----------------------------------------------------
         double next_time_step = time_step;
         pcout << "Advancing solution in time... " << std::endl;
-        pcout << "Timer starting. Flow solver " << std::endl;
+        pcout << "Timer starting." << std::endl;
         dealii::Timer timer(this->mpi_communicator,false);
         timer.start();
         while(ode_solver->current_time < final_time)

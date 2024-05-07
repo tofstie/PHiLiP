@@ -36,6 +36,12 @@ public:
     /// Add snapshot
     void addSnapshot(dealii::LinearAlgebra::distributed::Vector<double> snapshot);
 
+    /// Add snapshot with entropy varibles
+    void addEntropySnapshot(dealii::LinearAlgebra::distributed::Vector<double> dg_poly_snapshot,
+                            dealii::LinearAlgebra::distributed::Vector<double> entropy_varibles_at_q,
+                            int nstate,
+                            int n_quad_pts);
+
     /// Compute new POD basis from snapshots
     void computeBasis();
 

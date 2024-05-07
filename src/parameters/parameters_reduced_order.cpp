@@ -30,6 +30,10 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("parameter_max_values", "0.7, 4",
                           dealii::Patterns::List(dealii::Patterns::Double(), 0, 10, ","),
                           "Maximum values for parameters");
+        prm.declare_entry("output_snapshot_every_x_timesteps","0",
+                          dealii::Patterns::Integer(0,dealii::Patterns::Integer::max_int_value),
+                          "Number of Timesteps before snapshot is added"
+                          );
     }
     prm.leave_subsection();
 }
@@ -43,6 +47,7 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         num_halton = prm.get_integer("num_halton");
         recomputation_coefficient = prm.get_integer("recomputation_coefficient");
         path_to_search = prm.get("path_to_search");
+        output_snapshot_every_x_timesteps = prm.get_integer("output_snapshot_every_x_timesteps");
 
         std::string parameter_names_string = prm.get("parameter_names");
         std::unique_ptr<dealii::Patterns::PatternBase> ListPatternNames(new dealii::Patterns::List(dealii::Patterns::Anything(), 0, 10, ",")); //Note, in a future version of dealii, this may change from a unique_ptr to simply the object. Will need to use std::move(ListPattern) in next line.

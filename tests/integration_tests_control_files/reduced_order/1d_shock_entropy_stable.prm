@@ -10,13 +10,25 @@ set dimension = 1
 set pde_type  = euler
 set run_type = integration_test
 set test_type = pod_unsteady
+
 # DG formulation
-set use_weak_form = true
+set use_weak_form = false
 set flux_nodes_type = GL
+
+# NSFR
+set two_point_num_flux_type = CH
+set use_split_form = true
 
 # Euler
 subsection euler
   set mach_infinity = 0.1
+end
+
+# Artical Diffusion
+subsection artificial dissipation
+  set add_artificial_dissipation = true
+  set artificial_dissipation_type = laplacian
+  set mu_artificial_dissipation = 0.0002
 end
 
 # Flow Solver
@@ -38,7 +50,12 @@ subsection ODE solver
   set ode_output = quiet
   set ode_solver_type = runge_kutta
   set initial_time_step = 0.01
-  #set output_solution_every_x_steps = 100
-  set output_solution_every_dt_time_intervals = 0.025
+  #set output_solution_every_x_steps = 50
+  set output_solution_every_dt_time_intervals = 0.01
   set runge_kutta_method = ssprk3_ex 
+end
+
+# Reduced Order Model
+subsection reduced order
+  set output_snapshot_every_x_timesteps = 10
 end
