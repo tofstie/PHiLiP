@@ -41,8 +41,11 @@ PODUnsteady<dim,nstate>::PODUnsteady(
 
         std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix = std::make_shared<dealii::TrilinosWrappers::SparseMatrix>();
         system_matrix->copy_from(flow_solver->dg->system_matrix);
-
-        current_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
+        if(all_parameters->reduced_order_param.path_to_search == "."){
+            current_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
+        } else {
+            offline_pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(flow_solver->dg);
+        }
 
     }
 
@@ -56,10 +59,9 @@ int PODUnsteady<dim,nstate>
 //    , number_of_fixed_times_to_output_solution(ode_param.number_of_fixed_times_to_output_solution)
 //    , output_solution_at_exact_fixed_times(ode_param.output_solution_at_exact_fixed_times):
 const {
-    // TOMORROW (7th) 
-    // Look at BC
-    // Get Entropy Varis into a distributed matrix and change the online basis and test
+    
     auto all_param = *this->all_parameters;
+    if (all_param.reduced_order_param.path_to_search != ".") {return 0;}
     auto flow_solver_param = all_param.flow_solver_param;
     auto ode_param = all_param.ode_solver_param;
     auto do_output_solution_at_fixed_times = ode_param.output_solution_at_fixed_times;
@@ -71,13 +73,14 @@ const {
     int number_of_timesteps = 0;
     int iteration = 0;
     dealii::LinearAlgebra::distributed::Vector<double> entropy_snapshots(flow_solver->dg->solution);
+    dealii::LinearAlgebra::distributed::Vector<double> conservative_snapshots(flow_solver->dg->solution);
     dealii::QGauss<dim> quad_extra(flow_solver->dg->max_degree);
     const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
     dealii::FEValues<dim,dim> fe_values_extra(mapping, flow_solver->dg->fe_collection[flow_solver_param.poly_degree], quad_extra, 
         dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
-    const unsigned int n_quad_pts  = flow_solver->dg->volume_quadrature_collection[flow_solver_param.poly_degree].size();
-    const unsigned int n_dofs_cell = flow_solver->dg->fe_collection[flow_solver_param.poly_degree].dofs_per_cell;
-    const unsigned int n_shape_fns = n_dofs_cell / nstate; 
+    //const unsigned int n_quad_pts  = flow_solver->dg->volume_quadrature_collection[flow_solver_param.poly_degree].size();
+    //const unsigned int n_dofs_cell = flow_solver->dg->fe_collection[flow_solver_param.poly_degree].dofs_per_cell;
+    //const unsigned int n_shape_fns = n_dofs_cell / nstate; 
     
     const Parameters::AllParameters::Flux_Reconstruction FR_Type = all_param.flux_reconstruction_type;
     // Build Operator Basis
@@ -101,6 +104,8 @@ const {
             all_param.euler_param.angle_of_attack,
             all_param.euler_param.side_slip_angle);
     dealii::Table<1,double> output_solution_fixed_times;
+    flow_solver->dg->evaluate_mass_matrices();
+    
         // For outputting solution at fixed times
     if(do_output_solution_at_fixed_times && (number_of_fixed_times_to_output_solution > 0)) {
         output_solution_fixed_times.reinit(number_of_fixed_times_to_output_solution);
@@ -231,6 +236,7 @@ const {
             // Outputing Snapshots
             if(number_of_timesteps == output_snapshot_every_x_timesteps){
                 number_of_timesteps = 0;
+                /*
                 unsigned int entropy_idx = 0;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
                 for(auto cell = flow_solver->dg->dof_handler.begin_active(); cell != flow_solver->dg->dof_handler.end(); ++cell){
                     // Calculate Solution at quad poins
@@ -287,14 +293,18 @@ const {
                                                             soln_basis.oneD_vol_operator);
                         }
                     }
-                    for (unsigned int iquad=0;iquad<n_quad_pts;iquad++){
-                        for (int istate =0; istate < nstate; istate++){
-                            entropy_snapshots(entropy_idx) = projected_entropy_var_at_q[istate][iquad];
+                    for (int istate=0;istate<nstate;istate++){
+                        for (unsigned int iquad =0; iquad < n_quad_pts; iquad++){
+                            entropy_snapshots(entropy_idx) = entropy_var_at_q[istate][iquad];
+                            conservative_snapshots(entropy_idx) = soln_at_q[istate][iquad];
                             entropy_idx++;
                         }
                     }
                 }
-                current_pod->addEntropySnapshot(flow_solver->dg->solution,entropy_snapshots,nstate,n_quad_pts);
+                current_pod->addEntropySnapshot(conservative_snapshots,entropy_snapshots,nstate,n_quad_pts);
+                outputSnapshotData(iteration);
+                */
+                current_pod->addSnapshot(flow_solver->dg->solution);
                 outputSnapshotData(iteration);
                 iteration++;
                 pcout << "Outputed Snapshot Data" << std::endl;
@@ -319,9 +329,22 @@ void PODUnsteady<dim,nstate>
     std::unique_ptr<dealii::TableHandler> snapshot_table = std::make_unique<dealii::TableHandler>();
     std::ofstream solution_out_file("solution_snapshots_iteration_" +  std::to_string(iteration) + ".txt");
     unsigned int precision = 16;
-    current_pod->dealiiSnapshotMatrix.print_formatted(solution_out_file, precision);
+    current_pod->dealiiSnapshotMatrix.print_formatted(solution_out_file, precision, true,0,"0"); // Added fix to 0?
     solution_out_file.close();
 };
+/*
+template <int dim, int nstate>
+void PODUnsteady<dim,nstate>
+::hyperReduction(double tol = 10) const {
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> V = current_pod->getPODBasis();
+    vector b = V.transpose()*flow_solver->dg->global_mass_matrix;
+    vector r = b;
+    std::vector<int> I;
+    while
+}
+*/
+
+
 #if PHILIP_DIM==1
     template class PODUnsteady<PHILIP_DIM,PHILIP_DIM+2>;
 #endif

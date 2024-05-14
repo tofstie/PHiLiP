@@ -26,12 +26,14 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
         , mpi_rank(dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
         , pcout(std::cout, mpi_rank==0)
 {
-    const bool compute_dRdW = true;
-    dg_input->assemble_residual(compute_dRdW);
+    //const bool compute_dRdW = true;
+    //dg->assemble_residual(compute_dRdW); // Curently there is an error with this line ... Was there before I touched it
+    //Additional information: 
+    //Dimension 12288 not equal to 0.
 
     pcout << "Searching files..." << std::endl;
-
-    getPODBasisFromSnapshots();
+    addEntropyVaribles();
+    //getPODBasisFromSnapshots();
 }
 
 template <int dim>
@@ -163,7 +165,139 @@ template <int dim>
 dealii::LinearAlgebra::ReadWriteVector<double> OfflinePOD<dim>::getReferenceState() {
     return referenceState;
 }
+template <int dim>
+bool OfflinePOD<dim>::addEntropyVaribles(){
+    int const nstate = 3; // Program this into varible later
+    Physics::Euler<dim,nstate,double> euler_physics_double
+    = Physics::Euler<dim, nstate, double>(
+            dg->all_parameters,
+            dg->all_parameters->euler_param.ref_length,
+            dg->all_parameters->euler_param.gamma_gas,
+            dg->all_parameters->euler_param.mach_inf,
+            dg->all_parameters->euler_param.angle_of_attack,
+            dg->all_parameters->euler_param.side_slip_angle);
+    bool file_found = false;
+    int num_of_snapshots;
+    int global_quad_points;
+    int n_quad_pts = dg->volume_quadrature_collection[dg->all_parameters->flow_solver_param.poly_degree].size();
+    MatrixXd snapshotMatrix(0,0);
+    MatrixXd density(0,0);
+    MatrixXd momentum(0,0);
+    MatrixXd energy(0,0);
+    std::string path = dg->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
 
+    std::vector<std::filesystem::path> files_in_directory;
+    std::copy(std::filesystem::directory_iterator(path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
+    std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
+
+    for (const auto & entry : files_in_directory){
+        if(std::string(entry.filename()).std::string::find("solution_snapshot") != std::string::npos){
+            pcout << "Processing " << entry << std::endl;
+            file_found = true;
+            std::ifstream myfile(entry);
+            if(!myfile)
+            {
+                pcout << "Error opening file." << std::endl;
+                std::abort();
+            }
+            std::string line;
+            int rows = 0;
+            int cols = 0;
+            //First loop set to count rows and columns
+            while(std::getline(myfile, line)){ //for each line
+                std::istringstream stream(line);
+                std::string field;
+                cols = 0;
+                while (getline(stream, field,' ')){ //parse data values on each line
+                    if (field.empty()){ //due to whitespace
+                        continue;
+                    } else {
+                        cols++;
+                    }
+                }
+                rows++;
+            }
+            // ROWS = nstate*global_quad_pts
+            // COLS = num_of_snapshots
+            num_of_snapshots = cols;
+            global_quad_points = rows/nstate;
+            snapshotMatrix.conservativeResize(rows/nstate, 2*nstate*cols);
+            density.conservativeResize(rows/nstate, cols);
+            momentum.conservativeResize(rows/nstate, cols);
+            energy.conservativeResize(rows/nstate, cols);
+
+            int row = 0;
+            int energy_row = 0;
+            int momentum_row = 0;
+            int density_row = 0;
+            int istate = 0;
+            int i_quad = 0;
+            myfile.clear();
+            myfile.seekg(0); //Bring back to beginning of file
+            //Second loop set to build solutions matrix
+            while(std::getline(myfile, line)){ //for each line
+                std::istringstream stream(line);
+                std::string field;
+                int col = 0;
+                if (i_quad != n_quad_pts) { i_quad++;}
+                else { i_quad = 1;istate++;}
+                if (istate == nstate){ istate = 0;}
+                while (getline(stream, field,' ')) { //parse data values on each line
+                    if (field.empty()) {
+                        continue;
+                    } else {
+                        switch(istate){
+                            case 0:
+                                energy(energy_row,col) = std::stod(field);
+                                break;
+                            case 1:
+                                momentum(momentum_row,col) = std::stod(field);
+                                break;
+                            case 2:
+                                density(density_row,col) = std::stod(field);
+                                break;
+                        }
+                        col++;
+                    }
+                }
+                switch(istate){
+                    case 0:
+                        energy_row++;
+                        break;
+                    case 1:
+                        momentum_row++;
+                        break;
+                    case 2:
+                        density_row++;
+                        break;
+                }
+                row++;
+            }
+            myfile.close();
+        }
+    }
+    std::array<double,nstate> entropy_var;
+    for(int row = 0; row < global_quad_points; row++){
+        for(int col = 0; col < num_of_snapshots; col++){
+            std::array<double,nstate> conservative_soln{{density(row,col),momentum(row,col),energy(row,col)}};
+            entropy_var = euler_physics_double.compute_entropy_variables(conservative_soln);
+            snapshotMatrix(row,col) = density(row,col);
+            snapshotMatrix(row,col+num_of_snapshots) = momentum(row,col);
+            snapshotMatrix(row,col+2*num_of_snapshots) = energy(row,col);
+            snapshotMatrix(row,col+3*num_of_snapshots) = entropy_var[0];
+            snapshotMatrix(row,col+4*num_of_snapshots) = entropy_var[1];
+            snapshotMatrix(row,col+5*num_of_snapshots) = entropy_var[2];
+        }
+    }
+    pcout << "Snapshot matrix generated." << std::endl;
+    std::ofstream file("Entropy_snapshot.txt");
+    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    if (file.is_open()){
+        file << snapshotMatrix.format(CSVFormat);
+    }
+    file.close();
+    return !file_found;
+}
 template class OfflinePOD <PHILIP_DIM>;
 
 }

@@ -18,6 +18,7 @@ set flux_nodes_type = GL
 # NSFR
 set two_point_num_flux_type = CH
 set use_split_form = true
+set conv_num_flux = two_point_flux_with_roe_dissipation
 
 # Euler
 subsection euler
@@ -35,11 +36,11 @@ end
 subsection flow_solver
     set flow_case_type = reflective_shock_tube
     set poly_degree = 1
-    set final_time = 0.7
+    set final_time = 0.75
     set courant_friedrichs_lewy_number = 0.75
-    set adaptive_time_step = true
+    set adaptive_time_step = true # I believe this does not work
     subsection grid
-        set grid_left_bound = -1
+        set grid_left_bound = 0
         set grid_right_bound = 1
         set number_of_grid_elements_per_dimension = 2500
     end
@@ -58,4 +59,5 @@ end
 # Reduced Order Model
 subsection reduced order
   set output_snapshot_every_x_timesteps = 10
+  set path_to_search = /home/tyson/Codes/PHiLiP/build_debug
 end

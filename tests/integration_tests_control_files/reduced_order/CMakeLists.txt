@@ -113,9 +113,9 @@ add_test(
 # =======================================
 # 1D Euler Shock Entropy Stable solution
 # =======================================
-configure_file(1d_shock_entropy_stable.prm 1d_shock_entropy_stable.prm COPYONLY)
+configure_file(1d_shock_entropy_stable_online.prm 1d_shock_entropy_stable_online.prm COPYONLY)
 add_test(
         NAME 1D_EULER_SHOCK_ENTROPY_STABLE
-        COMMAND mpirun -np ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_1D -i ${CMAKE_CURRENT_BINARY_DIR}/1d_shock_entropy_stable.prm
+        COMMAND mpirun -np ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_1D -i ${CMAKE_CURRENT_BINARY_DIR}/1d_shock_entropy_stable_online.prm
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )

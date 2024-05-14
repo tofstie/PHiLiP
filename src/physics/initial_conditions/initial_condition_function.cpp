@@ -671,15 +671,15 @@ real InitialConditionFunction_ReflectedShock<dim, nstate, real>
 
         if (istate == 0) {
             // density
-            value = 2+0.5*exp(-100*pow(x-0.5,2));
+            value = 2+0.5*exp(-100*pow((x-0.5),2));
         }
         else if (istate == 1) {
             // x-velocity
-            value = 0.1*exp(-100*pow(x-0.5,2));
+            value = 0.1*exp(-100*pow((x-0.5),2));
         }
         else if (istate == 2) {
             // pressure
-            value = pow(2+0.5*exp(-100*pow(x-0.5,2)),this->gamma_gas); //SET CORRECT GAMMA, double check this
+            value = pow((2+0.5*exp(-100*pow((x-0.5),2))),this->gamma_gas);
         }
     }
     return value;

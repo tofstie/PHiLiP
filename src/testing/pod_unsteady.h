@@ -4,6 +4,7 @@
 #include <deal.II/numerics/vector_tools.h>
 #include "parameters/all_parameters.h"
 #include "reduced_order/pod_basis_online.h"
+#include "reduced_order/pod_basis_offline.h"
 #include "reduced_order/rom_test_location.h"
 #include <eigen/Eigen/Dense>
 #include "reduced_order/nearest_neighbors.h"
@@ -30,7 +31,7 @@ public:
 
     /// Most up to date POD basis
     std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> current_pod;
-
+    std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> offline_pod;
     
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver;
     /// Number of time steps for every snapshots
@@ -41,7 +42,7 @@ public:
 
     /// Output Snapshots
     void outputSnapshotData(int iteration) const;
-
+    //void hyperReduction(double tol = 10) const;
     /// Compute Hyper-reduction points
     //std::tuple<int,int> computeHyperReduction(dealii::TrilinosWrappers::SparseMatrix V, dealii::LinearAlgebra::distributed::Vector w) const;
 };

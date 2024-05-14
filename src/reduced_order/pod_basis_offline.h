@@ -54,6 +54,15 @@ public:
     /** Used as std::cout, but only prints if mpi_rank == 0
      */
     dealii::ConditionalOStream pcout;
+
+    //📣 Code below is Hyper-Reduction, maybe move this depending on the requirements later on
+    /// 
+
+    bool addEntropyVaribles();
+
+    /*
+    void compute_hyper_reduction(MatrixXd V_target, MatrixXd w_target);
+    */
 };
 
 }
