@@ -32,8 +32,13 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
                           "Maximum values for parameters");
         prm.declare_entry("output_snapshot_every_x_timesteps","0",
                           dealii::Patterns::Integer(0,dealii::Patterns::Integer::max_int_value),
-                          "Number of Timesteps before snapshot is added"
-                          );
+                          "Number of Timesteps before snapshot is added");
+        prm.declare_entry("number_nodal_modes", "0",
+                          dealii::Patterns::Integer(0, dealii::Patterns::Integer::max_int_value),
+                          "Number of Nodal Modes used in reduced basis");
+        prm.declare_entry("entropy_varibles_in_snapshots", "false",
+                           dealii::Patterns::Bool(),
+                           "Adds Entropy varibles to snapshots, false by default");
     }
     prm.leave_subsection();
 }
@@ -48,7 +53,8 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         recomputation_coefficient = prm.get_integer("recomputation_coefficient");
         path_to_search = prm.get("path_to_search");
         output_snapshot_every_x_timesteps = prm.get_integer("output_snapshot_every_x_timesteps");
-
+        number_nodal_modes = prm.get_integer("number_nodal_modes");
+        entropy_varibles_in_snapshots = prm.get_bool("entropy_varibles_in_snapshots");
         std::string parameter_names_string = prm.get("parameter_names");
         std::unique_ptr<dealii::Patterns::PatternBase> ListPatternNames(new dealii::Patterns::List(dealii::Patterns::Anything(), 0, 10, ",")); //Note, in a future version of dealii, this may change from a unique_ptr to simply the object. Will need to use std::move(ListPattern) in next line.
         parameter_names = dealii::Patterns::Tools::Convert<decltype(parameter_names)>::to_value(parameter_names_string, ListPatternNames);

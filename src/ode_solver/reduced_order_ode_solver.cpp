@@ -105,18 +105,24 @@ int ReducedOrderODESolver<dim,real,MeshType>::steady_state ()
 }
 
 template <int dim, typename real, typename MeshType>
-void ReducedOrderODESolver<dim,real,MeshType>::step_in_time (real /*dt*/, const bool /*pseudotime*/)
+void ReducedOrderODESolver<dim,real,MeshType>::step_in_time (real dt, const bool pseudotime)
 {
     const bool compute_dRdW = true;
     this->dg->assemble_residual(compute_dRdW);
-
     this->dg->system_matrix *= -1.0;
-
+    this->current_time += dt;
+    if (pseudotime){
+        const double CFL = dt;
+        this->dg->time_scaled_mass_matrices(CFL);
+        this->dg->add_time_scaled_mass_matrices();
+    } else {
+        this->dg->add_mass_matrices(1.0/dt);
+    }
     if ((this->ode_param.ode_output) == Parameters::OutputEnum::verbose &&
         (this->current_iteration%this->ode_param.print_iteration_modulo) == 0 ) {
         this->pcout << " Evaluating system update... " << std::endl;
     }
-
+ 
     const Epetra_CrsMatrix epetra_system_matrix = this->dg->system_matrix.trilinos_matrix();
     const Epetra_CrsMatrix epetra_pod_basis = pod->getPODBasis()->trilinos_matrix();
     std::shared_ptr<Epetra_CrsMatrix> epetra_test_basis = generate_test_basis(epetra_system_matrix, epetra_pod_basis);
@@ -178,7 +184,7 @@ void ReducedOrderODESolver<dim,real,MeshType>::step_in_time (real /*dt*/, const 
     if (iline == maxline) {
         step_length = 1.0;
         this->pcout << " Line Search (Case 2): Increase nonlinear residual tolerance by a factor " << std::endl;
-        this->pcout << " Line search failed. Will accept any valid residual less than " << reduction_tolerance_2 << " times the current " << initial_residual << "residual. " << std::endl;
+        this->pcout << " Line search failed. Will accept any valid residual less than " << reduction_tolerance_2 << " times the current " << initial_residual << " residual. " << std::endl;
         epetra_solution.Update(1, epetra_solution_update, 1);
         this->dg->assemble_residual();
         epetra_test_basis->Multiply(true, epetra_right_hand_side, epetra_reduced_rhs);

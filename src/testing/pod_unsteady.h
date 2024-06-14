@@ -42,6 +42,12 @@ public:
 
     /// Output Snapshots
     void outputSnapshotData(int iteration) const;
+    /// Output L2 Error
+    void CalculateL2Error (std::shared_ptr <dealii::TableHandler> L2error_data_table, 
+                   Physics::Euler<dim,dim+2,double> euler_physics_double,
+                   int iteration) const;
+    std::array<std::vector<double>,4> compute_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const;
+    std::array<double,2> integrate_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const;
     //void hyperReduction(double tol = 10) const;
     /// Compute Hyper-reduction points
     //std::tuple<int,int> computeHyperReduction(dealii::TrilinosWrappers::SparseMatrix V, dealii::LinearAlgebra::distributed::Vector w) const;

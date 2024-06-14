@@ -316,7 +316,7 @@ std::unique_ptr< TestsBase > TestsFactory<dim,nstate,MeshType>
     } else if(test_type == Test_enum::vortex_shedding) {
         if constexpr (dim==2 && nstate==dim+2) return std::make_unique<VortexShedding<dim, nstate>>(parameters_input, parameter_handler_input);
     } else if(test_type== Test_enum::pod_unsteady) {
-        if constexpr (dim==1 && nstate==dim+2) return std::make_unique<PODUnsteady<dim, nstate>>(parameters_input, parameter_handler_input);
+        if constexpr (nstate==dim+2) return std::make_unique<PODUnsteady<dim, nstate>>(parameters_input, parameter_handler_input);
     } else {
         std::cout << "Invalid test. You probably forgot to add it to the list of tests in tests.cpp" << std::endl;
         std::abort();

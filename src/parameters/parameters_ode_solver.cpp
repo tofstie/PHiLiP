@@ -40,6 +40,7 @@ void ODESolverParam::declare_parameters (dealii::ParameterHandler &prm)
                           " implicit | "
                           " rrk_explicit | "
                           " pod_galerkin | "
+                          " pod_galerkin_rk_solver | "
                           " pod_petrov_galerkin"),
                           "Type of ODE solver to use."
                           "Choices are "
@@ -47,6 +48,7 @@ void ODESolverParam::declare_parameters (dealii::ParameterHandler &prm)
                           " implicit | "
                           " rrk_explicit | "
                           " pod_galerkin | "
+                          " pod_galerkin_rk_solver | "
                           " pod_petrov_galerkin>.");
 
         prm.declare_entry("nonlinear_max_iterations", "500000",
@@ -147,16 +149,18 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
 
         // Assign ode_solver_type and the allocate AD matrix dRdW flag
         const std::string solver_string = prm.get("ode_solver_type");
-        if (solver_string == "runge_kutta")              { ode_solver_type = ODESolverEnum::runge_kutta_solver;
-                                                           allocate_matrix_dRdW = false; }
-        else if (solver_string == "implicit")            { ode_solver_type = ODESolverEnum::implicit_solver;
-                                                           allocate_matrix_dRdW = true; }
-        else if (solver_string == "rrk_explicit")        { ode_solver_type = ODESolverEnum::rrk_explicit_solver;
-                                                           allocate_matrix_dRdW = false; }
-        else if (solver_string == "pod_galerkin")        { ode_solver_type = ODESolverEnum::pod_galerkin_solver;
-                                                           allocate_matrix_dRdW = true; }
-        else if (solver_string == "pod_petrov_galerkin") { ode_solver_type = ODESolverEnum::pod_petrov_galerkin_solver;
-                                                           allocate_matrix_dRdW = true; }
+        if (solver_string == "runge_kutta")                 { ode_solver_type = ODESolverEnum::runge_kutta_solver;
+                                                              allocate_matrix_dRdW = false; }
+        else if (solver_string == "implicit")               { ode_solver_type = ODESolverEnum::implicit_solver;
+                                                              allocate_matrix_dRdW = true; }
+        else if (solver_string == "rrk_explicit")           { ode_solver_type = ODESolverEnum::rrk_explicit_solver;
+                                                              allocate_matrix_dRdW = false; }
+        else if (solver_string == "pod_galerkin")           { ode_solver_type = ODESolverEnum::pod_galerkin_solver;
+                                                              allocate_matrix_dRdW = true; }
+        else if (solver_string == "pod_petrov_galerkin")    { ode_solver_type = ODESolverEnum::pod_petrov_galerkin_solver;
+                                                              allocate_matrix_dRdW = true; }
+        else if (solver_string == "pod_galerkin_rk_solver") { ode_solver_type = ODESolverEnum::pod_galerkin_rk_solver;
+                                                              allocate_matrix_dRdW = true;}
 
         nonlinear_steady_residual_tolerance  = prm.get_double("nonlinear_steady_residual_tolerance");
         nonlinear_max_iterations = prm.get_integer("nonlinear_max_iterations");

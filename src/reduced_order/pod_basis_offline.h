@@ -36,7 +36,10 @@ public:
     bool getPODBasisFromSnapshots();
 
     /// POD basis
+    void calculatePODBasis(MatrixXd snapshots, std::string reference_type);
+
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> basis;
+    Eigen::MatrixXd snapshotMatrix;
 
     /// Reference state
     dealii::LinearAlgebra::ReadWriteVector<double> referenceState;
@@ -58,8 +61,11 @@ public:
     //📣 Code below is Hyper-Reduction, maybe move this depending on the requirements later on
     /// 
 
-    bool addEntropyVaribles();
+    bool getEntropyPODBasisFromSnapshots();
 
+    bool enrichPOD();
+
+    void debugMatrix(dealii::FullMatrix<double> M);
     /*
     void compute_hyper_reduction(MatrixXd V_target, MatrixXd w_target);
     */

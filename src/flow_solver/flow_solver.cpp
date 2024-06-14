@@ -50,13 +50,6 @@ FlowSolver<dim, nstate>::FlowSolver(
         dg->allocate_system(false,false,false);
     }
 
-    if(ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_solver || ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver){
-        std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
-        ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod);
-    }
-    else{
-        ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg);
-    }
 
     flow_solver_case->display_flow_solver_setup(dg);
 
@@ -90,11 +83,52 @@ FlowSolver<dim, nstate>::FlowSolver(
         // Initialize solution
         SetInitialCondition<dim,nstate,double>::set_initial_condition(flow_solver_case->initial_condition_function, dg, &all_param);
     }
+
     dg->solution.update_ghost_values();
-    
+    if( ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_solver || 
+        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver ||
+        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_rk_solver)
+    { 
+        std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
+        ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod);
+    }
+    else{
+        ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg);
+    }
     // Allocate ODE solver after initializing DG
     ode_solver->allocate_ode_system();
+        if(flow_solver_param.restart_computation_from_file == true) {
+        if(dim == 1) {
+            pcout << "Error: restart_computation_from_file is not possible for 1D. Set to false." << std::endl;
+            std::abort();
+        }
 
+        if (flow_solver_param.steady_state == true) {
+            pcout << "Error: Restart capability has not been fully implemented / tested for steady state computations." << std::endl;
+            std::abort();
+        }
+
+        // Initialize solution from restart file
+        pcout << "Initializing solution from restart file..." << std::flush;
+        const std::string restart_filename_without_extension = get_restart_filename_without_extension(flow_solver_param.restart_file_index);
+#if PHILIP_DIM>1
+        dg->triangulation->load(flow_solver_param.restart_files_directory_name + std::string("/") + restart_filename_without_extension);
+        
+        // Note: Future development with hp-capabilities, see section "Note on usage with DoFHandler with hp-capabilities"
+        // ----- Ref: https://www.dealii.org/current/doxygen/deal.II/classparallel_1_1distributed_1_1SolutionTransfer.html
+        dealii::LinearAlgebra::distributed::Vector<double> solution_no_ghost;
+        solution_no_ghost.reinit(dg->locally_owned_dofs, this->mpi_communicator);
+        dealii::parallel::distributed::SolutionTransfer<dim, dealii::LinearAlgebra::distributed::Vector<double>, dealii::DoFHandler<dim>> solution_transfer(dg->dof_handler);
+        solution_transfer.deserialize(solution_no_ghost);
+        dg->solution = solution_no_ghost; //< assignment
+#endif
+        pcout << "done." << std::endl;
+    } else {
+        // Initialize solution
+        SetInitialCondition<dim,nstate,double>::set_initial_condition(flow_solver_case->initial_condition_function, dg, &all_param);
+    }
+    
+    
     // output a copy of the input parameters file
     if(flow_solver_param.output_restart_files == true) {
         pcout << "Writing a reference copy of the inputted parameters (.prm) file... " << std::flush;

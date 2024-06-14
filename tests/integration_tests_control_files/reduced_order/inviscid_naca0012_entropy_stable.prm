@@ -65,8 +65,7 @@ subsection flow_solver
   set poly_degree = 0
   set steady_state = true
   subsection grid
-    set input_mesh_filename = /home/tyson/Codes/PHiLiP/tests/meshes/naca0012_hopw_ref1
-    #../../meshes/naca0012_hopw_ref1
+    set input_mesh_filename = ../../meshes/naca0012_hopw_ref1
   end
 end
 

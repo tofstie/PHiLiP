@@ -13,6 +13,7 @@ set(ODE_SOURCE
     pod_galerkin_ode_solver.cpp
     pod_petrov_galerkin_ode_solver.cpp
     reduced_order_ode_solver.cpp
+    pod_galerkin_rk_ode_solver.cpp
     JFNK_solver/jacobian_vector_product.cpp
     JFNK_solver/JFNK_solver.cpp)
 

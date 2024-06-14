@@ -37,8 +37,15 @@ public:
     /// Number of timesteps before snapshot should be added as snapshot
     int output_snapshot_every_x_timesteps;
 
+    /// Number of nodal modes to be used in reduced order basis
+    int number_nodal_modes;
+    
+    /// Whether to include entropy varibles in snapshot
+    bool entropy_varibles_in_snapshots;
+
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
+    
     /// Parses input file and sets the variables.
     void parse_parameters (dealii::ParameterHandler &prm);
 

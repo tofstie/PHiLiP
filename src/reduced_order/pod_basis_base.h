@@ -4,7 +4,7 @@
 #include <deal.II/numerics/vector_tools.h>
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
-
+#include <eigen/Eigen/Dense>
 namespace PHiLiP {
 namespace ProperOrthogonalDecomposition {
 
@@ -21,6 +21,9 @@ public:
 
     /// Function to return reference state
     virtual dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() = 0;
+
+    /// Matrix containing snapshots, Fix this later, does not work
+    Eigen::MatrixXd snapshotMatrix;
 };
 
 }

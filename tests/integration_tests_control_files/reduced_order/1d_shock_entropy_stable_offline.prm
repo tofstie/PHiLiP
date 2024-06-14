@@ -1,8 +1,6 @@
 # Listing of Parameters
 # ---------------------
 
-set test_type = adaptive_sampling_testing
-
 # Number of dimensions
 set dimension = 1
 
@@ -12,12 +10,12 @@ set run_type = integration_test
 set test_type = pod_unsteady
 
 # DG formulation
-set use_weak_form = false
+set use_weak_form = true
 set flux_nodes_type = GL
 
 # NSFR
 set two_point_num_flux_type = CH
-set use_split_form = true
+# set use_split_form = true
 set conv_num_flux = two_point_flux_with_roe_dissipation
 
 # Euler
@@ -25,7 +23,8 @@ subsection euler
   set mach_infinity = 0.1
 end
 
-# Artical Diffusion
+# Artical Diffusion 
+# Not implemented in Strong DG
 subsection artificial dissipation
   set add_artificial_dissipation = true
   set artificial_dissipation_type = laplacian
@@ -49,7 +48,8 @@ end
 # ODE solver
 subsection ODE solver
   set ode_output = quiet
-  set ode_solver_type = runge_kutta
+  set ode_solver_type = pod_galerkin
+  #set ode_solver_type = runge_kutta
   set initial_time_step = 0.01
   #set output_solution_every_x_steps = 50
   set output_solution_every_dt_time_intervals = 0.01

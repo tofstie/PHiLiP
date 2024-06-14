@@ -32,7 +32,7 @@ public:
 
     ///Function to get POD reference state
     dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() override;
-
+    Eigen::MatrixXd snapshotMatrix;
     /// Add snapshot
     void addSnapshot(dealii::LinearAlgebra::distributed::Vector<double> snapshot);
 
@@ -57,8 +57,6 @@ public:
     /// LAPACK matrix of snapshots for nice printing
     dealii::LAPACKFullMatrix<double> dealiiSnapshotMatrix;
 
-    /// Matrix containing snapshots
-    MatrixXd snapshotMatrix;
 
     const MPI_Comm mpi_communicator; ///< MPI communicator.
     const int mpi_rank; ///< MPI rank.
