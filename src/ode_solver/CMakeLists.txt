@@ -15,7 +15,8 @@ set(ODE_SOURCE
     reduced_order_ode_solver.cpp
     pod_galerkin_rk_ode_solver.cpp
     JFNK_solver/jacobian_vector_product.cpp
-    JFNK_solver/JFNK_solver.cpp)
+    JFNK_solver/JFNK_solver.cpp
+    hyper_reduced_petrov_galerkin_ode_solver.cpp)
 
 foreach(dim RANGE 1 3)
     # Output library

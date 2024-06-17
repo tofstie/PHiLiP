@@ -40,7 +40,7 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
 template <int dim>
 bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
     bool file_found = false;
-    snapshotMatrix.resize(0,0);
+    snapshotMatrix(0,0);
     std::string path = dg->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
     std::string reference_type = "mean";
     std::vector<std::filesystem::path> files_in_directory;
@@ -177,6 +177,11 @@ std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> OfflinePOD<dim>::getPODB
 template <int dim>
 dealii::LinearAlgebra::ReadWriteVector<double> OfflinePOD<dim>::getReferenceState() {
     return referenceState;
+}
+
+template <int dim>
+MatrixXd OfflinePOD<dim>::getSnapshotMatrix() {
+    return snapshotMatrix;
 }
 template <int dim>
 bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
