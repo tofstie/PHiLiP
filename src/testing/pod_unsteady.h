@@ -43,7 +43,8 @@ public:
     /// Output Snapshots
     void outputSnapshotData(int iteration) const;
     /// Output L2 Error
-    void CalculateL2Error (std::shared_ptr <dealii::TableHandler> L2error_data_table, 
+    void CalculateL2Error (std::shared_ptr <dealii::TableHandler> L2error_data_table,
+                   FlowSolver::FlowSolver<dim,nstate> FOM_flow_solver,
                    Physics::Euler<dim,dim+2,double> euler_physics_double,
                    int iteration) const;
     std::array<std::vector<double>,4> compute_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const;

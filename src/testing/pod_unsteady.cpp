@@ -104,6 +104,17 @@ const {
             all_param.euler_param.side_slip_angle);
     dealii::Table<1,double> output_solution_fixed_times;
     flow_solver->dg->evaluate_mass_matrices();
+
+    // Full Order flow solver (For L2 Errors)
+    
+    Parameters::AllParameters FOM_param = *(TestsBase::all_parameters);
+    using ODESolverEnum = Parameters::ODESolverParam::ODESolverEnum;
+    using OutputEnum = Parameters::OutputEnum;
+    dealii::ParameterHandler dummy_handler;
+    FOM_param.ode_solver_param.ode_solver_type = ODESolverEnum::runge_kutta_solver;
+    FOM_param.ode_solver_param.ode_output = OutputEnum::quiet;
+    const Parameters::AllParameters FOM_param_const = FOM_param;
+    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> FOM_flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&FOM_param_const, dummy_handler);
     
         // For outputting solution at fixed times
     if(do_output_solution_at_fixed_times && (number_of_fixed_times_to_output_solution > 0)) {
@@ -160,7 +171,7 @@ const {
         if(all_parameters->reduced_order_param.path_to_search == "."){
              current_pod->addSnapshot(flow_solver->dg->solution);
         } else {
-            CalculateL2Error(L2error_data_table,euler_physics_double,iteration);
+            CalculateL2Error(L2error_data_table,*FOM_flow_solver,euler_physics_double,iteration);
         }
         double next_time_step = time_step;
         pcout << "Advancing solution in time... " << std::endl;
@@ -312,7 +323,7 @@ const {
                     current_pod->addSnapshot(flow_solver->dg->solution);
                     pcout << "Outputed Snapshot Data" << std::endl;
                 } else { // 
-                    CalculateL2Error(L2error_data_table,euler_physics_double,iteration);
+                    CalculateL2Error(L2error_data_table,*FOM_flow_solver,euler_physics_double,iteration);
                     
 
                 }
@@ -636,7 +647,8 @@ std::array<double,2> PODUnsteady<dim, nstate>
 
 template <int dim, int nstate>
 void PODUnsteady<dim, nstate>
-::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2error_data_table, 
+::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2error_data_table,
+                   FlowSolver::FlowSolver<dim,nstate> FOM_flow_solver,
                    Physics::Euler<dim,dim+2,double> euler_physics_double,
                    int iteration) const{
     const double current_time = flow_solver->ode_solver->current_time;
@@ -647,35 +659,33 @@ void PODUnsteady<dim, nstate>
             FOM_solution(m) = offline_pod->snapshotMatrix(m,iteration);
         }
     }
-    Parameters::AllParameters FOM_param = *(TestsBase::all_parameters);
-    using ODESolverEnum = Parameters::ODESolverParam::ODESolverEnum;
-    using OutputEnum = Parameters::OutputEnum;
-    dealii::ParameterHandler dummy_handler;
-    FOM_param.ode_solver_param.ode_solver_type = ODESolverEnum::runge_kutta_solver;
-    FOM_param.ode_solver_param.ode_output = OutputEnum::quiet;
-    const Parameters::AllParameters FOM_param_const = FOM_param;
-    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> FOM_flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&FOM_param_const, dummy_handler);
-    FOM_flow_solver->dg->solution = FOM_solution;
-    const bool compute_dRdW = true;
+    FOM_flow_solver.dg->solution = FOM_solution;
+    //const bool compute_dRdW = false;
     // Here
-    FOM_flow_solver->dg->assemble_residual(compute_dRdW);
+    //FOM_flow_solver.dg->assemble_residual(compute_dRdW);
     
     std::array<std::vector<double>,4> FOM_quantities;
-    FOM_quantities = compute_quantities(*FOM_flow_solver->dg,euler_physics_double);
+    FOM_quantities = compute_quantities(*FOM_flow_solver.dg,euler_physics_double);
     std::array<std::vector<double>,4> ROM_quantities;
     ROM_quantities = compute_quantities(*flow_solver->dg,euler_physics_double);
 
     std::array<double,4> L2_error {{0,0,0,0}};
+    std::array<double,4> FOM_sum {{0,0,0,0}};
     std::array<double,2> FOM_integrated_values {{0,0}};
     std::array<double,2> ROM_integrated_values {{0,0}};
 
-    FOM_integrated_values = integrate_quantities(*FOM_flow_solver->dg,euler_physics_double);
+    FOM_integrated_values = integrate_quantities(*FOM_flow_solver.dg,euler_physics_double);
     ROM_integrated_values = integrate_quantities(*flow_solver->dg,euler_physics_double);
 
     for(unsigned int iquad = 0; iquad < FOM_quantities[0].size(); iquad++ ){
         for(int i = 0; i < 4; i++){
             L2_error[i] += std::pow((FOM_quantities[i][iquad]-ROM_quantities[i][iquad]),2);
+            FOM_sum[i] += std::pow(FOM_quantities[i][iquad],2);
         }
+    }
+    for (int i = 0; i < 4; i++){
+        L2_error[i] /= FOM_sum[i];
+        L2_error[i] = std::sqrt(L2_error[i]);
     }
 
     std::array<std::string,4> L2_labels {{"density_l2","pressure_l2","tke_l2","entropy_l2"}};

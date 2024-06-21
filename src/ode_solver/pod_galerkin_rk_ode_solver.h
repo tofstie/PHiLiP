@@ -36,8 +36,12 @@ public:
     std::shared_ptr<Epetra_CrsMatrix> generate_test_basis(const Epetra_CrsMatrix &epetra_system_matrix, const Epetra_CrsMatrix &pod_basis);
 
     /// Generate reduced LHS
-    std::shared_ptr<Epetra_CrsMatrix> generate_reduced_lhs(const Epetra_CrsMatrix epetra_system_matrix, Epetra_CrsMatrix test_basis);
+    std::shared_ptr<Epetra_CrsMatrix> generate_reduced_lhs(const Epetra_CrsMatrix &epetra_system_matrix, const Epetra_CrsMatrix &test_basis);
+
+
+    
 protected:
+    //std::shared_ptr<Epetra_CrsMatrix> reduced_lhs;
     /// Stores Butcher tableau a and b, which specify the RK method
     std::shared_ptr<RKTableauBase<dim,real,MeshType>> butcher_tableau;
     /// Implicit solver for diagonally-implicit RK methods, using Jacobian-free Newton-Krylov
@@ -45,10 +49,17 @@ protected:
     /// Storage for the derivative at each Runge-Kutta stage
     std::vector<dealii::LinearAlgebra::distributed::Vector<double>> rk_stage;
 
+    std::vector<dealii::LinearAlgebra::distributed::Vector<double>> reduced_rk_stage;
     /// Indicator for zero diagonal elements; used to toggle implicit solve.
     std::vector<bool> butcher_tableau_aii_is_zero;
-
-    void epetra_to_dealii(Epetra_Vector &epetra_vector, dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector);
+    Epetra_CrsMatrix epetra_pod_basis;
+    Epetra_CrsMatrix epetra_system_matrix;
+    std::shared_ptr<Epetra_CrsMatrix> epetra_test_basis;
+    std::shared_ptr<Epetra_CrsMatrix> epetra_reduced_lhs;
+    int Multiply(Epetra_CrsMatrix &epetra_matrix, dealii::LinearAlgebra::distributed::Vector<double> &input_dealii_vector,
+                 dealii::LinearAlgebra::distributed::Vector<double> &output_dealii_vector, dealii::IndexSet index_set, bool transpose);
+    void epetra_to_dealii(Epetra_Vector &epetra_vector, dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector, dealii::IndexSet index_set);
+    void debug_Epetra(Epetra_CrsMatrix &epetra_matrix);
 };
 }
 }

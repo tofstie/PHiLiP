@@ -41,4 +41,4 @@ gmsh_meshes/joukowski/pg2d.py
 gmsh_meshes/joukowski/plot3d.py
 gmsh_meshes/joukowski/vtk.py
 doc/doxygen.cfg
-.vscode/launch.json
+.vscode/*
