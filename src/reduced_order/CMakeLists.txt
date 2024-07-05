@@ -14,7 +14,8 @@ set(SOURCE
     adaptive_sampling_base.cpp
     assemble_ECSW_training_data_base.cpp
     hrom_test_location.cpp
-    hyper_reduced_sampling_error_updated.cpp)
+    hyper_reduced_sampling_error_updated.cpp
+    assemble_greedy_residual.cpp)
 
 foreach(dim RANGE 1 3)
     # Output library

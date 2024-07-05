@@ -13,7 +13,7 @@ set test_type = pod_unsteady
 
 # DG formulation
 set use_weak_form = false
-set flux_nodes_type = GL
+set flux_nodes_type = GLL
 
 # NSFR
 set two_point_num_flux_type = CH
@@ -25,11 +25,16 @@ subsection euler
   set mach_infinity = 0.1
 end
 
-# Artical Diffusion
+# Artical Diffusion Does not work on strong dg
 subsection artificial dissipation
   set add_artificial_dissipation = true
   set artificial_dissipation_type = laplacian
   set mu_artificial_dissipation = 0.0002
+end
+
+# Limiter
+subsection limiter
+  set use_tvb_limiter = true
 end
 
 # Flow Solver

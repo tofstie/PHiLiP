@@ -19,10 +19,14 @@
 #include "reduced_order/halton.h"
 #include "reduced_order/min_max_scaler.h"
 #include <deal.II/base/timer.h>
+#include "reduced_order/assemble_greedy_residual.h"
 #include "tests.h"
 
 // FOR TESTING TYPES
 #include <typeinfo>
+#include <limits>
+
+
 
 namespace PHiLiP {
 namespace Tests {
@@ -33,20 +37,34 @@ PODUnsteady<dim,nstate>::PODUnsteady(
     const dealii::ParameterHandler &parameter_handler_input)
     : TestsBase::TestsBase(parameters_input)
     , parameter_handler(parameter_handler_input)
+    , flow_solver(FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(all_parameters, parameter_handler))
+    , all_param(*parameters_input)
+    , flow_solver_param(all_param.flow_solver_param)
+    , ode_param(all_param.ode_solver_param)
+    , do_output_solution_at_fixed_times(ode_param.output_solution_at_fixed_times)
+    , number_of_fixed_times_to_output_solution(ode_param.number_of_fixed_times_to_output_solution)
+    , output_solution_at_exact_fixed_times(ode_param.output_solution_at_exact_fixed_times)
+    , final_time(flow_solver_param.final_time)
+    , output_snapshot_every_x_timesteps(all_param.reduced_order_param.output_snapshot_every_x_timesteps)
     {
- 
-        flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(all_parameters, parameter_handler);
-
         //const bool compute_dRdW = true;
         //flow_solver->dg->assemble_residual(compute_dRdW);
-
-        std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix = std::make_shared<dealii::TrilinosWrappers::SparseMatrix>();
-        system_matrix->copy_from(flow_solver->dg->system_matrix);
         if(all_parameters->reduced_order_param.path_to_search == "."){
+            std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix = std::make_shared<dealii::TrilinosWrappers::SparseMatrix>();
+            system_matrix->copy_from(flow_solver->dg->system_matrix);
             current_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
         } else {
             offline_pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(flow_solver->dg);
         }
+        
+        if(false){ // Am I doing hyper reduction?!
+            auto ode_solver_type = ode_param.ode_solver_type;
+            HyperReduction::AssembleGreedyRes<dim,nstate> hyper_reduction(&all_param, parameter_handler, flow_solver->dg, offline_pod, ode_solver_type);
+            hyper_reduction.build_initial_weights();
+            hyper_reduction.build_initial_target();
+            hyper_reduction.build_problem();
+        }
+        
 
     }
 
@@ -60,15 +78,6 @@ int PODUnsteady<dim,nstate>
 //    , number_of_fixed_times_to_output_solution(ode_param.number_of_fixed_times_to_output_solution)
 //    , output_solution_at_exact_fixed_times(ode_param.output_solution_at_exact_fixed_times):
 const {
-    auto all_param = *this->all_parameters;
-    auto flow_solver_param = all_param.flow_solver_param;
-    auto ode_param = all_param.ode_solver_param;
-    auto do_output_solution_at_fixed_times = ode_param.output_solution_at_fixed_times;
-    auto number_of_fixed_times_to_output_solution = ode_param.number_of_fixed_times_to_output_solution;
-    auto output_solution_at_exact_fixed_times = ode_param.output_solution_at_exact_fixed_times;
-    auto final_time = flow_solver_param.final_time;
-
-    int output_snapshot_every_x_timesteps = all_param.reduced_order_param.output_snapshot_every_x_timesteps;
     int number_of_timesteps = 0;
     int iteration = 0;
     dealii::LinearAlgebra::distributed::Vector<double> entropy_snapshots(flow_solver->dg->solution);
@@ -116,7 +125,7 @@ const {
     const Parameters::AllParameters FOM_param_const = FOM_param;
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> FOM_flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&FOM_param_const, dummy_handler);
     
-        // For outputting solution at fixed times
+    // For outputting solution at fixed times
     if(do_output_solution_at_fixed_times && (number_of_fixed_times_to_output_solution > 0)) {
         output_solution_fixed_times.reinit(number_of_fixed_times_to_output_solution);
         
@@ -199,7 +208,7 @@ const {
 
             // advance solution
             //Online
-                flow_solver->ode_solver->step_in_time(time_step,false); // pseudotime==false
+            flow_solver->ode_solver->step_in_time(time_step,false); // pseudotime==false
 
             // Compute the unsteady quantities, write to the dealii table, and output to file
             flow_solver->flow_solver_case->compute_unsteady_data_and_write_to_table(flow_solver->ode_solver, flow_solver->dg, unsteady_data_table);
@@ -324,14 +333,14 @@ const {
                     pcout << "Outputed Snapshot Data" << std::endl;
                 } else { // 
                     CalculateL2Error(L2error_data_table,*FOM_flow_solver,euler_physics_double,iteration);
-                    
-
                 }
                 iteration++;
             }
         } // closing while loop
         timer.stop();
-        outputSnapshotData(iteration);
+        if(all_parameters->reduced_order_param.path_to_search == "."){
+            outputSnapshotData(iteration);
+        }
         pcout << "Timer stopped. " << std::endl;
         const double max_wall_time = dealii::Utilities::MPI::max(timer.wall_time(), this->mpi_communicator);
         pcout << "Elapsed wall time (mpi max): " << max_wall_time << " seconds." << std::endl;

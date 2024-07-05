@@ -40,9 +40,9 @@ public:
 
     /// POD basis
     void calculatePODBasis(MatrixXd snapshots, std::string reference_type);
+    
 
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> basis;
-    Eigen::MatrixXd snapshotMatrix;
 
     /// Reference state
     dealii::LinearAlgebra::ReadWriteVector<double> referenceState;
@@ -68,6 +68,8 @@ public:
     /// 
 
     bool getEntropyPODBasisFromSnapshots();
+
+    bool getEntropyProjPODBasisFromSnapshots();
 
     bool enrichPOD();
 

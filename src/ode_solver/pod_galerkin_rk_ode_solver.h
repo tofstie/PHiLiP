@@ -59,7 +59,9 @@ protected:
     int Multiply(Epetra_CrsMatrix &epetra_matrix, dealii::LinearAlgebra::distributed::Vector<double> &input_dealii_vector,
                  dealii::LinearAlgebra::distributed::Vector<double> &output_dealii_vector, dealii::IndexSet index_set, bool transpose);
     void epetra_to_dealii(Epetra_Vector &epetra_vector, dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector, dealii::IndexSet index_set);
+    //void dealii_to_epetra(dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector, Epetra_Vector &epetra_vector);
     void debug_Epetra(Epetra_CrsMatrix &epetra_matrix);
+    void head(Epetra_Vector &epetra_vector, int number);
 };
 }
 }

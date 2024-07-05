@@ -101,7 +101,16 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
         this->dg->solution = this->rk_stage[i];
 
         // Not including limiter yet as not sure of implications on ROM
-
+        if (this->limiter) {
+            this->limiter->limit(this->dg->solution,
+                this->dg->dof_handler,
+                this->dg->fe_collection,
+                this->dg->volume_quadrature_collection,
+                this->dg->high_order_grid->fe_system.tensor_degree(),
+                this->dg->max_degree,
+                this->dg->oneD_fe_collection_1state,
+                this->dg->oneD_quadrature_collection);
+        }
         //set the DG current time for unsteady source terms
         this->dg->set_current_time(this->current_time + this->butcher_tableau->get_c(i)*dt);
         //solve the system's right hand side
@@ -113,15 +122,19 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
             // Not implmenting this yet as requires editting DG base
         } else{
             dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
-            Epetra_Vector eptra_rhs(Epetra_DataAccess::Copy, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
-            Epetra_Vector epetra_reduced_rhs(epetra_pod_basis.DomainMap());
+            Epetra_Vector eptra_rhs(Epetra_DataAccess::View, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
+            Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
             std::ofstream epetra_rhs_file("eptra_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
             eptra_rhs.Print(epetra_rhs_file);
+            //head(eptra_rhs, 10);
             epetra_test_basis->Multiply(true,eptra_rhs,epetra_reduced_rhs);
-
+            //head(epetra_reduced_rhs, 10);
+            //std::cout << "Epetra Reduced RHS: " << epetra_reduced_rhs[0] << std::endl;
             std::ofstream reduced_file("epetra_reduced_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
             epetra_reduced_rhs.Print(reduced_file);
-
+            if (false) {
+                head(epetra_reduced_rhs, 10);
+            }
             Epetra_Vector epetra_rk_stage_i(epetra_reduced_lhs->DomainMap()); // Ensure this is correct as well, since LHS is not transpose might need to be rangeMap
             Epetra_LinearProblem linearProblem(epetra_reduced_lhs.get(), &epetra_rk_stage_i, &epetra_reduced_rhs);
             //std::cout << linearProblem.CheckInput() << std::endl;
@@ -137,12 +150,14 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
             //std::cout << "Rows :" << epetra_reduced_lhs->NumGlobalRows() << "Cols :" << epetra_reduced_lhs->NumGlobalCols() <<std::endl;
             Solver.Solve();
             epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, reduced_index);
-            std::ofstream system_file("epetra_rk_stage_i" + std::to_string(i) + ".txt");
+            std::ofstream system_file("epetra_rk_stage_i" + std::to_string(i) + "Processor" + std::to_string(this->mpi_rank) + ".txt");
+            std::ofstream dealii_rk_stage_file("dealii_rk_stage_i" + std::to_string(i) + "Processor" + std::to_string(this->mpi_rank) + ".txt");
             epetra_rk_stage_i.Print(system_file);
-            this->reduced_rk_stage[i] = dealii_reduced_stage_i; // This needs to be reduced_rk_stage
-            
+            dealii_reduced_stage_i.print(dealii_rk_stage_file);
+            this->reduced_rk_stage[i] = dealii_reduced_stage_i;
         }
 }
+
 //std::cout << "Cut" << std::endl;
 this->modified_time_step = dt;
 for (int i = 0; i < n_rk_stages; ++i){
@@ -167,7 +182,18 @@ for (int i = 0; i < n_rk_stages; ++i){
     }
 }
 this->dg->solution = this->solution_update; // u_0 + W*u_np1 = u_0 + W*u_n + dt* sum(W * k_i * b_i)
+if (this->limiter) {
+    this->limiter->limit(this->dg->solution,
+        this->dg->dof_handler,
+        this->dg->fe_collection,
+        this->dg->volume_quadrature_collection,
+        this->dg->high_order_grid->fe_system.tensor_degree(),
+        this->dg->max_degree,
+        this->dg->oneD_fe_collection_1state,
+        this->dg->oneD_quadrature_collection);
+}
 ++(this->current_iteration);
+//this->pcout << this->current_iteration << std::endl;
 this->current_time += dt;
 
 }
@@ -205,7 +231,6 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::allocate_ode_syst
     if(this->all_parameters->use_inverse_mass_on_the_fly == false) {
         this->pcout << " evaluating inverse mass matrix..." << std::flush;
         this->dg->evaluate_mass_matrices(true); // creates and stores global inverse mass matrix
-
     }
 
     this->rk_stage.resize(n_rk_stages);
@@ -346,18 +371,43 @@ void PODGalerkinRKODESolver<dim,real,n_rk_stages,MeshType>::epetra_to_dealii(Epe
                                                                              dealii::IndexSet index_set)
 {
     const Epetra_BlockMap &epetra_map = epetra_vector.Map();
-
+    /*
+    std::ofstream dealii_to_epetra_map_file("dealii_map" + std::to_string(this->mpi_rank) + ".txt");
+    std::ofstream epetra_to_dealii_map_file("epetra_map" + std::to_string(this->mpi_rank) + ".txt");
+    dealii::LinearAlgebra::distributed::Vector<double> dealii_to_epetra_map(index_set, this->mpi_communicator);
+    for(unsigned int i = 0; i < dealii_to_epetra_map.size(); i++){
+        if(dealii_to_epetra_map.in_local_range(i)){
+            dealii_to_epetra_map[i] = i;
+        }
+    }
+    dealii_to_epetra_map.print(dealii_to_epetra_map_file);
+    Epetra_Vector epetra_to_dealii_map(Epetra_DataAccess::Copy, epetra_map, dealii_to_epetra_map.begin());
+    epetra_to_dealii_map.Print(epetra_to_dealii_map_file);
+    */
     dealii_vector.reinit(index_set,this->mpi_communicator); // Need one for different size (reduced), one approach is to take in an IndexSet
     for(int i = 0; i < epetra_map.NumMyElements();++i){
-        int global_idx = epetra_map.GID(i);
-        if(dealii_vector.in_local_range(global_idx)){
-            dealii_vector[global_idx] = epetra_vector[i];
+        int epetra_global_idx = epetra_map.GID(i);
+        int dealii_global_idx = epetra_global_idx;
+        if(dealii_vector.in_local_range(dealii_global_idx)){
+            dealii_vector[dealii_global_idx] = epetra_vector[epetra_global_idx];
         }
     }
     dealii_vector.compress(dealii::VectorOperation::insert);
 
 }
-
+/*
+template <int dim, typename real, int n_rk_stages, typename MeshType>
+void PODGalerkinRKODESolver<dim, real, n_rk_stages,MeshType>::dealii_to_epetra(dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector,
+                                                                               Epetra_Vector &epetra_vector)
+{
+    for(unsigned int i = 0; i < dealii_vector.size(); i++){
+        if(dealii_vector.in_local_range(i)){
+            epetra_vector.ReplaceGlobalValues(1,&dealii_vector[i],&i);
+        }
+    }
+    return;
+}
+*/
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::debug_Epetra(Epetra_CrsMatrix &epetra_matrix){
         this->pcout << "Number of rows: " << epetra_matrix.NumGlobalRows() << std::endl;
@@ -365,6 +415,15 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::debug_Epetra(Epet
         this->pcout << "Number of non-zeros: " << epetra_matrix.NumGlobalNonzeros() << std::endl;
         this->pcout << "Row Map: " << epetra_matrix.RowMap() << std::endl;
         this->pcout << "Col Map: " << epetra_matrix.ColMap() << std::endl;
+}
+
+template <int dim, typename real, int n_rk_stages, typename MeshType>
+void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::head(Epetra_Vector &epetra_vector, int number){
+    std::cout << "|\tLocal Index\t|\tValue\t|\tRank\t|" << std::endl;
+    for(int i = 0; i < number; i++){
+        std::cout <<"|\t" << std::to_string(i) <<"\t\t|" << std::scientific << std::to_string(epetra_vector[i]) << "|\t" << std::to_string(this->mpi_rank) << "\t|" << std::endl;
+    }
+    return;
 }
 
 

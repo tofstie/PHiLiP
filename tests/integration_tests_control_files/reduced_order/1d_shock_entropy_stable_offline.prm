@@ -10,8 +10,8 @@ set run_type = integration_test
 set test_type = pod_unsteady
 
 # DG formulation
-set use_weak_form = true
-set flux_nodes_type = GL
+set use_weak_form = false
+set flux_nodes_type = GLL
 
 # NSFR
 set two_point_num_flux_type = CH
@@ -31,6 +31,10 @@ subsection artificial dissipation
   set mu_artificial_dissipation = 0.0002
 end
 
+subsection limiter
+  set use_tvb_limiter = true
+end
+
 # Flow Solver
 subsection flow_solver
     set flow_case_type = reflective_shock_tube
@@ -48,7 +52,7 @@ end
 # ODE solver
 subsection ODE solver
   set ode_output = quiet
-  set ode_solver_type = pod_galerkin
+  set ode_solver_type = pod_galerkin_rk_solver
   #set ode_solver_type = runge_kutta
   set initial_time_step = 0.01
   #set output_solution_every_x_steps = 50
@@ -59,5 +63,6 @@ end
 # Reduced Order Model
 subsection reduced order
   set output_snapshot_every_x_timesteps = 10
-  set path_to_search = /home/tyson/Codes/PHiLiP/build_debug
+  set path_to_search = /home/tyson/Codes/PHiLiP/build_release
+  set entropy_varibles_in_snapshots = true
 end

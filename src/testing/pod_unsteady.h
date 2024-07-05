@@ -29,11 +29,21 @@ public:
     /// Parameter handler for storing the .prm file being ran
     const dealii::ParameterHandler &parameter_handler;
 
+    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver;
+
+    const Parameters::AllParameters all_param; ///< All parameters
+    const Parameters::FlowSolverParam flow_solver_param; ///< Flow solver parameters
+    const Parameters::ODESolverParam ode_param; ///< ODE solver parameters
+
+    const bool do_output_solution_at_fixed_times; ///< Flag for outputting solution at fixed times
+    const unsigned int number_of_fixed_times_to_output_solution; ///< Number of fixed times to output the solution
+    const bool output_solution_at_exact_fixed_times;///< Flag for outputting the solution at exact fixed times by decreasing the time step on the fly
+    const double final_time; ///< Final time of solution
+    const int output_snapshot_every_x_timesteps;
     /// Most up to date POD basis
     std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> current_pod;
     std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> offline_pod;
     
-    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver;
     /// Number of time steps for every snapshots
     mutable int snapshots_every_x_steps;
 
