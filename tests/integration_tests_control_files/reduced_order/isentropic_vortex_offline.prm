@@ -34,6 +34,10 @@ subsection euler
   set mach_infinity = 1.195228609334 #=sqrt(2/1.4)
 end
 
+subsection linear solver
+  set linear_solver_output = quiet
+end
+
 subsection limiter
   set bound_preserving_limiter = positivity_preservingZhang2010
 end
@@ -56,6 +60,6 @@ end
 subsection reduced order
   set output_snapshot_every_x_timesteps = 10
   set path_to_search = /home/tyson/Codes/PHiLiP/build_release
-  set entropy_varibles_in_snapshots = true
+  set entropy_varibles_in_snapshots = false
   set adaptation_tolerance = 0.000003
 end

@@ -85,6 +85,7 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
     // Storing Varibles to access after while loop
     dealii::LinearAlgebra::distributed::Vector<double> alpha_g;
     dealii::IndexSet m_index_g;
+    unsigned int old_i = -1; /// Setting this to UINT_MAX to avoid old_i being the same as i. Might need to think of a more elegant solution
     while(residual.l2_norm()/b_distributed.l2_norm() > this->all_parameters->reduced_order_param.adaptation_tolerance && non_zeros <= snapshots_and_weights){
     /// 1. Compute new point i
         // Reduce J to columns of y
@@ -291,6 +292,11 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
         non_zeros = size_of_set_z; // Equal to Cardinality of set z
         alpha_g.reinit(alpha);
         alpha_g.import(alpha,dealii::VectorOperation::insert);
+        if(old_i != i){ // Remove posibility of infinite loops, might be better to add a random point from set y instead or a iter counter 
+            old_i = i;
+        } else {
+            break;
+        }
     };
     // Building weights of set z
     dealii::LinearAlgebra::distributed::Vector<double> initial_weights_set_z(alpha_g);
@@ -299,10 +305,11 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
         initial_weights_set_z[set_iter] = this->initial_weights[*idx];
         set_iter++;
     }
-     this->final_weights.reinit(alpha_g);
+    this->final_weights.reinit(alpha_g);
     for(unsigned int idx = 0; idx <  this->final_weights.size(); idx++){
         this->final_weights[idx] = sqrt(initial_weights_set_z[idx])*alpha_g[idx];
     }
+    this->final_weights.print(std::cout);
     return;
 }
 

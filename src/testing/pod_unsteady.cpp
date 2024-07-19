@@ -57,7 +57,7 @@ PODUnsteady<dim,nstate>::PODUnsteady(
             offline_pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(flow_solver->dg);
         }
         
-        if(false){ // Am I doing hyper reduction?!
+        if(true){ // Am I doing hyper reduction?!
             auto ode_solver_type = ode_param.ode_solver_type;
             HyperReduction::AssembleGreedyRes<dim,nstate> hyper_reduction(&all_param, parameter_handler, flow_solver->dg, offline_pod, ode_solver_type);
             hyper_reduction.build_initial_weights();

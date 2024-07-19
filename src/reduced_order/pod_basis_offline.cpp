@@ -130,7 +130,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(snapshotMatrixCentered);
     MatrixXd pod_basis_one = svd_one.matrixU();
     /// This commented sections adds a col of 1 to the LSV and preforms another SVD.
-    
+    /*
     VectorXd ones = VectorXd::Ones(pod_basis_one.rows());
     pod_basis_one.conservativeResize(pod_basis_one.rows(),pod_basis_one.cols()+1);
     pod_basis_one.col(pod_basis_one.cols()-1) = ones;
@@ -139,7 +139,25 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     VectorXd singular_values = svd.singularValues();
     std::ofstream sing_file("singular_values.txt");
     sing_file << singular_values;
-    //MatrixXd pod_basis = pod_basis_one; // Comment this line out when wanting to use 1's
+    */
+    MatrixXd pod_basis = pod_basis_one; // Comment this line out when wanting to use 1's
+    if (!num_of_modes == 0){
+        Assert(num_of_modes > pod_basis.cols(),
+         dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
+        // 📢 MatrixXd pod_basis_n_modes = Eigen::MatrixXd
+        Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all,Eigen::seqN(0,num_of_modes));
+        pod_basis = pod_basis_n_modes;
+    }
+
+    /*
+    fullBasis.reinit(snapshots.rows(), snapshots.cols());
+
+    for (unsigned int m = 0; m < snapshots.rows(); m++) {
+        for (unsigned int n = 0; n < snapshots.cols(); n++) {
+            fullBasis.set(m, n, snapshots(m, n));
+        }
+    }
+    */
     fullBasis.reinit(pod_basis.rows(), pod_basis.cols());
 
     for (unsigned int m = 0; m < pod_basis.rows(); m++) {
@@ -147,15 +165,11 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
             fullBasis.set(m, n, pod_basis(m, n));
         }
     }
-
+    
     std::ofstream out_file("POD_basis.txt");
     unsigned int precision = 16;
     fullBasis.print_formatted(out_file, precision);
-    if (!num_of_modes == 0){
-        Assert(num_of_modes > pod_basis.cols(),
-         dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
-        // 📢 MatrixXd pod_basis_n_modes = Eigen::MatrixXd
-    }
+   
     const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
     Epetra_Map system_matrix_map = epetra_system_matrix.RowMap();
     Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy, system_matrix_map, pod_basis.cols());
@@ -340,18 +354,20 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
                 switch(istate){
                     case energy_case:
                         snapshotMatrix(solution_idx+istate*n_quad_pts,col) = energy(row,col);
-                        
+                        snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[nstate-istate-1];
                         break;
                     case density_case:
                         snapshotMatrix(solution_idx+istate*n_quad_pts,col) = density(row,col);
+                        snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[nstate-istate-1];
                         break;
                     default:
                         snapshotMatrix(solution_idx+istate*n_quad_pts,col) = momentum[istate-1](row,col);
+                        snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[istate];
                         break;
 
 
                 }
-                snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[istate];//entropy_var[nstate-istate-1];
+                //snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[nstate-istate-1];
                 /* OLD
                 snapshotMatrix(solution_idx+2*n_quad_pts,col) = density(row,col);
                 snapshotMatrix(solution_idx+1*n_quad_pts,col) = momentum(row,col);
