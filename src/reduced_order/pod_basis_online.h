@@ -36,6 +36,13 @@ public:
     /// Function to get snapshot matrix used to build POD basis
     MatrixXd getSnapshotMatrix() override;
     Eigen::MatrixXd snapshotMatrix;
+
+    /// This function is not defined for online basis calculations
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getSkewSymmetric() override;
+
+    /// This function is not defined for online basis calculations
+    MatrixXd getTestBasis() override;
+    
     /// Add snapshot
     void addSnapshot(dealii::LinearAlgebra::distributed::Vector<double> snapshot);
 

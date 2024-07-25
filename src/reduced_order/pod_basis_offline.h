@@ -35,6 +35,12 @@ public:
     /// Function to get snapshot matrix used to build POD basis
     MatrixXd getSnapshotMatrix() override;
 
+    /// Function to return Skew-Symmetric Q
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getSkewSymmetric() override;
+
+    /// Function to return Vt
+    MatrixXd getTestBasis() override;
+
     /// Read snapshots to build POD basis
     bool getPODBasisFromSnapshots();
 
@@ -55,6 +61,12 @@ public:
 
     /// Matrix containing snapshots
     MatrixXd snapshotMatrix;
+
+    /// Q - Symmetric Skew Matrix
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> Q;
+
+    /// Vt - Test Galerkin Matrix
+    Eigen::MatrixXd Vt;
 
     const MPI_Comm mpi_communicator; ///< MPI communicator.
     const int mpi_rank; ///< MPI rank.

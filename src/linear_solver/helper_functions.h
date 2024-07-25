@@ -14,6 +14,7 @@
 #include <Epetra_MultiVector.h>
 #include <Epetra_LinearProblem.h>
 #include <EpetraExt_MatrixMatrix.h>
+#include <deal.II/lac/lapack_full_matrix.h>
 
 /// Helper functions for transferring information between Epetra and Eigen structures
 
@@ -59,5 +60,9 @@ M load_csv (const std::string & path) {
 }
 
 MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra);
+
+MatrixXd lapack_to_eig_matrix(dealii::LAPACKFullMatrix<double> &lapack_matrix);
+
+dealii::LAPACKFullMatrix<double> eig_to_lapack_matrix(MatrixXd &eigen_matrix);
 
 #endif

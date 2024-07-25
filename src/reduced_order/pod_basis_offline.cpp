@@ -11,9 +11,11 @@
 #include <eigen/Eigen/SVD>
 #include <filesystem>
 #include <iostream>
+#include <algorithm>
 
 #include "dg/dg_base.hpp"
 #include "pod_basis_base.h"
+#include "linear_solver/helper_functions.h"
 
 namespace PHiLiP {
 namespace ProperOrthogonalDecomposition {
@@ -22,6 +24,7 @@ template <int dim>
 OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
         : basis(std::make_shared<dealii::TrilinosWrappers::SparseMatrix>())
         , dg(dg_input)
+        , Q(std::make_shared<dealii::TrilinosWrappers::SparseMatrix>())
         , mpi_communicator(MPI_COMM_WORLD)
         , mpi_rank(dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
         , pcout(std::cout, mpi_rank==0)
@@ -206,6 +209,18 @@ template <int dim>
 MatrixXd OfflinePOD<dim>::getSnapshotMatrix() {
     return snapshotMatrix;
 }
+
+template <int dim>
+std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> OfflinePOD<dim>::getSkewSymmetric(){
+    return Q;
+}
+
+template <int dim>
+MatrixXd OfflinePOD<dim>::getTestBasis() {
+    return Vt;
+}
+
+
 template <int dim>
 bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     //const bool compute_dRdW = true;
@@ -603,8 +618,10 @@ bool OfflinePOD<dim>::enrichPOD(){
     std::vector<std::array<unsigned int,dim>> Hadamard_columns_sparsity_volume(n_quad_pts * n_quad_pts_1D);
     flux_basis_int.sum_factorized_Hadamard_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity_volume, Hadamard_columns_sparsity_volume);
     // TODO : Read in POD Basis
+    int iter = 0;
     for (auto cell = dg->dof_handler.begin_active(); cell!=dg->dof_handler.end(); ++cell){
         if (!cell->is_locally_owned()) continue;
+        iter++;
         // Reinit Operators for local cell
         flux_basis_int.build_1D_volume_operator(dg->oneD_fe_collection_flux[dg->max_degree], dg->oneD_quadrature_collection[dg->max_degree]);
         flux_basis_int.build_1D_gradient_operator(dg->oneD_fe_collection_flux[dg->max_degree], dg->oneD_quadrature_collection[dg->max_degree]);
@@ -622,7 +639,6 @@ bool OfflinePOD<dim>::enrichPOD(){
         // Current reference element related to this physical cell
         const dealii::FESystem<dim,dim> &current_fe_ref = dg->fe_collection[fe_index_curr_cell];
         const unsigned int n_dofs_cell = current_fe_ref.n_dofs_per_cell();
-        
         dofs_indices.resize(n_dofs_cell);
         cell->get_dof_indices (dofs_indices);
         //const bool Cartesian_element = (cell->manifold_id() == dealii::numbers::flat_manifold_id);
@@ -641,7 +657,11 @@ bool OfflinePOD<dim>::enrichPOD(){
                                                             flux_basis_stiffness.oneD_skew_symm_vol_oper, 
                                                             oneD_vol_quad_weights,
                                                             flux_basis_stiffness_skew_symm_oper_sparse);
-        local_Q.fill(flux_basis_stiffness_skew_symm_oper_sparse[0],0,0,0,0);
+        for(int idim = 0; idim < dim; idim++){
+           debugMatrix(flux_basis_stiffness_skew_symm_oper_sparse[idim]);
+        }
+        
+        //local_Q.fill(flux_basis_stiffness_skew_symm_oper_sparse[0],0,0,0,0);
         // Both Off diagonal terms - Strong DG line 1641
         
         dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);
@@ -657,24 +677,30 @@ bool OfflinePOD<dim>::enrichPOD(){
                                                                         oneD_quad_weights_vol,
                                                                         surf_oper_sparse,
                                                                         dim_not_zero);
-            //debugMatrix(surf_oper_sparse);
-            local_Q.fill(surf_oper_sparse,n_quad_pts_1D*(iface+1),0,0,0);
+            debugMatrix(surf_oper_sparse);
+            local_Q.fill(surf_oper_sparse,n_quad_pts*(iface+1),0,0,0);
             dealii::FullMatrix<double> surf_oper_sparse_trans;
             surf_oper_sparse_trans.copy_transposed(surf_oper_sparse);
             surf_oper_sparse_trans *= -1;
-            local_Q.fill(surf_oper_sparse_trans,0,n_quad_pts_1D*(iface+1),0,0);
+            local_Q.fill(surf_oper_sparse_trans,0,n_quad_pts*(iface+1),0,0);
         }
+        std::ofstream local_Q_file("local_Q_file.txt");
+        local_Q.print(local_Q_file);
         //debugMatrix(flux_basis_stiffness_skew_symm_oper_sparse[0]);
-        global_Q.set(dofs_indices, local_Q);
+        global_Q.add(dofs_indices, local_Q);
        
     }
-    // Compute QV
-    
+
+    std::cout << "Max Row Sum: " << global_Q.linfty_norm() << std::endl;
+    std::ofstream Q_file("Q_file.txt");
+    global_Q.print(Q_file);
+    Q->reinit(global_Q);
+    /// Computing Vt
     dealii::TrilinosWrappers::SparseMatrix sparse_basis;
     sparse_basis.copy_from(*basis);
     dealii::TrilinosWrappers::SparseMatrix QV;
     global_Q.mmult(QV,*basis);
-    // Inject QV into V
+
     dealii::FullMatrix<double> enriched_basis(sparse_basis.m(),sparse_basis.n()+global_Q.n()+1);
     for (std::size_t row = 0; row < enriched_basis.m(); ++row){ // Might need to change size_type = std::size_t
         enriched_basis.set(row,0,1.);
@@ -693,37 +719,9 @@ bool OfflinePOD<dim>::enrichPOD(){
     pcout << "Preforming LAPACK svd" << std::endl;
     enriched_basis_LAPACK.compute_svd();
     dealii::LAPACKFullMatrix<double> LAPACK_test_basis = enriched_basis_LAPACK.get_svd_u();
-    const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
-    Epetra_Map system_matrix_map = epetra_system_matrix.RowMap();
-    Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy, system_matrix_map, LAPACK_test_basis.n_cols());
+    
+    Vt = lapack_to_eig_matrix(LAPACK_test_basis); // Setting to Eigen for now
 
-    const int numMyElements = system_matrix_map.NumMyElements(); //Number of elements on the calling processor
-
-    for (int localRow = 0; localRow < numMyElements; ++localRow){
-        const int globalRow = system_matrix_map.GID(localRow);
-        for(long unsigned int n = 0 ; n < LAPACK_test_basis.n_cols() ; n++){ // Type of n is long unsigned int
-            //epetra_basis.InsertGlobalValues(globalRow, 1, LAPACK_basis(globalRow, n), &n);
-            pcout << globalRow << std::endl;
-        }
-    }
-    Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
-    Epetra_Map domain_map((int)LAPACK_test_basis.n_cols(), 0, epetra_comm);
-
-    epetra_basis.FillComplete(domain_map, system_matrix_map);
-    basis->reinit(epetra_basis);
-    /*
-    std::ofstream out_file("enriched_basis.txt");
-    unsigned int precision = 16;
-    enriched_basis.print_formatted(out_file, precision);
-    */
-    // Compute Qt hat
-    Epetra_CrsMatrix modal_differentiation_matrix_temp(Epetra_DataAccess::View, system_matrix_map, LAPACK_test_basis.n_cols());
-    Epetra_CrsMatrix modal_differentiation_matrix(Epetra_DataAccess::View, epetra_basis.DomainMap(), epetra_basis.NumGlobalCols());
-    Epetra_CrsMatrix Q(Epetra_DataAccess::Copy,system_matrix_map,global_Q.n());
-
-    EpetraExt::MatrixMatrix::Multiply(Q, false, epetra_basis, false, modal_differentiation_matrix_temp);
-    EpetraExt::MatrixMatrix::Multiply(epetra_basis, true, modal_differentiation_matrix_temp, false, modal_differentiation_matrix);
-    // Save modal_differentiation_matrix somewhere
     return true;
 }
 
@@ -734,6 +732,9 @@ void OfflinePOD<dim>::debugMatrix(dealii::FullMatrix<double> M){
     }
     return;
 };
+
+
+
 template class OfflinePOD <PHILIP_DIM>;
 
 }

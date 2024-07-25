@@ -12,6 +12,7 @@
 #include <Epetra_MultiVector.h>
 #include <Epetra_LinearProblem.h>
 #include <EpetraExt_MatrixMatrix.h>
+#include <deal.II/lac/lapack_full_matrix.h>
 
 using namespace Eigen;
 /// @brief Fills the entries in an empty Eigen::MatrixXd from an Epetra_Vector structure
@@ -61,4 +62,30 @@ MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra){
       }
   }
   return A;
+}
+
+MatrixXd lapack_to_eig_matrix(dealii::LAPACKFullMatrix<double> &lapack_matrix){
+  const unsigned int rows = lapack_matrix.m();
+  const unsigned int cols = lapack_matrix.n();
+  Eigen::MatrixXd eigen_matrix(rows,cols);
+  for (unsigned int i = 0; i < rows; ++i){
+    for (unsigned int  j = 0; j < cols; ++j){
+      eigen_matrix(i,j) = lapack_matrix(i,j);
+    }
+  }
+  return eigen_matrix;
+}
+
+dealii::LAPACKFullMatrix<double> eig_to_lapack_matrix(MatrixXd &eigen_matrix){
+  /// Assuming that LAPACK is the same along all cores
+  const unsigned int rows = eigen_matrix.rows();
+  const unsigned int cols = eigen_matrix.cols();
+  dealii::LAPACKFullMatrix<double> lapack_matrix(rows,cols);
+  for (unsigned int i = 0; i < rows; ++i){
+    for (unsigned int  j = 0; j < cols; ++j){
+      lapack_matrix(i,j) = eigen_matrix(i,j);
+    }
+  }
+  return lapack_matrix;
+
 }

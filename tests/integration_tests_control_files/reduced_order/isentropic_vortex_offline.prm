@@ -60,6 +60,6 @@ end
 subsection reduced order
   set output_snapshot_every_x_timesteps = 10
   set path_to_search = /home/tyson/Codes/PHiLiP/build_release
-  set entropy_varibles_in_snapshots = false
+  set entropy_varibles_in_snapshots = true
   set adaptation_tolerance = 0.000003
 end
