@@ -3924,7 +3924,28 @@ void DGWeak<dim,nstate,real,MeshType>::allocate_dual_vector ()
 {
     this->dual.reinit(this->locally_owned_dofs, this->ghost_dofs, this->mpi_communicator);
 }
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim,nstate,real,MeshType>::calculate_global_entropy()
+{
+    //Do Nothing... For now
+}
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &/*V*/)
+{
+    //Do Nothing... For now
+}
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &/*V*/)
+{
+    //Do Nothing... For now
+}
 
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim, nstate, real, MeshType>::quadrature_conservative_solution(dealii::LinearAlgebra::distributed::Vector<double> &/*nodal_coefficients*/,
+dealii::LinearAlgebra::distributed::Vector<double> &/*quadrature_solution*/)
+{
+    // Do nothing
+}
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;
 // Otherwise: dealii::parallel::distributed::Triangulation<dim>;

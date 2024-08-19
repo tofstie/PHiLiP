@@ -34,6 +34,7 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
     dg->evaluate_mass_matrices(compute_dRdW);
     pcout << "Searching files..." << std::endl;
     if(dg->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+        //getPODBasisFromSnapshots();
         getEntropyPODBasisFromSnapshots();
         //getEntropyProjPODBasisFromSnapshots();
     } else {
@@ -102,6 +103,18 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
             myfile.close();
         }
     }
+    // Reordering Snapshot matrix to match for multiple cores
+    dealii::LinearAlgebra::distributed::Vector<double> parallelized_order(dg->solution);
+    for(unsigned int i = 0; i <  parallelized_order.size();i++){
+        if(parallelized_order.in_local_range(i)){
+            parallelized_order(i) = i; 
+        }
+    }
+    dealii::LinearAlgebra::ReadWriteVector<double> order_vector(parallelized_order.size());
+    order_vector.import(parallelized_order, dealii::VectorOperation::values::insert);
+    std::ofstream order_file("order_file.txt");
+    order_vector.print(order_file);
+
 
     pcout << "Snapshot matrix generated." << std::endl;
 
@@ -151,7 +164,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all,Eigen::seqN(0,num_of_modes));
         pod_basis = pod_basis_n_modes;
     }
-
+    this->Vt = pod_basis;
     /*
     fullBasis.reinit(snapshots.rows(), snapshots.cols());
 
@@ -241,7 +254,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
 
     const int energy_case = 0;
     const int density_case = nstate-1;
-    
+    Eigen::MatrixXd nodal_Snapshots(0,0);
     snapshotMatrix.conservativeResize(0,0);
     MatrixXd density(0,0);
     std::array<MatrixXd,dim> momentum;
@@ -250,12 +263,13 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     }
     MatrixXd energy(0,0);
     std::string path = dg->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
-    std::string reference_type = "mean";
+    std::string reference_type = "zero";
     std::vector<std::filesystem::path> files_in_directory;
     std::copy(std::filesystem::directory_iterator(path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
     std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
 
     for (const auto & entry : files_in_directory){
+        int old_amount_of_nodal = nodal_Snapshots.cols();
         int old_amount_of_snapshots = snapshotMatrix.cols();
         if(std::string(entry.filename()).std::string::find("solution_snapshot") != std::string::npos){
             pcout << "Processing " << entry << std::endl;
@@ -287,6 +301,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             // COLS = num_of_snapshots
             num_of_snapshots += cols;
             global_quad_points = rows/nstate;
+            nodal_Snapshots.conservativeResize(rows, old_amount_of_nodal  + cols);
             snapshotMatrix.conservativeResize(rows, old_amount_of_snapshots + 2*cols); // Changing rows from rows/nstate and cols from 2*nstate*cols
             density.conservativeResize(rows/nstate, density.cols() + cols);
             for(int idim = 0; idim < dim; idim++){
@@ -295,26 +310,27 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             energy.conservativeResize(rows/nstate, energy.cols() + cols);
 
             int row = 0;
-            int energy_row = 0;
-            std::array<int,dim> momentum_row;
-            std::fill(momentum_row.begin(),momentum_row.end(), 0);
-            int density_row = 0;
-            int istate = 0;
-            int i_quad = 0;
+  
             myfile.clear();
             myfile.seekg(0); //Bring back to beginning of file
             //Second loop set to build solutions matrix
+            
             while(std::getline(myfile, line)){ //for each line
                 std::istringstream stream(line);
                 std::string field;
                 int col = 0;
-                if (i_quad != n_quad_pts) { i_quad++;}
-                else { i_quad = 1;istate++;}
-                if (istate == nstate){ istate = 0;}
+               
                 while (getline(stream, field,' ')) { //parse data values on each line
                     if (field.empty()) {
                         continue;
                     } else {
+                        nodal_Snapshots(row, nodal_Snapshots.cols()-cols+col) = std::stod(field); //This will work for however many solutions in each file
+                        col++;
+                    }
+                }
+                row++;
+            }
+                        /*
                         switch(istate){
                             case energy_case:
                                 energy(energy_row,energy.cols() - cols + col) = std::stod(field);
@@ -342,8 +358,46 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
                 }
                 row++;
             }
+            */
             myfile.close();
         }
+    }
+    
+  
+    for(int col = 0; col < nodal_Snapshots.cols(); col++){
+        dealii::LinearAlgebra::distributed::Vector<double> nodal_solution;
+        dealii::LinearAlgebra::distributed::Vector<double> quad_solution;
+        nodal_solution.reinit(dg->solution); quad_solution.reinit(dg->solution);
+        for(int row = 0; row < nodal_Snapshots.rows();row++){
+            nodal_solution(row) = nodal_Snapshots(row,col);
+        }
+        dg->quadrature_conservative_solution(nodal_solution,quad_solution);
+        int energy_row = 0;
+        std::array<int,dim> momentum_row;
+        std::fill(momentum_row.begin(),momentum_row.end(), 0);
+        int density_row = 0;
+        int istate = 0;
+        int i_quad = 0;
+        for(unsigned int row = 0; row < quad_solution.size(); row ++) {
+            if (i_quad != n_quad_pts) { i_quad++;}
+            else { i_quad = 1;istate++;}
+            if (istate == nstate){ istate = 0;}
+            switch(istate){
+                case energy_case:
+                    energy(energy_row,col) = quad_solution(row);
+                    energy_row++;
+                    break;
+                case density_case:
+                    density(density_row, col) = quad_solution(row);
+                    density_row++;
+                    break;
+                default:
+                    momentum[istate-1](momentum_row[istate-1],col) = quad_solution(row);
+                    momentum_row[istate-1]++;
+                    break;
+            }
+        }
+
     }
     int solution_idx = 0;
     for(int row = 0; row < global_quad_points; row++){
@@ -377,7 +431,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
                         break;
                     default:
                         snapshotMatrix(solution_idx+istate*n_quad_pts,col) = momentum[istate-1](row,col);
-                        snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[istate];
+                        snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[nstate-istate-1];
                         break;
 
 
@@ -651,17 +705,14 @@ bool OfflinePOD<dim>::enrichPOD(){
         for(int idim=0; idim<dim; idim++){
             flux_basis_stiffness_skew_symm_oper_sparse[idim].reinit(n_quad_pts, n_quad_pts_1D);
         }
+        
         // 📢 Define flux_basis_stiffness 📢
         flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D, 
                                                             Hadamard_rows_sparsity_volume, Hadamard_columns_sparsity_volume,
                                                             flux_basis_stiffness.oneD_skew_symm_vol_oper, 
                                                             oneD_vol_quad_weights,
                                                             flux_basis_stiffness_skew_symm_oper_sparse);
-        for(int idim = 0; idim < dim; idim++){
-           debugMatrix(flux_basis_stiffness_skew_symm_oper_sparse[idim]);
-        }
-        
-        //local_Q.fill(flux_basis_stiffness_skew_symm_oper_sparse[0],0,0,0,0);
+        local_Q.add(flux_basis_stiffness_skew_symm_oper_sparse[0],1.,0,0,0,0);
         // Both Off diagonal terms - Strong DG line 1641
         
         dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);
@@ -670,23 +721,23 @@ bool OfflinePOD<dim>::enrichPOD(){
             const int dim_not_zero = iface / 2;//reference direction of face integer division
             std::vector<unsigned int> Hadamard_rows_sparsity_off(n_face_quad_pts * n_quad_pts_1D);//size n^{d+1}
             std::vector<unsigned int> Hadamard_columns_sparsity_off(n_face_quad_pts * n_quad_pts_1D);
-            flux_basis_int.sum_factorized_Hadamard_surface_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off, dim_not_zero);
-            flux_basis_int.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D, 
+            flux_basis_ext.sum_factorized_Hadamard_surface_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off, dim_not_zero);
+            flux_basis_ext.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D, 
                                                                         Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off,
-                                                                        flux_basis_int.oneD_surf_operator[iface_1D], 
+                                                                        flux_basis_ext.oneD_surf_operator[iface_1D], 
                                                                         oneD_quad_weights_vol,
                                                                         surf_oper_sparse,
                                                                         dim_not_zero);
-            debugMatrix(surf_oper_sparse);
-            local_Q.fill(surf_oper_sparse,n_quad_pts*(iface+1),0,0,0);
+            //debugMatrix(surf_oper_sparse);
+            local_Q.add(surf_oper_sparse,1.,n_quad_pts*(iface+1),0,0,0);
             dealii::FullMatrix<double> surf_oper_sparse_trans;
             surf_oper_sparse_trans.copy_transposed(surf_oper_sparse);
             surf_oper_sparse_trans *= -1;
-            local_Q.fill(surf_oper_sparse_trans,0,n_quad_pts*(iface+1),0,0);
+            local_Q.add(surf_oper_sparse_trans,1.,0,n_quad_pts*(iface+1),0,0);
         }
         std::ofstream local_Q_file("local_Q_file.txt");
         local_Q.print(local_Q_file);
-        //debugMatrix(flux_basis_stiffness_skew_symm_oper_sparse[0]);
+        debugMatrix(flux_basis_stiffness_skew_symm_oper_sparse[0]);
         global_Q.add(dofs_indices, local_Q);
        
     }

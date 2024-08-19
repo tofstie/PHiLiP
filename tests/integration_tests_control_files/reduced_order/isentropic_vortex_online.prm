@@ -20,9 +20,14 @@ set use_periodic_bc = true
 set conv_num_flux = two_point_flux
 set two_point_num_flux_type = CH
 
+subsection limiter
+  set bound_preserving_limiter = positivity_preservingZhang2010
+end
+
 # ODE solver
 subsection ODE solver
-  set ode_output = verbose 
+  set ode_output = verbose
+  set print_iteration_modulo = 5
   set ode_solver_type = runge_kutta 
   set runge_kutta_method = rk4_ex
   set output_solution_every_x_steps = 10
@@ -35,16 +40,16 @@ end
 
 subsection flow_solver
   set flow_case_type = isentropic_vortex
-  set poly_degree = 3
+  set poly_degree = 1 #3
   set final_time = 23.66431913239 #=20 * sqrt(1.4), time for vortex to advect around the domain
   set courant_friedrichs_lewy_number = 0.1
   set unsteady_data_table_filename = isentropic_vortex_time_table
   subsection grid
     set grid_left_bound = -10.0
     set grid_right_bound = 10.0
-    set number_of_grid_elements_per_dimension = 32
+    set number_of_grid_elements_per_dimension = 4 #32
   end
-  #set interpolate_initial_condition = true
+  set apply_initial_condition_method = interpolate_initial_condition_function
 end
 
 # Reduced Order Model

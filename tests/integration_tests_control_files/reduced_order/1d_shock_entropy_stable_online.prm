@@ -1,7 +1,6 @@
 # Listing of Parameters
 # ---------------------
 
-set test_type = adaptive_sampling_testing
 
 # Number of dimensions
 set dimension = 1
@@ -47,7 +46,7 @@ subsection flow_solver
     subsection grid
         set grid_left_bound = 0
         set grid_right_bound = 1
-        set number_of_grid_elements_per_dimension = 2500
+        set number_of_grid_elements_per_dimension = 1250
     end
 end
 
@@ -58,7 +57,7 @@ subsection ODE solver
   set initial_time_step = 0.01
   #set output_solution_every_x_steps = 50
   set output_solution_every_dt_time_intervals = 0.01
-  set runge_kutta_method = ssprk3_ex 
+  set runge_kutta_method = ssprk3_ex
 end
 
 # Reduced Order Model

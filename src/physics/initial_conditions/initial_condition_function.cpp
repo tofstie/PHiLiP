@@ -344,8 +344,17 @@ inline real InitialConditionFunction_IsentropicVortex<dim,nstate,real>
     const double R = 1;
     const double sigma = 1;
     const double beta = M_infty * 5 * sqrt(2.0)/4.0/pi * exp(1.0/2.0);
+    #if PHILIP_DIM==1
+    const double x0 = 0.0;
+    const double x = point[0] - x0;
+    const double delta_Ux = 0;
+    const double Omega = beta * exp(-0.5/sigma/sigma* (x/R * x/R));
+    const double delta_T  = -(gam-1.0)/2.0 * Omega * Omega;
+    std::array<real,nstate> soln_primitive;
+    soln_primitive[0] = pow((1 + delta_T), 1.0/(gam-1.0));
+    soln_primitive[1] = M_infty + delta_Ux;
+    #else
     const double alpha = pi/4; //rad
-
     // Centre of the vortex  at t=0
     const double x0 = 0.0;
     const double y0 = 0.0;
@@ -365,8 +374,8 @@ inline real InitialConditionFunction_IsentropicVortex<dim,nstate,real>
     #if PHILIP_DIM==3
     soln_primitive[3] = 0;
     #endif
+    #endif
     soln_primitive[nstate-1] = 1.0/gam*pow(1+delta_T, gam/(gam-1.0));
-
     const std::array<real,nstate> soln_conservative = this->euler_physics->convert_primitive_to_conservative(soln_primitive);
     return soln_conservative[istate];
 }
@@ -756,7 +765,7 @@ InitialConditionFactory<dim,nstate, real>::create_InitialConditionFunction(
     } else if (flow_type == FlowCaseEnum::periodic_1D_unsteady) {
         if constexpr (dim==1 && nstate==1) return std::make_shared<InitialConditionFunction_1DSine<dim,nstate,real> > ();
     } else if (flow_type == FlowCaseEnum::isentropic_vortex) {
-        if constexpr (dim>1 && nstate==dim+2) return std::make_shared<InitialConditionFunction_IsentropicVortex<dim,nstate,real> > (param);
+        if constexpr (nstate==dim+2) return std::make_shared<InitialConditionFunction_IsentropicVortex<dim,nstate,real> > (param);
     } else if (flow_type == FlowCaseEnum::kelvin_helmholtz_instability) {
         if constexpr (dim>1 && nstate==dim+2) return std::make_shared<InitialConditionFunction_KHI<dim,nstate,real> > (param);
     } else if (flow_type == FlowCaseEnum::non_periodic_cube_flow) {
@@ -808,9 +817,7 @@ template class InitialConditionFunction_ReflectedShock <PHILIP_DIM, PHILIP_DIM +
 template class InitialConditionFunction_TaylorGreenVortex <PHILIP_DIM, PHILIP_DIM+2, double>;
 template class InitialConditionFunction_TaylorGreenVortex_Isothermal <PHILIP_DIM, PHILIP_DIM+2, double>;
 #endif
-#if PHILIP_DIM>1
 template class InitialConditionFunction_IsentropicVortex <PHILIP_DIM, PHILIP_DIM+2, double>;
-#endif
 #if PHILIP_DIM==2
 template class InitialConditionFunction_KHI <PHILIP_DIM, PHILIP_DIM+2, double>;
 template class InitialConditionFunction_EulerBase <PHILIP_DIM, PHILIP_DIM + 2, double>;

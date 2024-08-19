@@ -1095,7 +1095,6 @@ void DGBase<dim,real,MeshType>::assemble_residual (const bool compute_dRdW, cons
         &&  !(compute_dRdW && compute_d2R)
         &&  !(compute_dRdX && compute_d2R)
             , dealii::ExcMessage("Can only do one at a time compute_dRdW or compute_dRdX or compute_d2R"));
-
     max_artificial_dissipation_coeff = 0.0;
     //pcout << "Assembling DG residual...";
     if (compute_dRdW) {

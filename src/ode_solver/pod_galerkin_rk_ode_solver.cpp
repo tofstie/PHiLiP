@@ -16,8 +16,7 @@ template <int dim, typename real, int n_rk_stages, typename MeshType>
 PODGalerkinRKODESolver<dim,real,n_rk_stages,MeshType>::PODGalerkinRKODESolver(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input,
                                                                           std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau_input,
                                                                           std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod)
-                                                                          : ODESolverBase<dim,real,MeshType>(dg_input)
-                                                                          , pod(pod) 
+                                                                          : ODESolverBase<dim,real,MeshType>(dg_input, pod)
                                                                           , butcher_tableau(rk_tableau_input)
                                                                           , solver(dg_input)
                                                                           , epetra_pod_basis(pod->getPODBasis()->trilinos_matrix())
@@ -95,6 +94,7 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
         this->rk_stage[i].add(1.0,this->solution_update);
         if (!this->butcher_tableau_aii_is_zero[i]){
             // Implicit, not sure on JFNK works for reduced order or not, assuming it does for now
+            std::cout << "Implicit, abort" << std::endl;
             solver.solve(dt*this->butcher_tableau->get_a(i,i), this->rk_stage[i]);
             this->rk_stage[i] = solver.current_solution_estimate;
         }
@@ -156,45 +156,45 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
             dealii_reduced_stage_i.print(dealii_rk_stage_file);
             this->reduced_rk_stage[i] = dealii_reduced_stage_i;
         }
-}
-
-//std::cout << "Cut" << std::endl;
-this->modified_time_step = dt;
-for (int i = 0; i < n_rk_stages; ++i){
-    // Be careful with the pseudotimestep as not sure about that block
-    dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_i;
-    Multiply(*epetra_test_basis,this->reduced_rk_stage[i],dealii_rk_stage_i,solution_index,false);
-    /*
-    Epetra_Vector epetra_reduced_stage_i(Epetra_DataAccess::View, epetra_test_basis->DomainMap(), this->reduced_rk_stage[i].begin());
-    Epetra_Vector epetra_rk_stage_i(epetra_test_basis->RangeMap());
-    epetra_test_basis->Multiply(false, epetra_reduced_stage_i, epetra_rk_stage_i);
-    
-    //epetra_rk_stage_i.Print(system_file);
-    epetra_to_dealii(epetra_rk_stage_i,dealii_rk_stage_i, solution_index);
-    */
-    if (pseudotime){
-        const double CFL = this->butcher_tableau->get_b(i) * dt;
-        this->dg->time_scale_solution_update(dealii_rk_stage_i, CFL);
-        this->solution_update.add(1.0, dealii_rk_stage_i); 
-    } else {
-       
-        this->solution_update.add(dt* this->butcher_tableau->get_b(i),dealii_rk_stage_i); 
     }
-}
-this->dg->solution = this->solution_update; // u_0 + W*u_np1 = u_0 + W*u_n + dt* sum(W * k_i * b_i)
-if (this->limiter) {
-    this->limiter->limit(this->dg->solution,
-        this->dg->dof_handler,
-        this->dg->fe_collection,
-        this->dg->volume_quadrature_collection,
-        this->dg->high_order_grid->fe_system.tensor_degree(),
-        this->dg->max_degree,
-        this->dg->oneD_fe_collection_1state,
-        this->dg->oneD_quadrature_collection);
-}
-++(this->current_iteration);
-//this->pcout << this->current_iteration << std::endl;
-this->current_time += dt;
+
+    //std::cout << "Cut" << std::endl;
+    this->modified_time_step = dt;
+    for (int i = 0; i < n_rk_stages; ++i){
+        // Be careful with the pseudotimestep as not sure about that block
+        dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_i;
+        Multiply(*epetra_test_basis,this->reduced_rk_stage[i],dealii_rk_stage_i,solution_index,false);
+        /*
+        Epetra_Vector epetra_reduced_stage_i(Epetra_DataAccess::View, epetra_test_basis->DomainMap(), this->reduced_rk_stage[i].begin());
+        Epetra_Vector epetra_rk_stage_i(epetra_test_basis->RangeMap());
+        epetra_test_basis->Multiply(false, epetra_reduced_stage_i, epetra_rk_stage_i);
+        
+        //epetra_rk_stage_i.Print(system_file);
+        epetra_to_dealii(epetra_rk_stage_i,dealii_rk_stage_i, solution_index);
+        */
+        if (pseudotime){
+            const double CFL = this->butcher_tableau->get_b(i) * dt;
+            this->dg->time_scale_solution_update(dealii_rk_stage_i, CFL);
+            this->solution_update.add(1.0, dealii_rk_stage_i); 
+        } else {
+        
+            this->solution_update.add(dt* this->butcher_tableau->get_b(i),dealii_rk_stage_i); 
+        }
+    }
+    this->dg->solution = this->solution_update; // u_0 + W*u_np1 = u_0 + W*u_n + dt* sum(W * k_i * b_i)
+    if (this->limiter) {
+        this->limiter->limit(this->dg->solution,
+            this->dg->dof_handler,
+            this->dg->fe_collection,
+            this->dg->volume_quadrature_collection,
+            this->dg->high_order_grid->fe_system.tensor_degree(),
+            this->dg->max_degree,
+            this->dg->oneD_fe_collection_1state,
+            this->dg->oneD_quadrature_collection);
+    }
+    ++(this->current_iteration);
+    //this->pcout << this->current_iteration << std::endl;
+    this->current_time += dt;
 
 }
 
@@ -239,7 +239,7 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::allocate_ode_syst
     }
 
     // Parrallezing reduced RK Stage
-    const unsigned int reduced_size = pod->getPODBasis()->n();
+    const unsigned int reduced_size = this->pod->getPODBasis()->n();
     dealii::IndexSet reduced_index(reduced_size);
     const unsigned int my_procs = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
     const unsigned int n_procs = dealii::Utilities::MPI::n_mpi_processes(this->mpi_communicator);

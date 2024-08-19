@@ -55,18 +55,89 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
     Eigen::MatrixXd diag_weights = final_weights_eigen.asDiagonal();
     Eigen::MatrixXd M_test = Vt_id.transpose()*diag_weights*Vt_id;
 
-    dealii::LAPACKFullMatrix lapack_M_test = eig_to_lapack_matrix(M_test);
-    double l1_norm = lapack_M_test.l1_norm();
-    double condition_number_reciprocal = 1E-11;
-    //{ // Block here to destroy a temp M_test for the condition number (Change to function later?)
-        dealii::LAPACKFullMatrix M_test_temp(lapack_M_test);
-        M_test_temp.compute_cholesky_factorization(); // This assumes that M_test is SPD, which it will be no matter Vt
-        condition_number_reciprocal = M_test_temp.reciprocal_condition_number(l1_norm); 
-    ///}
-    std::cout << "Initial Reciprocal Condition of Mtest: " <<  condition_number_reciprocal << std::endl;
-    if(condition_number_reciprocal < 1E-10){
-        std::cout << "Initial Reciprocal Condition of Mtest: " <<  condition_number_reciprocal << std::endl;
+    Eigen::EigenSolver<Eigen::MatrixXd> eigensolver;
+    eigensolver.compute(M_test);
+
+    
+    Eigen::VectorXd eigenvalues = eigensolver.eigenvalues().real();
+    Eigen::MatrixXd eigenvectors = eigensolver.eigenvectors().real();
+ 
+    double min_eigenvalue = eigenvalues.minCoeff(); /// The eigen values are strictly greater than 0
+    double max_eigenvalue = eigenvalues.maxCoeff();
+    double condition_number;
+    condition_number = abs(max_eigenvalue)/abs(min_eigenvalue);
+    std::cout << "Initial Reciprocal Condition of Mtest: " <<  condition_number << std::endl;
+    if(condition_number > 1E10){
+        std::cout << "Initial Reciprocal Condition of Mtest: " <<  condition_number << std::endl;
         std::cout << "Getting additional points for stability" << std::endl;
+        std::vector<int> p(eigenvalues.size());
+        for(unsigned int i = 0; i < p.size();++i){
+            p[i] = i;
+        }
+        std::sort(p.begin(),p.end(),[&eigenvalues](int a, int b) {return eigenvalues[a] < eigenvalues[b];});
+        std::vector<int> columns_to_keep;
+        for (unsigned int i = 0; i < eigenvalues.size(); ++i) {
+            if (eigenvalues[p[i]] < 1e-12) {
+                columns_to_keep.push_back(p[i]);
+            }
+        }
+        Eigen::MatrixXd Vx(M_test.rows(),columns_to_keep.size());
+        for(unsigned int i = 0;i<columns_to_keep.size(); ++i){
+            Vx.col(i) = Vx.col(columns_to_keep[i]);
+        }
+        Eigen::MatrixXd Z = this->pod->getTestBasis()*Vx;
+        Eigen::MatrixXd V_mass = this->V_target;
+        this->build_chan_target(Z);
+        AssembleGreedyCubature<dim, nstate> Second_Cubature_Problem(all_parameters, this->parameter_handler, this->initial_weights, this->b, this->V_target);
+        Second_Cubature_Problem.build_problem();
+        dealii::LinearAlgebra::distributed::Vector<double> weights = Second_Cubature_Problem.get_weights();
+        std::vector<int> z_additional = Second_Cubature_Problem.get_indices();
+        double z_scale = 1e-2;
+        std::set<int> all_pts;
+        for(const int& i: z_vector){
+            all_pts.insert(i);
+        }
+        for(const int& i: z_additional){
+            all_pts.insert(i);
+        }
+        std::vector<int> unique_pts(all_pts.begin(), all_pts.end());
+        Eigen::MatrixXd Z_mass = this->V_target;
+        Eigen::MatrixXd J(V_mass.rows(),V_mass.cols()+Z_mass.cols());
+        for(int j = 0; j < J.cols(); ++j){
+            if(j < V_mass.cols()){
+                J.col(j) = V_mass.col(j);
+            } else {
+                J.col(j) = z_scale*Z_mass.col(j);
+            }
+        }
+        /* Commenting out for now as eig_to_epetra_vector is currently in another branch
+        Eigen::VectorXd b = J.transpose().rowwise().sum();
+        Epetra_CrsMatrix J_epetra = eig_to_epetra_matrix(J);
+        Epetra_Vector b_epetra = eig_to_epetra_vector(b);
+        Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
+        NNLS_solver NNLS_prob(all_parameters, this->parameter_handler, J_epetra, epetra_comm, b_epetra);
+        std::cout << "Solve NNLS problem..."<< std::endl;
+        bool exit_con = NNLS_prob.solve();
+        Epetra_Vector w_unscaled = NNLS_prob.getSolution();
+        Eigen::VectorXd w_unscaled_eigen = epetra_to_eig_vec(w_unscaled_eigen);
+        Eigen::VectorXd w_eigen = w_unscaled*w_unscaled_eigen.sum()/length_of_weights;
+        Eigen::MatrixXd Vt_idt = this->pod->getTestBasis()(unique_pts,Eigen::placeholders::all); 
+        Eigen::MatrixXd M_test_2 = Vt_id.transpose()*diag_weights*Vt_id;
+        Eigen::EigenSolver<Eigen::MatrixXd> eigensolver2;
+        eigensolver2.compute(M_test_2);
+
+        
+        Eigen::VectorXd eigenvalues2 = eigensolver2.eigenvalues().real();
+        Eigen::MatrixXd eigenvectors2 = eigensolver2.eigenvectors().real();
+    
+        double min_eigenvalue2 = eigenvalues2.minCoeff(); /// The eigen values are strictly greater than 0
+        double max_eigenvalue2 = eigenvalues2.maxCoeff();
+        double condition_number2;
+        condition_number2 = abs(max_eigenvalue2)/abs(min_eigenvalue2);
+        std::cout << "Initial Reciprocal Condition of Mtest: " <<  condition_number2 << std::endl;
+        */
+
+
     }
 
     
@@ -150,10 +221,10 @@ void AssembleGreedyRes<dim, nstate>::build_initial_target(){
 }
 
 template<int dim, int nstate>
-void AssembleGreedyRes<dim, nstate>::build_chan_target(){
-    Eigen::MatrixXd V_t_1 = this->pod->getTestBasis();
-    Eigen::MatrixXd V_t_2 = this->pod->getTestBasis();
-    Eigen::MatrixXd V_mass(V_t_1.rows(),V_t_1.cols()*(V_t_1.col()+1)/2);
+void AssembleGreedyRes<dim, nstate>::build_chan_target(Eigen::MatrixXd &Input_Matrix){
+    Eigen::MatrixXd V_t_1 = Input_Matrix;
+    Eigen::MatrixXd V_t_2 = Input_Matrix;
+    Eigen::MatrixXd V_mass(V_t_1.rows(),V_t_1.cols()*(V_t_1.cols()+1)/2);
     int sk = 0;
     for(int i = 0; i < V_t_1.cols();++i){
         for(int j = 0; j < V_t_2.cols();++j){
@@ -163,10 +234,40 @@ void AssembleGreedyRes<dim, nstate>::build_chan_target(){
     Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd(V_mass);
     Eigen::MatrixXd V_target_temp = svd.matrixU();
     Eigen::VectorXd singular_values = svd.singularValues();
+    Eigen::VectorXd singular_values_squared = singular_values.array().square();
+    Eigen::VectorXd cum_sum_sv_squared(singular_values.size());
+    cum_sum_sv_squared(0) = singular_values_squared(0);
+    for (int i = 1; i < singular_values_squared.size(); ++i){
+        cum_sum_sv_squared(i) = cum_sum_sv_squared(i-1) + singular_values_squared(i);
+    }
+    double l2_norm_squared = singular_values_squared.sum();
+    Eigen::VectorXd singular_value_energy = (1-(cum_sum_sv_squared.array()/l2_norm_squared)).sqrt();
 
-    V_target = V_target_temp
-    this->b.reinit(V_target.cols()); // Fix this
-    
+    std::vector<int> columns_to_keep;
+    double tol = 5.5E-5; // Hard coding tolerance for now based on Chan's results
+    for (int i = 0; i < singular_value_energy.size(); ++i) {
+        if (singular_value_energy(i) > tol) {
+            columns_to_keep.push_back(i);
+        }
+    }
+    Eigen::MatrixXd V_filtered(V_target_temp.rows(), columns_to_keep.size());
+    for(unsigned int i = 0; i < columns_to_keep.size(); ++i){
+        V_filtered.col(i) = V_target_temp.col(columns_to_keep[i]);
+    }
+
+    V_target = V_filtered;
+    int size_of_weights = this->initial_weights.size();
+    Eigen::VectorXd weights_eigen(size_of_weights);
+    for(int i = 0; i < size_of_weights; ++i){
+        weights_eigen(i) = this->initial_weights(i);
+    }
+    Eigen::VectorXd b_eigen = V_target.transpose()*weights_eigen;
+
+    this->b.reinit(b_eigen.size());
+    for(int i = 0; i < b_eigen.size(); ++i){
+        this->b(i) = b_eigen(i);
+    }
+
 }
 
 template <int dim, int nstate>

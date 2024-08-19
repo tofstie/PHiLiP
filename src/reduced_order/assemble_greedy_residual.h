@@ -67,9 +67,12 @@ class AssembleGreedyRes{
     /// RHS Vector for the NNLS Problem
     dealii::LinearAlgebra::ReadWriteVector<double> b;
 
-    void build_initial_weights();
+    void build_weights();
 
     void build_initial_target();
+
+    void build_chan_target(Eigen::MatrixXd &Input_Matrix);
+    
     void epetra_to_dealii(Epetra_Vector &epetra_vector, 
                           dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector,
                           dealii::IndexSet index_set);

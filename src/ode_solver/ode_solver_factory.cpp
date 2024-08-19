@@ -194,7 +194,9 @@ std::shared_ptr<ODESolverBase<dim,real,MeshType>> ODESolverFactory<dim,real,Mesh
 }
 
 template <int dim, typename real, typename MeshType>
-std::shared_ptr<ODESolverBase<dim,real,MeshType>> ODESolverFactory<dim,real,MeshType>::create_RungeKuttaODESolver(std::shared_ptr< DGBase<dim,real,MeshType> > dg_input, std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod)
+std::shared_ptr<ODESolverBase<dim,real,MeshType>> ODESolverFactory<dim,real,MeshType>::create_RungeKuttaODESolver(
+    std::shared_ptr< DGBase<dim,real,MeshType> > dg_input, 
+    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod)
 {
     dealii::ConditionalOStream pcout(std::cout, dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)==0);
 
@@ -205,7 +207,7 @@ std::shared_ptr<ODESolverBase<dim,real,MeshType>> ODESolverFactory<dim,real,Mesh
     const ODEEnum ode_solver_type = dg_input->all_parameters->ode_solver_param.ode_solver_type;
     if (ode_solver_type == ODEEnum::pod_galerkin_rk_solver) {
         // Hard-coded templating of n_rk_stages because it is not known at compile time
-        pcout << "Creating Runge Kutta ODE Solver with " 
+        pcout << "Creating Galerkin Runge Kutta ODE Solver with " 
               << n_rk_stages << " stage(s)..." << std::endl;
         if (n_rk_stages == 1){
             return std::make_shared<PODGalerkinRKODESolver<dim,real,1,MeshType>>(dg_input,rk_tableau,pod);

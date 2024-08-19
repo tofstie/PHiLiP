@@ -3,6 +3,7 @@
 
 #include <deal.II/numerics/vector_tools.h>
 #include "parameters/all_parameters.h"
+#include "reduced_order/pod_basis_base.h"
 #include "reduced_order/pod_basis_online.h"
 #include "reduced_order/pod_basis_offline.h"
 #include "reduced_order/rom_test_location.h"
@@ -42,7 +43,7 @@ public:
     const int output_snapshot_every_x_timesteps;
     /// Most up to date POD basis
     std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> current_pod;
-    std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> offline_pod;
+    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> offline_pod;
     
     /// Number of time steps for every snapshots
     mutable int snapshots_every_x_steps;

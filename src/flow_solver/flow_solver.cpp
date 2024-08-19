@@ -98,7 +98,6 @@ FlowSolver<dim, nstate>::FlowSolver(
     // Allocate ODE solver after initializing DG
     ode_solver->allocate_ode_system();
     
-    
     // output a copy of the input parameters file
     if(flow_solver_param.output_restart_files == true) {
         pcout << "Writing a reference copy of the inputted parameters (.prm) file... " << std::flush;

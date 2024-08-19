@@ -17,6 +17,15 @@
 
 #include "strong_dg.hpp"
 
+#include "linear_solver/helper_functions.h"
+
+#include <eigen/Eigen/LU>
+
+#include <Epetra_CrsMatrix.h>
+#include <Epetra_Comm.h>
+#include <EpetraExt_MatrixMatrix.h>
+#include <deal.II/lac/full_matrix.h> // LAPACK Matrix for Printing/Debugging
+
 namespace PHiLiP {
 
 template <int dim, int nstate, typename real, typename MeshType>
@@ -994,7 +1003,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
             }
         }
         for(int istate=0; istate<nstate; istate++){
-            std::vector<real> entropy_var_coeff(n_shape_fns);;
+            std::vector<real> entropy_var_coeff(n_shape_fns);
             soln_basis_projection_oper.matrix_vector_mult_1D(entropy_var_at_q[istate],
                                                              entropy_var_coeff,
                                                              soln_basis_projection_oper.oneD_vol_operator);
@@ -1061,7 +1070,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
             //get the soln for iquad from projected entropy variables
             std::array<real,nstate> entropy_var;
             for(int istate=0; istate<nstate; istate++){
-                entropy_var[istate] = projected_entropy_var_at_q[istate][iquad];
+                if(!this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+                    entropy_var[istate] = projected_entropy_var_at_q[istate][iquad];
+                } else {
+                    entropy_var[istate] = this->projected_entropy[cell_dofs_indices[istate*n_shape_fns+iquad]];
+                }
             }
             soln_state = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var);
             
@@ -1092,7 +1105,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
                     std::array<real,nstate> soln_state_flux_basis;
                     std::array<real,nstate> entropy_var_flux_basis;
                     for(int istate=0; istate<nstate; istate++){
-                        entropy_var_flux_basis[istate] = projected_entropy_var_at_q[istate][flux_quad];
+                        if(!this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+                            entropy_var_flux_basis[istate] = projected_entropy_var_at_q[istate][flux_quad];
+                        } else {
+                            entropy_var_flux_basis[istate] = this->projected_entropy[dof_indices[istate*n_shape_fns+flux_quad]];
+                        }
                     }
                     soln_state_flux_basis = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_flux_basis);
 
@@ -1527,7 +1544,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
             if(iquad==0){
                 entropy_var_vol[istate].resize(n_quad_pts_vol);
             }
-            entropy_var_vol[istate][iquad] = entropy_var[istate];
+                entropy_var_vol[istate][iquad] = entropy_var[istate];
         }
     }
 
@@ -1583,7 +1600,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
             //Compute the conservative values on the facet from the interpolated entorpy variables.
             std::array<real,nstate> entropy_var_face;
             for(int istate=0; istate<nstate; istate++){
-                entropy_var_face[istate] = projected_entropy_var_surf[istate][iquad_face];
+                if(!this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+                    entropy_var_face[istate] = projected_entropy_var_surf[istate][iquad_face];
+                } else {
+                    entropy_var_face[istate] = this->projected_entropy[dof_indices[istate*n_shape_fns+iquad_face]];
+                }
             }
             std::array<real,nstate> soln_state_face;
             soln_state_face= this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_face);
@@ -1610,7 +1631,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
                 }
                 std::array<real,nstate> entropy_var;
                 for(int istate=0; istate<nstate; istate++){
-                    entropy_var[istate] = projected_entropy_var_vol[istate][iquad_vol];
+                    if(!this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+                        entropy_var[istate] = projected_entropy_var_vol[istate][iquad_vol];
+                    } else {
+                        entropy_var[istate] = this->projected_entropy[dof_indices[istate*n_shape_fns+iquad_vol]];
+                    }
                 }
                 std::array<real,nstate> soln_state;
                 soln_state = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var);
@@ -1704,7 +1729,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
         std::array<real,nstate> soln_interp_to_face_int;
         for(int istate=0; istate<nstate; istate++){
             soln_interp_to_face_int[istate] = soln_at_surf_q[istate][iquad];
-            entropy_var_face_int[istate] = projected_entropy_var_surf[istate][iquad];
+            if(!this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+                entropy_var_face_int[istate] = projected_entropy_var_surf[istate][iquad];
+            } else {
+                entropy_var_face_int[istate] = this->projected_entropy[dof_indices[istate*n_shape_fns+iquad]];
+            }
             for(int idim=0; idim<dim; idim++){
                 aux_soln_state_int[istate][idim] = aux_soln_at_surf_q[istate][idim][iquad];
             }
@@ -2166,7 +2195,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
             if(iquad==0){
                 entropy_var_vol_int[istate].resize(n_quad_pts_vol_int);
             }
-            entropy_var_vol_int[istate][iquad] = entropy_var[istate];
+            if(!this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+                entropy_var_vol_int[istate][iquad] = entropy_var[istate];
+            } else {
+                entropy_var_vol_int[istate][iquad] = this->projected_entropy[dof_indices_int[istate*n_shape_fns_int+iquad]];
+            }
         }
     }
     std::array<std::vector<real>,nstate> entropy_var_vol_ext;
@@ -2181,7 +2214,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
             if(iquad==0){
                 entropy_var_vol_ext[istate].resize(n_quad_pts_vol_ext);
             }
-            entropy_var_vol_ext[istate][iquad] = entropy_var[istate];
+            if(!this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+                entropy_var_vol_ext[istate][iquad] = entropy_var[istate];
+            } else {
+                entropy_var_vol_ext[istate][iquad] = this->projected_entropy[dof_indices_ext[istate*n_shape_fns_ext+iquad]];
+            }
         }
     }
 
@@ -2270,8 +2307,8 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
                 entropy_var_face_ext[istate] = projected_entropy_var_surf_ext[istate][iquad_face];
             }
             std::array<real,nstate> soln_state_face_int;
-            soln_state_face_int = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_face_int);
             std::array<real,nstate> soln_state_face_ext;
+            soln_state_face_int = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_face_int);
             soln_state_face_ext = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_face_ext);
 
             //only do the n_quad_1D vol points that give non-zero entries from Hadamard product.
@@ -3138,6 +3175,261 @@ void DGStrong<dim,nstate,real,MeshType>::allocate_dual_vector()
     //Do nothing.
 }
 
+template <int dim, int nstate, typename real, typename MeshType>
+void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy()
+{
+    this->global_entropy.reinit(this->solution);
+    const auto mapping = (*(this->high_order_grid->mapping_fe_field));
+    dealii::hp::MappingCollection<dim> mapping_collection(mapping);
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume (mapping_collection, this->fe_collection, this->volume_quadrature_collection, this->volume_update_flags); ///< FEValues of volume.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_int (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of interior face.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_ext (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->neighbor_face_update_flags); ///< FEValues of exterior face.
+    dealii::hp::FESubfaceValues<dim,dim> fe_values_collection_subface (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of subface.
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume_lagrange (mapping_collection, this->fe_collection_lagrange, this->volume_quadrature_collection, this->volume_update_flags);
+    const unsigned int init_grid_degree = this->high_order_grid->fe_system.tensor_degree();
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_int(1, this->max_degree, init_grid_degree); 
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_ext(1, this->max_degree, init_grid_degree); 
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_int(1, this->max_degree, init_grid_degree); 
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_ext(1, this->max_degree, init_grid_degree); 
+    OPERATOR::local_basis_stiffness<dim,2*dim,real> flux_basis_stiffness(1, this->max_degree, init_grid_degree, true); 
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree); 
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree); 
+    OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
+
+    this->reinit_operators_for_cell_residual_loop(
+        this->max_degree, this->max_degree, init_grid_degree, 
+        soln_basis_int, soln_basis_ext, 
+        flux_basis_int, flux_basis_ext, 
+        flux_basis_stiffness, 
+        soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+        mapping_basis);
+
+    //solution.update_ghost_values();
+    auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        
+        std::vector<dealii::types::global_dof_index> current_dofs_indices;
+        std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
+        // Current reference element related to this physical cell
+        const int i_fele = current_cell->active_fe_index();
+        const unsigned int poly_degree = i_fele;
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
+        dealii::Vector<real> local_entropy(n_dofs_curr_cell);
+         // Obtain the mapping from local dof indices to global dof indices
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        current_cell->get_dof_indices (current_dofs_indices);
+        
+
+
+        const unsigned int n_metric_dofs_cell = this->high_order_grid->fe_system.dofs_per_cell;
+        std::vector<dealii::types::global_dof_index> current_metric_dofs_indices(n_metric_dofs_cell);
+        std::vector<dealii::types::global_dof_index> neighbor_metric_dofs_indices(n_metric_dofs_cell);
+        metric_cell->get_dof_indices (current_metric_dofs_indices);
+
+        //const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
+        std::array<std::vector<real>,nstate> soln_coeff;
+        std::array<dealii::Tensor<1,dim,std::vector<real>>,nstate> aux_soln_coeff;
+        const unsigned int n_shape_fns = n_dofs_curr_cell / nstate;
+        for (unsigned int idof = 0; idof < n_dofs_curr_cell; ++idof) {
+            const unsigned int istate = this->fe_collection[poly_degree].system_to_component_index(idof).first;
+            const unsigned int ishape = this->fe_collection[poly_degree].system_to_component_index(idof).second;
+            if(ishape == 0)
+                soln_coeff[istate].resize(n_shape_fns);
+            soln_coeff[istate][ishape] = DGBase<dim,real,MeshType>::solution(current_dofs_indices[idof]);
+        }
+        std::array<std::vector<real>,nstate> soln_at_q;
+        // Interpolate each state to the quadrature points using sum-factorization
+        // with the basis functions in each reference direction.
+        for(int istate=0; istate<nstate; istate++){
+            soln_at_q[istate].resize(n_quad_pts);
+            soln_basis_int.matrix_vector_mult_1D(soln_coeff[istate], soln_at_q[istate],
+                                            soln_basis_int.oneD_vol_operator);
+
+        }
+         //get entropy projected variables
+        std::array<std::vector<real>,nstate> entropy_var_at_q;
+        std::array<std::vector<real>,nstate> projected_entropy_var_at_q;
+        if (this->all_parameters->use_split_form || this->all_parameters->use_curvilinear_split_form){
+            for(int istate=0; istate<nstate; istate++){
+                entropy_var_at_q[istate].resize(n_quad_pts);
+                projected_entropy_var_at_q[istate].resize(n_quad_pts);
+            }
+            for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+                std::array<real,nstate> soln_state;
+                for(int istate=0; istate<nstate; istate++){
+                    soln_state[istate] = soln_at_q[istate][iquad];
+                }
+                std::array<real,nstate> entropy_var;
+                entropy_var = this->pde_physics_double->compute_entropy_variables(soln_state);
+                for(int istate=0; istate<nstate; istate++){
+                    entropy_var_at_q[istate][iquad] = entropy_var[istate];
+                }
+            
+                for(int istate=0; istate<nstate; istate++){
+                    std::vector<real> entropy_var_coeff(n_shape_fns);
+                    soln_basis_projection_oper_int.matrix_vector_mult_1D(entropy_var_at_q[istate],
+                                                                        entropy_var_coeff,
+                                                                        soln_basis_projection_oper_int.oneD_vol_operator);
+                    soln_basis_int.matrix_vector_mult_1D(entropy_var_coeff,
+                                                        projected_entropy_var_at_q[istate],
+                                                        soln_basis_int.oneD_vol_operator);
+                }
+            }
+        }
+        for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+                std::array<real,nstate> entropy_var;
+                for(int istate=0; istate<nstate; istate++){
+                    entropy_var[istate] = projected_entropy_var_at_q[istate][iquad];
+                    local_entropy[istate*n_shape_fns + iquad] = entropy_var[istate];
+                }
+        }
+        for (unsigned int i=0; i<n_dofs_curr_cell; ++i) {
+            this->global_entropy[current_dofs_indices[i]] += local_entropy[i];
+        }
+    }
+    std::ofstream file("global_entropy.txt");
+    this->global_entropy.print(file);
+}
+
+template <int dim, int nstate, typename real, typename MeshType>
+void DGStrong<dim, nstate, real, MeshType>::quadrature_conservative_solution(
+    dealii::LinearAlgebra::distributed::Vector<double> &nodal_coefficients,
+    dealii::LinearAlgebra::distributed::Vector<double> &quadrature_solution)
+{
+    quadrature_solution.reinit(this->solution);
+    const auto mapping = (*(this->high_order_grid->mapping_fe_field));
+    dealii::hp::MappingCollection<dim> mapping_collection(mapping);
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume (mapping_collection, this->fe_collection, this->volume_quadrature_collection, this->volume_update_flags); ///< FEValues of volume.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_int (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of interior face.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_ext (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->neighbor_face_update_flags); ///< FEValues of exterior face.
+    dealii::hp::FESubfaceValues<dim,dim> fe_values_collection_subface (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of subface.
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume_lagrange (mapping_collection, this->fe_collection_lagrange, this->volume_quadrature_collection, this->volume_update_flags);
+    const unsigned int init_grid_degree = this->high_order_grid->fe_system.tensor_degree();
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_int(1, this->max_degree, init_grid_degree); 
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_ext(1, this->max_degree, init_grid_degree); 
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_int(1, this->max_degree, init_grid_degree); 
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_ext(1, this->max_degree, init_grid_degree); 
+    OPERATOR::local_basis_stiffness<dim,2*dim,real> flux_basis_stiffness(1, this->max_degree, init_grid_degree, true); 
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree); 
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree); 
+    OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
+
+    this->reinit_operators_for_cell_residual_loop(
+        this->max_degree, this->max_degree, init_grid_degree, 
+        soln_basis_int, soln_basis_ext, 
+        flux_basis_int, flux_basis_ext, 
+        flux_basis_stiffness, 
+        soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+        mapping_basis);
+
+    //solution.update_ghost_values();
+    auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        
+        std::vector<dealii::types::global_dof_index> current_dofs_indices;
+        std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
+        // Current reference element related to this physical cell
+        const int i_fele = current_cell->active_fe_index();
+        const unsigned int poly_degree = i_fele;
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
+        dealii::Vector<real> local_conservative_at_q(n_dofs_curr_cell);
+         // Obtain the mapping from local dof indices to global dof indices
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        current_cell->get_dof_indices (current_dofs_indices);
+        
+
+
+        const unsigned int n_metric_dofs_cell = this->high_order_grid->fe_system.dofs_per_cell;
+        std::vector<dealii::types::global_dof_index> current_metric_dofs_indices(n_metric_dofs_cell);
+        std::vector<dealii::types::global_dof_index> neighbor_metric_dofs_indices(n_metric_dofs_cell);
+        metric_cell->get_dof_indices (current_metric_dofs_indices);
+
+        //const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
+        std::array<std::vector<real>,nstate> soln_coeff;
+        std::array<dealii::Tensor<1,dim,std::vector<real>>,nstate> aux_soln_coeff;
+        const unsigned int n_shape_fns = n_dofs_curr_cell / nstate;
+        for (unsigned int idof = 0; idof < n_dofs_curr_cell; ++idof) {
+            const unsigned int istate = this->fe_collection[poly_degree].system_to_component_index(idof).first;
+            const unsigned int ishape = this->fe_collection[poly_degree].system_to_component_index(idof).second;
+            if(ishape == 0)
+                soln_coeff[istate].resize(n_shape_fns);
+            soln_coeff[istate][ishape] = nodal_coefficients(current_dofs_indices[idof]);
+        }
+        std::array<std::vector<real>,nstate> soln_at_q;
+        // Interpolate each state to the quadrature points using sum-factorization
+        // with the basis functions in each reference direction.
+        for(int istate=0; istate<nstate; istate++){
+            soln_at_q[istate].resize(n_quad_pts);
+            soln_basis_int.matrix_vector_mult_1D(soln_coeff[istate], soln_at_q[istate],
+                                            soln_basis_int.oneD_vol_operator);
+
+        }
+        for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+                for(int istate=0; istate<nstate; istate++){
+                    local_conservative_at_q[istate*n_shape_fns + iquad] = soln_at_q[istate][iquad];
+                }
+        }
+        for (unsigned int i=0; i<n_dofs_curr_cell; ++i) {
+            quadrature_solution[current_dofs_indices[i]] += local_conservative_at_q[i];
+        }
+}
+}
+
+template <int dim, int nstate, typename real, typename MeshType>
+void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V)
+{
+    Eigen::MatrixXd V_eigen = epetra_to_eig_matrix(V.trilinos_matrix());
+    //Eigen::MatrixXd pinvV = V_eigen.completeOrthogonalDecomposition().pseudoInverse();
+    //Eigen::PartialPivLU<Eigen::MatrixXd> lu = Eigen::PartialPivLU<Eigen::MatrixXd>(VTV);
+    Eigen::MatrixXd V_eigen_T = V_eigen.transpose();
+    Eigen::MatrixXd VTV = V_eigen_T*V_eigen;
+    Eigen::MatrixXd PsuedoInv = VTV.inverse()*V_eigen_T;
+    Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
+    Epetra_CrsMatrix pinvV = eig_to_epetra_matrix(PsuedoInv,PsuedoInv.cols(),PsuedoInv.rows(),epetra_comm);
+    //Epetra_CrsMatrix projection_Epetra = eig_to_epetra_matrix(projection_eigen, projection_eigen.cols(), projection_eigen.rows(), epetra_comm);
+    dealii::LAPACKFullMatrix<double> fullBasis;
+    fullBasis.reinit(PsuedoInv.rows(), PsuedoInv.cols());
+
+    for (unsigned int m = 0; m < PsuedoInv.rows(); m++) {
+        for (unsigned int n = 0; n < PsuedoInv.cols(); n++) {
+            fullBasis.set(m, n, PsuedoInv(m, n));
+        }
+    }
+    
+    std::ofstream out_file("PsuedoInverse.txt");
+    std::ofstream out_file_epetra("PsuedoInverse_epetra.txt");
+    unsigned int precision = 16;
+    fullBasis.print_formatted(out_file, precision);
+    pinvV.Print(out_file_epetra);
+    this->projection_matrix.reinit(pinvV);
+}
+
+template <int dim, int nstate, typename real, typename MeshType>
+void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V)
+{
+    
+    dealii::LinearAlgebra::distributed::Vector<double> temp_val (this->projection_matrix.locally_owned_range_indices(), this->mpi_communicator);
+    this->projected_entropy.reinit(this->global_entropy);
+    this->projection_matrix.vmult(temp_val,this->global_entropy);
+    
+    V.vmult(this->projected_entropy,temp_val);
+    dealii::LinearAlgebra::distributed::Vector<double> entropy_diff(this->global_entropy);
+    entropy_diff -= this->projected_entropy;
+    //entropy_diff.add(1.,this->projected_entropy,-1.,this->global_entropy);
+    std::ofstream file("entropy_diff.txt");
+    entropy_diff.print(file);
+
+}
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;
 // Otherwise: dealii::parallel::distributed::Triangulation<dim>;

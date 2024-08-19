@@ -152,7 +152,7 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
         // Assign ode_solver_type and the allocate AD matrix dRdW flag
         const std::string solver_string = prm.get("ode_solver_type");
         if (solver_string == "runge_kutta")                 { ode_solver_type = ODESolverEnum::runge_kutta_solver;
-                                                              allocate_matrix_dRdW = false; }
+                                                              allocate_matrix_dRdW = false; } // Change this back to false later
         else if (solver_string == "implicit")               { ode_solver_type = ODESolverEnum::implicit_solver;
                                                               allocate_matrix_dRdW = true; }
         else if (solver_string == "rrk_explicit")           { ode_solver_type = ODESolverEnum::rrk_explicit_solver;

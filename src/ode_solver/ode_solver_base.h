@@ -11,6 +11,7 @@
 
 #include "dg/dg_base.hpp"
 #include "parameters/all_parameters.h"
+#include "reduced_order/pod_basis_base.h"
 
 namespace PHiLiP {
 namespace ODE {
@@ -27,6 +28,9 @@ class ODESolverBase
 public:
     /// Default constructor that will set the constants.
     explicit ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input); ///< Constructor.
+
+    ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input,
+                  std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod);
 
     virtual ~ODESolverBase() = default; ///< Destructor.
 
@@ -68,6 +72,9 @@ public:
 
     double residual_norm; ///< Current residual norm. Only makes sense for steady state
     double residual_norm_decrease; ///< Current residual norm normalized by initial residual. Only makes sense for steady state
+        /// Smart pointer to POD
+    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>>pod;
+
 
 protected:
     /// CFL factor for (un)successful linesearches

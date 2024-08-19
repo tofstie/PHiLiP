@@ -50,22 +50,21 @@ PODUnsteady<dim,nstate>::PODUnsteady(
         //const bool compute_dRdW = true;
         //flow_solver->dg->assemble_residual(compute_dRdW);
         if(all_parameters->reduced_order_param.path_to_search == "."){
+            const bool compute_dRdW = true;
+            flow_solver->dg->assemble_residual(compute_dRdW);
             std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix = std::make_shared<dealii::TrilinosWrappers::SparseMatrix>();
             system_matrix->copy_from(flow_solver->dg->system_matrix);
             current_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
         } else {
-            offline_pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(flow_solver->dg);
+            offline_pod = flow_solver->ode_solver->pod;
         }
-        
-        if(true){ // Am I doing hyper reduction?!
+        if(false){ // Am I doing hyper reduction?!
             auto ode_solver_type = ode_param.ode_solver_type;
             HyperReduction::AssembleGreedyRes<dim,nstate> hyper_reduction(&all_param, parameter_handler, flow_solver->dg, offline_pod, ode_solver_type);
             hyper_reduction.build_weights();
             hyper_reduction.build_initial_target();
             hyper_reduction.build_problem();
         }
-        
-
     }
 
 template <int dim, int nstate>
@@ -80,6 +79,8 @@ int PODUnsteady<dim,nstate>
 const {
     int number_of_timesteps = 0;
     int iteration = 0;
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
+    flow_solver->dg->calculate_projection_matrix(*pod_basis);
     dealii::LinearAlgebra::distributed::Vector<double> entropy_snapshots(flow_solver->dg->solution);
     dealii::LinearAlgebra::distributed::Vector<double> conservative_snapshots(flow_solver->dg->solution);
     dealii::QGauss<dim> quad_extra(flow_solver->dg->max_degree);
@@ -113,7 +114,6 @@ const {
             all_param.euler_param.side_slip_angle);
     dealii::Table<1,double> output_solution_fixed_times;
     flow_solver->dg->evaluate_mass_matrices();
-
     // Full Order flow solver (For L2 Errors)
     
     Parameters::AllParameters FOM_param = *(TestsBase::all_parameters);
@@ -205,7 +205,8 @@ const {
 
             // update time step in flow_solver->flow_solver_case
             flow_solver->flow_solver_case->set_time_step(time_step);
-
+            flow_solver->dg->calculate_global_entropy();
+            flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis);
             // advance solution
             //Online
             flow_solver->ode_solver->step_in_time(time_step,false); // pseudotime==false
@@ -661,11 +662,11 @@ void PODUnsteady<dim, nstate>
                    Physics::Euler<dim,dim+2,double> euler_physics_double,
                    int iteration) const{
     const double current_time = flow_solver->ode_solver->current_time;
-
+    Eigen::MatrixXd snapshotMatrix = offline_pod->getSnapshotMatrix();
     dealii::LinearAlgebra::distributed::Vector<double> FOM_solution(flow_solver->dg->solution);
-    for(int m = 0; m < offline_pod->snapshotMatrix.rows();m++){
+    for(int m = 0; m < snapshotMatrix.rows();m++){
         if(FOM_solution.in_local_range(m)){
-            FOM_solution(m) = offline_pod->snapshotMatrix(m,iteration);
+            FOM_solution(m) = snapshotMatrix(m,iteration);
         }
     }
     FOM_flow_solver.dg->solution = FOM_solution;

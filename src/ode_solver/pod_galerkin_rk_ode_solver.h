@@ -22,7 +22,7 @@ public:
                          std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau_input,
                          std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod);
     /// POD
-    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod;
+    //std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod;
     /// Destructor
     virtual ~PODGalerkinRKODESolver() {};
 

@@ -45,7 +45,7 @@ subsection flow_solver
     subsection grid
         set grid_left_bound = 0
         set grid_right_bound = 1
-        set number_of_grid_elements_per_dimension = 2500
+        set number_of_grid_elements_per_dimension = 5
     end
 end
 
@@ -63,6 +63,6 @@ end
 # Reduced Order Model
 subsection reduced order
   set output_snapshot_every_x_timesteps = 10
-  set path_to_search = /home/tyson/Codes/PHiLiP/build_release
+  set path_to_search = /home/tyson/Desktop/Folder
   set entropy_varibles_in_snapshots = true
 end
