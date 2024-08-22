@@ -427,7 +427,7 @@ public:
         Parameters::AllParameters const* const param);
 };
 /// Initial Condition Function: 1D Euler Reflected Shock
-/** See Johnsen et al., Entropy stable reduced order modeling 
+/** See Chan, Entropy stable reduced order modeling 
  *  of nonlinear conservation, 2020 Pg. 18
 */
 template <int dim, int nstate, typename real>
@@ -445,6 +445,26 @@ public:
     
     const double gamma_gas; //< Constant heat capacity ratio of fluid.
 };
+/// Initial Condition Function: 2D Riemann Problem
+/** See Chan, Entropy stable reduced order modeling 
+ *  of nonlinear conservation, 2020 Pg. 22
+*/
+template <int dim, int nstate, typename real>
+class InitialConditionFunction_RiemannProblem : public InitialConditionFunction_EulerBase<dim, nstate, real>
+{
+protected:
+    /// Value of initial condition expressed in terms of primitive variables
+    real primitive_value(const dealii::Point<dim, real>& point, const unsigned int istate = 0) const override;
+
+public:
+    /// Constructor for InitialConditionFunction_ReflectedShock
+    /** Calls the Function(const unsigned int n_components) constructor in deal.II*/
+    explicit InitialConditionFunction_RiemannProblem(
+        Parameters::AllParameters const* const param);
+    
+    const double gamma_gas; //< Constant heat capacity ratio of fluid.
+};
+
 /// Initial condition 0.
 template <int dim, int nstate, typename real>
 class InitialConditionFunction_Zero : public InitialConditionFunction<dim,nstate,real>

@@ -42,6 +42,8 @@ double PeriodicEntropyTests<dim,nstate>::get_constant_time_step(std::shared_ptr<
         // TEMP using same as is defined in periodic turbulence for consistency with some existing results
         const double constant_time_step = this->all_param.flow_solver_param.courant_friedrichs_lewy_number * approximate_grid_spacing;
         return constant_time_step;
+    } else if (flow_case == FlowCaseEnum::riemann_problem) {
+        constant_time_step = this->all_param.flow_solver_param.courant_friedrichs_lewy_number * approximate_grid_spacing;
     } else{
         this->pcout << "Timestep size has not been defined in periodic_entropy_tests for this flow_case_type. Aborting..." << std::endl;
         std::abort();

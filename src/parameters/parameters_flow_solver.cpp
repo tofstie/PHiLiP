@@ -39,7 +39,8 @@ void FlowSolverParam::declare_parameters(dealii::ParameterHandler &prm)
                           " shu_osher_problem | "
                           " advection_limiter | "
                           " burgers_limiter | "
-                          " reflective_shock_tube "),
+                          " reflective_shock_tube | "
+                          " riemann_problem "),
                           "The type of flow we want to simulate. "
                           "Choices are "
                           " <taylor_green_vortex | "
@@ -61,7 +62,8 @@ void FlowSolverParam::declare_parameters(dealii::ParameterHandler &prm)
                           " shu_osher_problem | "
                           " advection_limiter | "
                           " burgers_limiter | "
-                          " reflective_shock_tube >. ");
+                          " reflective_shock_tube | "
+                          " riemann_problem >. ");
 
         prm.declare_entry("poly_degree", "1",
                           dealii::Patterns::Integer(0, dealii::Patterns::Integer::max_int_value),
@@ -345,6 +347,7 @@ void FlowSolverParam::parse_parameters(dealii::ParameterHandler &prm)
         else if (flow_case_type_string == "advection_limiter")          {flow_case_type = advection_limiter;}
         else if (flow_case_type_string == "burgers_limiter")            {flow_case_type = burgers_limiter;}
         else if (flow_case_type_string == "reflective_shock_tube")      {flow_case_type = reflective_shock_tube;}
+        else if (flow_case_type_string == "riemann_problem")            {flow_case_type = riemann_problem;}
         poly_degree = prm.get_integer("poly_degree");
         
         // get max poly degree for adaptation

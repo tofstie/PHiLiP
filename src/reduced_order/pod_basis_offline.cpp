@@ -254,7 +254,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
 
     const int energy_case = 0;
     const int density_case = nstate-1;
-    Eigen::MatrixXd nodal_Snapshots(0,0);
+    
     snapshotMatrix.conservativeResize(0,0);
     MatrixXd density(0,0);
     std::array<MatrixXd,dim> momentum;
@@ -269,7 +269,6 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
 
     for (const auto & entry : files_in_directory){
-        int old_amount_of_nodal = nodal_Snapshots.cols();
         int old_amount_of_snapshots = snapshotMatrix.cols();
         if(std::string(entry.filename()).std::string::find("solution_snapshot") != std::string::npos){
             pcout << "Processing " << entry << std::endl;
@@ -301,7 +300,6 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             // COLS = num_of_snapshots
             num_of_snapshots += cols;
             global_quad_points = rows/nstate;
-            nodal_Snapshots.conservativeResize(rows, old_amount_of_nodal  + cols);
             snapshotMatrix.conservativeResize(rows, old_amount_of_snapshots + 2*cols); // Changing rows from rows/nstate and cols from 2*nstate*cols
             density.conservativeResize(rows/nstate, density.cols() + cols);
             for(int idim = 0; idim < dim; idim++){
@@ -310,27 +308,26 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             energy.conservativeResize(rows/nstate, energy.cols() + cols);
 
             int row = 0;
-  
+            int energy_row = 0;
+            std::array<int,dim> momentum_row;
+            std::fill(momentum_row.begin(),momentum_row.end(), 0);
+            int density_row = 0;
+            int istate = 0;
+            int i_quad = 0;
             myfile.clear();
             myfile.seekg(0); //Bring back to beginning of file
             //Second loop set to build solutions matrix
-            
             while(std::getline(myfile, line)){ //for each line
                 std::istringstream stream(line);
                 std::string field;
                 int col = 0;
-               
+                if (i_quad != n_quad_pts) { i_quad++;}
+                else { i_quad = 1;istate++;}
+                if (istate == nstate){ istate = 0;}
                 while (getline(stream, field,' ')) { //parse data values on each line
                     if (field.empty()) {
                         continue;
                     } else {
-                        nodal_Snapshots(row, nodal_Snapshots.cols()-cols+col) = std::stod(field); //This will work for however many solutions in each file
-                        col++;
-                    }
-                }
-                row++;
-            }
-                        /*
                         switch(istate){
                             case energy_case:
                                 energy(energy_row,energy.cols() - cols + col) = std::stod(field);
@@ -358,46 +355,8 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
                 }
                 row++;
             }
-            */
             myfile.close();
         }
-    }
-    
-  
-    for(int col = 0; col < nodal_Snapshots.cols(); col++){
-        dealii::LinearAlgebra::distributed::Vector<double> nodal_solution;
-        dealii::LinearAlgebra::distributed::Vector<double> quad_solution;
-        nodal_solution.reinit(dg->solution); quad_solution.reinit(dg->solution);
-        for(int row = 0; row < nodal_Snapshots.rows();row++){
-            nodal_solution(row) = nodal_Snapshots(row,col);
-        }
-        dg->quadrature_conservative_solution(nodal_solution,quad_solution);
-        int energy_row = 0;
-        std::array<int,dim> momentum_row;
-        std::fill(momentum_row.begin(),momentum_row.end(), 0);
-        int density_row = 0;
-        int istate = 0;
-        int i_quad = 0;
-        for(unsigned int row = 0; row < quad_solution.size(); row ++) {
-            if (i_quad != n_quad_pts) { i_quad++;}
-            else { i_quad = 1;istate++;}
-            if (istate == nstate){ istate = 0;}
-            switch(istate){
-                case energy_case:
-                    energy(energy_row,col) = quad_solution(row);
-                    energy_row++;
-                    break;
-                case density_case:
-                    density(density_row, col) = quad_solution(row);
-                    density_row++;
-                    break;
-                default:
-                    momentum[istate-1](momentum_row[istate-1],col) = quad_solution(row);
-                    momentum_row[istate-1]++;
-                    break;
-            }
-        }
-
     }
     int solution_idx = 0;
     for(int row = 0; row < global_quad_points; row++){
@@ -418,6 +377,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
                         break;
                 }
             }
+            /// this will need to be adapted to find nodal entropy, can't just compute like this
             std::array<double,nstate> entropy_var = euler_physics_double.compute_entropy_variables(conservative_soln);
             for(int istate = 0; istate < nstate; istate++){
                 switch(istate){

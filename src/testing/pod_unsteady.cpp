@@ -50,8 +50,8 @@ PODUnsteady<dim,nstate>::PODUnsteady(
         //const bool compute_dRdW = true;
         //flow_solver->dg->assemble_residual(compute_dRdW);
         if(all_parameters->reduced_order_param.path_to_search == "."){
-            const bool compute_dRdW = true;
-            flow_solver->dg->assemble_residual(compute_dRdW);
+            //const bool compute_dRdW = true;
+            //flow_solver->dg->assemble_residual(compute_dRdW);
             std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix = std::make_shared<dealii::TrilinosWrappers::SparseMatrix>();
             system_matrix->copy_from(flow_solver->dg->system_matrix);
             current_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
@@ -79,14 +79,13 @@ int PODUnsteady<dim,nstate>
 const {
     int number_of_timesteps = 0;
     int iteration = 0;
-    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
-    flow_solver->dg->calculate_projection_matrix(*pod_basis);
+    if(all_parameters->reduced_order_param.path_to_search != "."){
+        std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
+        flow_solver->dg->calculate_projection_matrix(*pod_basis);
+    }
     dealii::LinearAlgebra::distributed::Vector<double> entropy_snapshots(flow_solver->dg->solution);
     dealii::LinearAlgebra::distributed::Vector<double> conservative_snapshots(flow_solver->dg->solution);
     dealii::QGauss<dim> quad_extra(flow_solver->dg->max_degree);
-    const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
-    dealii::FEValues<dim,dim> fe_values_extra(mapping, flow_solver->dg->fe_collection[flow_solver_param.poly_degree], quad_extra, 
-        dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
     //const unsigned int n_quad_pts  = flow_solver->dg->volume_quadrature_collection[flow_solver_param.poly_degree].size();
     //const unsigned int n_dofs_cell = flow_solver->dg->fe_collection[flow_solver_param.poly_degree].dofs_per_cell;
     //const unsigned int n_shape_fns = n_dofs_cell / nstate; 
@@ -205,8 +204,11 @@ const {
 
             // update time step in flow_solver->flow_solver_case
             flow_solver->flow_solver_case->set_time_step(time_step);
-            flow_solver->dg->calculate_global_entropy();
-            flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis);
+            if(all_parameters->reduced_order_param.path_to_search != "."){
+                std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
+                flow_solver->dg->calculate_global_entropy(*pod_basis);
+                flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis);
+            }
             // advance solution
             //Online
             flow_solver->ode_solver->step_in_time(time_step,false); // pseudotime==false

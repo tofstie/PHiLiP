@@ -34,7 +34,8 @@ public:
         shu_osher_problem,
         advection_limiter,
         burgers_limiter,
-        reflective_shock_tube
+        reflective_shock_tube,
+        riemann_problem
         };
     FlowCaseType flow_case_type; ///< Selected FlowCaseType from the input file
 

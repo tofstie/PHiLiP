@@ -10,7 +10,7 @@ set test_type = pod_unsteady
 # DG formulation
 set use_weak_form = false
 set use_split_form = true
-set flux_nodes_type = GLL
+set flux_nodes_type = GL
 set flux_reconstruction = cDG
 
 # Note: this was added to turn off check_same_coords() -- has no other function when dim!=1
@@ -20,9 +20,9 @@ set use_periodic_bc = true
 set conv_num_flux = two_point_flux
 set two_point_num_flux_type = CH
 
-subsection limiter
-  set bound_preserving_limiter = positivity_preservingZhang2010
-end
+#subsection limiter
+#  set bound_preserving_limiter = positivity_preservingZhang2010
+#end
 
 # ODE solver
 subsection ODE solver
@@ -30,24 +30,24 @@ subsection ODE solver
   set print_iteration_modulo = 5
   set ode_solver_type = runge_kutta 
   set runge_kutta_method = rk4_ex
-  set output_solution_every_x_steps = 10
+  set output_solution_every_x_steps = 1
 end
 
 # freestream Mach number
-subsection euler
-  set mach_infinity = 1.195228609334 #=sqrt(2/1.4)
-end
+# subsection euler
+#  set mach_infinity = 0#=sqrt(2/1.4)
+# end
 
 subsection flow_solver
-  set flow_case_type = isentropic_vortex
-  set poly_degree = 3
-  set final_time = 23.66431913239 #=20 * sqrt(1.4), time for vortex to advect around the domain
-  set courant_friedrichs_lewy_number = 0.1
-  set unsteady_data_table_filename = isentropic_vortex_time_table
+  set flow_case_type = riemann_problem
+  set poly_degree = 0
+  set final_time = 0.25
+  set courant_friedrichs_lewy_number = 0.125
+  set unsteady_data_table_filename = riemann_problem_time_table
   subsection grid
-    set grid_left_bound = -10.0
-    set grid_right_bound = 10.0
-    set number_of_grid_elements_per_dimension = 32
+    set grid_left_bound = -1
+    set grid_right_bound = 1
+    set number_of_grid_elements_per_dimension = 8
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end

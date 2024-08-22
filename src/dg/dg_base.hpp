@@ -938,7 +938,7 @@ public:
     virtual void set_use_auxiliary_eq() = 0;
 
     /// Calculates global entropy at quadrature nodes
-    virtual void calculate_global_entropy() = 0;
+    virtual void calculate_global_entropy(dealii::TrilinosWrappers::SparseMatrix &V) = 0;
 
     /// Calculates Projection Matrix from POD 
     virtual void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) = 0;
@@ -950,11 +950,14 @@ public:
     virtual void quadrature_conservative_solution(dealii::LinearAlgebra::distributed::Vector<double> &nodal_coefficients, dealii::LinearAlgebra::distributed::Vector<double> &quadrature_solution) = 0;
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;
+    /// Global Face Entropy
+    dealii::LinearAlgebra::distributed::Vector<double> global_face_entropy;
     /// Projection Matrix
     dealii::TrilinosWrappers::SparseMatrix projection_matrix;
     /// ROM Projected Entropy
     dealii::LinearAlgebra::distributed::Vector<double> projected_entropy;
-
+    /// ROM Projected Face Entropy
+    dealii::LinearAlgebra::distributed::Vector<double> projected_face_entropy;
 }; // end of DGBase class
 
 } // PHiLiP namespace
