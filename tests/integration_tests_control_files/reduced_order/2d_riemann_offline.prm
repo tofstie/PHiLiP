@@ -10,7 +10,7 @@ set test_type = pod_unsteady
 # DG formulation
 set use_weak_form = false
 set use_split_form = true
-set flux_nodes_type = GL
+set flux_nodes_type = GLL
 set flux_reconstruction = cDG
 
 # Note: this was added to turn off check_same_coords() -- has no other function when dim!=1
@@ -47,7 +47,7 @@ subsection flow_solver
   subsection grid
     set grid_left_bound = -1
     set grid_right_bound = 1
-    set number_of_grid_elements_per_dimension = 32
+    set number_of_grid_elements_per_dimension = 128
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end
@@ -58,4 +58,5 @@ subsection reduced order
     set path_to_search = /home/tyson/Codes/PHiLiP/build_release
     set entropy_varibles_in_snapshots = true
     set adaptation_tolerance = 0.000003
+    set number_nodal_modes = 100
 end

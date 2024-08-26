@@ -3174,8 +3174,8 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::Trilin
 {
     dealii::LinearAlgebra::distributed::Vector<double> temp;
     temp.reinit(V.locally_owned_domain_indices(), this->mpi_communicator);
-    V.Tvmult(temp,this->solution);
-    V.vmult(this->solution,temp);
+    //V.Tvmult(temp,this->solution);
+    //V.vmult(this->solution,temp);
     this->global_entropy.reinit(this->solution);
 
     const auto mapping = (*(this->high_order_grid->mapping_fe_field));
@@ -3275,11 +3275,14 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::Trilin
                                                                 entropy_var_coeff,
                                                                 soln_basis_projection_oper_int.oneD_vol_operator);
             entropy_coeff[istate] = entropy_var_coeff;
+            for(unsigned int iquad = 0; iquad < n_quad_pts; iquad++){
+                this->global_entropy[current_dofs_indices[istate*n_shape_fns + iquad]] = entropy_var_coeff[iquad];
+            }
             soln_basis_int.matrix_vector_mult_1D(entropy_var_coeff,
                                                 projected_entropy_var_at_q[istate],
                                                 soln_basis_int.oneD_vol_operator);
         }
-        for(unsigned int ishape_fn=0; ishape_fn<n_shape_fns; ishape_fn++){
+/*         for(unsigned int ishape_fn=0; ishape_fn<n_shape_fns; ishape_fn++){
                 for(int istate=0; istate<nstate; istate++){
                     //entropy_var[istate] = projected_entropy_var_at_q[istate][iquad];
                     local_entropy[istate*n_shape_fns + ishape_fn] = entropy_coeff[istate][ishape_fn];
@@ -3287,7 +3290,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::Trilin
         }
         for (unsigned int i=0; i<n_dofs_curr_cell; ++i) {
             this->global_entropy[current_dofs_indices[i]] += local_entropy[i];
-        }
+        } */
     }
     std::ofstream file("global_entropy.txt");
     this->global_entropy.print(file);

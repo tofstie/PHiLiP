@@ -79,7 +79,7 @@ int PODUnsteady<dim,nstate>
 const {
     int number_of_timesteps = 0;
     int iteration = 0;
-    if(all_parameters->reduced_order_param.path_to_search != "."){
+    if(all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
         std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
         flow_solver->dg->calculate_projection_matrix(*pod_basis);
     }
@@ -204,11 +204,6 @@ const {
 
             // update time step in flow_solver->flow_solver_case
             flow_solver->flow_solver_case->set_time_step(time_step);
-            if(all_parameters->reduced_order_param.path_to_search != "."){
-                std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
-                flow_solver->dg->calculate_global_entropy(*pod_basis);
-                flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis);
-            }
             // advance solution
             //Online
             flow_solver->ode_solver->step_in_time(time_step,false); // pseudotime==false

@@ -114,6 +114,12 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
         //set the DG current time for unsteady source terms
         this->dg->set_current_time(this->current_time + this->butcher_tableau->get_c(i)*dt);
         //solve the system's right hand side
+        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+            dealii::TrilinosWrappers::SparseMatrix pod_basis;
+            pod_basis.reinit(epetra_pod_basis);
+            this->dg->calculate_global_entropy(pod_basis);
+            this->dg->calculate_ROM_projected_entropy(pod_basis);
+        }
         this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(i)))
         std::ofstream RHS_file("RHS" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
         this->dg->right_hand_side.print(RHS_file);
