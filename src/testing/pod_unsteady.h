@@ -41,13 +41,16 @@ public:
     const bool output_solution_at_exact_fixed_times;///< Flag for outputting the solution at exact fixed times by decreasing the time step on the fly
     const double final_time; ///< Final time of solution
     const int output_snapshot_every_x_timesteps;
+
+    double mutable rom_previous_entropy;
+    double mutable fom_previous_entropy;
     /// Most up to date POD basis
     std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> current_pod;
     std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> offline_pod;
     
     /// Number of time steps for every snapshots
     mutable int snapshots_every_x_steps;
-
+    
     /// Run Test
     int run_test() const override;
 

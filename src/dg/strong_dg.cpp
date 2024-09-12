@@ -898,7 +898,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
     dealii::Vector<real>                                   &local_rhs_int_cell)
 {
     (void) current_cell_index;
-
+    
     const unsigned int n_quad_pts  = this->volume_quadrature_collection[poly_degree].size();
     const unsigned int n_dofs_cell = this->fe_collection[poly_degree].dofs_per_cell;
     const unsigned int n_shape_fns = n_dofs_cell / nstate; 
@@ -3170,14 +3170,13 @@ void DGStrong<dim,nstate,real,MeshType>::allocate_dual_vector()
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::TrilinosWrappers::SparseMatrix &V)
+void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy()
 {
-    dealii::LinearAlgebra::distributed::Vector<double> temp;
-    temp.reinit(V.locally_owned_domain_indices(), this->mpi_communicator);
-    //V.Tvmult(temp,this->solution);
-    //V.vmult(this->solution,temp);
     this->global_entropy.reinit(this->solution);
-
+    std::array<dealii::LinearAlgebra::distributed::Vector<double>,dim> location;
+    for(int idim = 0; idim < dim; idim++){
+        location[idim].reinit(this->solution);
+    }
     const auto mapping = (*(this->high_order_grid->mapping_fe_field));
     dealii::hp::MappingCollection<dim> mapping_collection(mapping);
 
@@ -3196,7 +3195,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::Trilin
     OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree); 
     OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree); 
     OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
-
+    std::array<std::vector<real>,dim> mapping_support_points;
     this->reinit_operators_for_cell_residual_loop(
         this->max_degree, this->max_degree, init_grid_degree, 
         soln_basis_int, soln_basis_ext, 
@@ -3218,18 +3217,44 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::Trilin
         const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
         const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
         const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
+        const dealii::FESystem<dim> &fe_metric = this->high_order_grid->fe_system;
+        const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
+        const unsigned int n_grid_nodes  = n_metric_dofs / dim;
         dealii::Vector<real> local_entropy(n_dofs_curr_cell);
          // Obtain the mapping from local dof indices to global dof indices
         current_dofs_indices.resize(n_dofs_curr_cell);
         current_cell->get_dof_indices (current_dofs_indices);
+        std::vector<dealii::types::global_dof_index> metric_dof_indices(n_metric_dofs);
+        metric_cell->get_dof_indices (metric_dof_indices);
+
+        // For calculating Locations
+        OPERATOR::metric_operators<real,dim,2*dim> metric_oper_int(nstate, poly_degree, init_grid_degree,
+                                                               true,
+                                                               false);
+        for(int idim=0; idim<dim; idim++){
+            mapping_support_points[idim].resize(n_grid_nodes);
+        }
+        const std::vector<unsigned int > &index_renumbering = dealii::FETools::hierarchic_to_lexicographic_numbering<dim>(init_grid_degree);
+        for (unsigned int idof = 0; idof< n_metric_dofs; ++idof) {
+            const real val = (this->high_order_grid->volume_nodes[metric_dof_indices[idof]]);
+            const unsigned int istate = fe_metric.system_to_component_index(idof).first; 
+            const unsigned int ishape = fe_metric.system_to_component_index(idof).second; 
+            const unsigned int igrid_node = index_renumbering[ishape];
+            mapping_support_points[istate][igrid_node] = val; 
+        }
+        metric_oper_int.build_volume_metric_operators(
+            this->volume_quadrature_collection[poly_degree].size(), n_grid_nodes,
+            mapping_support_points,
+            mapping_basis,
+            this->all_parameters->use_invariant_curl_form);
+        for(int idim = 0; idim < dim; idim++){
+            for(unsigned int iquad = 0; iquad < n_quad_pts; iquad++){
+                location[idim][current_dofs_indices[iquad]] = metric_oper_int.flux_nodes_vol[idim][iquad];
+            }   
+        }
         
-
-
-        const unsigned int n_metric_dofs_cell = this->high_order_grid->fe_system.dofs_per_cell;
-        std::vector<dealii::types::global_dof_index> current_metric_dofs_indices(n_metric_dofs_cell);
-        std::vector<dealii::types::global_dof_index> neighbor_metric_dofs_indices(n_metric_dofs_cell);
-        metric_cell->get_dof_indices (current_metric_dofs_indices);
-
+        std::vector<dealii::types::global_dof_index> neighbor_metric_dofs_indices(n_metric_dofs);
+        
         //const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
         std::array<std::vector<real>,nstate> soln_coeff;
         const unsigned int n_shape_fns = n_dofs_curr_cell / nstate;
@@ -3294,23 +3319,21 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::Trilin
     }
     std::ofstream file("global_entropy.txt");
     this->global_entropy.print(file);
+    for(int idim = 0; idim < dim; idim++){
+        std::ofstream location_file("locations_" + std::to_string(idim)+".txt");
+        location[idim].print(location_file);
+    }
+
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGStrong<dim, nstate, real, MeshType>::quadrature_conservative_solution(
-    dealii::LinearAlgebra::distributed::Vector<double> &nodal_coefficients,
-    dealii::LinearAlgebra::distributed::Vector<double> &quadrature_solution)
+void DGStrong<dim, nstate, real, MeshType>::location2D(
+    dealii::LinearAlgebra::distributed::Vector<double> &location_x,
+    dealii::LinearAlgebra::distributed::Vector<double> &location_y)
 {
-    quadrature_solution.reinit(this->solution);
-    const auto mapping = (*(this->high_order_grid->mapping_fe_field));
-    dealii::hp::MappingCollection<dim> mapping_collection(mapping);
-
-    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume (mapping_collection, this->fe_collection, this->volume_quadrature_collection, this->volume_update_flags); ///< FEValues of volume.
-    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_int (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of interior face.
-    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_ext (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->neighbor_face_update_flags); ///< FEValues of exterior face.
-    dealii::hp::FESubfaceValues<dim,dim> fe_values_collection_subface (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of subface.
-
-    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume_lagrange (mapping_collection, this->fe_collection_lagrange, this->volume_quadrature_collection, this->volume_update_flags);
+    location_x.reinit(this->solution);
+    location_y.reinit(this->solution);
+    // Operator Setup
     const unsigned int init_grid_degree = this->high_order_grid->fe_system.tensor_degree();
     OPERATOR::basis_functions<dim,2*dim,real> soln_basis_int(1, this->max_degree, init_grid_degree); 
     OPERATOR::basis_functions<dim,2*dim,real> soln_basis_ext(1, this->max_degree, init_grid_degree); 
@@ -3320,7 +3343,7 @@ void DGStrong<dim, nstate, real, MeshType>::quadrature_conservative_solution(
     OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree); 
     OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree); 
     OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
-
+    std::array<std::vector<real>,dim> mapping_support_points;
     this->reinit_operators_for_cell_residual_loop(
         this->max_degree, this->max_degree, init_grid_degree, 
         soln_basis_int, soln_basis_ext, 
@@ -3328,61 +3351,53 @@ void DGStrong<dim, nstate, real, MeshType>::quadrature_conservative_solution(
         flux_basis_stiffness, 
         soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
         mapping_basis);
-
-    //solution.update_ghost_values();
+    // Loop over each cell
     auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
         if (!current_cell->is_locally_owned()) continue;
-        
+        // Set up for cell
         std::vector<dealii::types::global_dof_index> current_dofs_indices;
         std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
-        // Current reference element related to this physical cell
         const int i_fele = current_cell->active_fe_index();
         const unsigned int poly_degree = i_fele;
         const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
         const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
         const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
-        dealii::Vector<real> local_conservative_at_q(n_dofs_curr_cell);
-         // Obtain the mapping from local dof indices to global dof indices
+        const dealii::FESystem<dim> &fe_metric = this->high_order_grid->fe_system;
+        const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
+        const unsigned int n_grid_nodes  = n_metric_dofs / dim;
+        // Obtain the mapping from local dof indices to global dof indices
         current_dofs_indices.resize(n_dofs_curr_cell);
         current_cell->get_dof_indices (current_dofs_indices);
-        
-
-
-        const unsigned int n_metric_dofs_cell = this->high_order_grid->fe_system.dofs_per_cell;
-        std::vector<dealii::types::global_dof_index> current_metric_dofs_indices(n_metric_dofs_cell);
-        std::vector<dealii::types::global_dof_index> neighbor_metric_dofs_indices(n_metric_dofs_cell);
-        metric_cell->get_dof_indices (current_metric_dofs_indices);
-
-        //const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
-        std::array<std::vector<real>,nstate> soln_coeff;
-        std::array<dealii::Tensor<1,dim,std::vector<real>>,nstate> aux_soln_coeff;
-        const unsigned int n_shape_fns = n_dofs_curr_cell / nstate;
-        for (unsigned int idof = 0; idof < n_dofs_curr_cell; ++idof) {
-            const unsigned int istate = this->fe_collection[poly_degree].system_to_component_index(idof).first;
-            const unsigned int ishape = this->fe_collection[poly_degree].system_to_component_index(idof).second;
-            if(ishape == 0)
-                soln_coeff[istate].resize(n_shape_fns);
-            soln_coeff[istate][ishape] = nodal_coefficients(current_dofs_indices[idof]);
+        std::vector<dealii::types::global_dof_index> metric_dof_indices(n_metric_dofs);
+        metric_cell->get_dof_indices (metric_dof_indices);
+        // For calculating Locations
+        OPERATOR::metric_operators<real,dim,2*dim> metric_oper_int(nstate, poly_degree, init_grid_degree,
+                                                               true,
+                                                               false);
+        for(int idim=0; idim<dim; idim++){
+            mapping_support_points[idim].resize(n_grid_nodes);
         }
-        std::array<std::vector<real>,nstate> soln_at_q;
-        // Interpolate each state to the quadrature points using sum-factorization
-        // with the basis functions in each reference direction.
-        for(int istate=0; istate<nstate; istate++){
-            soln_at_q[istate].resize(n_quad_pts);
-            soln_basis_int.matrix_vector_mult_1D(soln_coeff[istate], soln_at_q[istate],
-                                            soln_basis_int.oneD_vol_operator);
-
+        const std::vector<unsigned int > &index_renumbering = dealii::FETools::hierarchic_to_lexicographic_numbering<dim>(init_grid_degree);
+        for (unsigned int idof = 0; idof< n_metric_dofs; ++idof) {
+            const real val = (this->high_order_grid->volume_nodes[metric_dof_indices[idof]]);
+            const unsigned int istate = fe_metric.system_to_component_index(idof).first; 
+            const unsigned int ishape = fe_metric.system_to_component_index(idof).second; 
+            const unsigned int igrid_node = index_renumbering[ishape];
+            mapping_support_points[istate][igrid_node] = val; 
         }
-        for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
-                for(int istate=0; istate<nstate; istate++){
-                    local_conservative_at_q[istate*n_shape_fns + iquad] = soln_at_q[istate][iquad];
-                }
+        metric_oper_int.build_volume_metric_operators(
+            this->volume_quadrature_collection[poly_degree].size(), n_grid_nodes,
+            mapping_support_points,
+            mapping_basis,
+            this->all_parameters->use_invariant_curl_form);
+        for(unsigned int iquad = 0; iquad < n_quad_pts; iquad++){
+            for(int istate = 0; istate < nstate; istate++){
+                location_x[current_dofs_indices[iquad+istate*n_quad_pts]] = metric_oper_int.flux_nodes_vol[0][iquad];
+                location_y[current_dofs_indices[iquad+istate*n_quad_pts]] = metric_oper_int.flux_nodes_vol[1][iquad];
+            }   
         }
-        for (unsigned int i=0; i<n_dofs_curr_cell; ++i) {
-            quadrature_solution[current_dofs_indices[i]] += local_conservative_at_q[i];
-        }
-}
+    }
 }
 
 template <int dim, int nstate, typename real, typename MeshType>

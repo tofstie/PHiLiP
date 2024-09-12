@@ -3925,7 +3925,7 @@ void DGWeak<dim,nstate,real,MeshType>::allocate_dual_vector ()
     this->dual.reinit(this->locally_owned_dofs, this->ghost_dofs, this->mpi_communicator);
 }
 template <int dim, int nstate, typename real, typename MeshType>
-void DGWeak<dim,nstate,real,MeshType>::calculate_global_entropy(dealii::TrilinosWrappers::SparseMatrix &/*V*/)
+void DGWeak<dim,nstate,real,MeshType>::calculate_global_entropy()
 {
     //Do Nothing... For now
 }
@@ -3941,7 +3941,7 @@ void DGWeak<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::T
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGWeak<dim, nstate, real, MeshType>::quadrature_conservative_solution(dealii::LinearAlgebra::distributed::Vector<double> &/*nodal_coefficients*/,
+void DGWeak<dim, nstate, real, MeshType>::location2D(dealii::LinearAlgebra::distributed::Vector<double> &/*nodal_coefficients*/,
 dealii::LinearAlgebra::distributed::Vector<double> &/*quadrature_solution*/)
 {
     // Do nothing

@@ -47,7 +47,7 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
     bool file_found = false;
     snapshotMatrix.resize(0,0);
     std::string path = dg->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
-    std::string reference_type = "mean";
+    std::string reference_type = "zero";
     std::vector<std::filesystem::path> files_in_directory;
     std::copy(std::filesystem::directory_iterator(path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
     std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
@@ -130,6 +130,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     Kevin Carlberg, Charbel Bou-Mosleh, Charbel Farhat
     International Journal for Numerical Methods in Engineering, 2011
     */
+    //matchQuadratureLocation();  
     int num_of_modes = dg->all_parameters->reduced_order_param.number_nodal_modes;
     VectorXd reference_state;
     pcout << "Computing POD basis..." << std::endl;
@@ -142,9 +143,10 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     for(unsigned int i = 0 ; i < reference_state.size() ; i++){
         referenceState(i) = reference_state(i);
     }
+
     MatrixXd snapshotMatrixCentered = snapshots.colwise() - reference_state;
     Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(snapshotMatrixCentered);
-    MatrixXd pod_basis_one = svd_one.matrixU();
+    MatrixXd pod_basis = svd_one.matrixU();
     /// This commented sections adds a col of 1 to the LSV and preforms another SVD.
     /*
     VectorXd ones = VectorXd::Ones(pod_basis_one.rows());
@@ -156,15 +158,15 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     std::ofstream sing_file("singular_values.txt");
     sing_file << singular_values;
     */
-    MatrixXd pod_basis = pod_basis_one; // Comment this line out when wanting to use 1's
     if (!num_of_modes == 0){
-        Assert(num_of_modes > pod_basis.cols(),
+        Assert(num_of_modes < pod_basis.cols(),
          dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
         // 📢 MatrixXd pod_basis_n_modes = Eigen::MatrixXd
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all,Eigen::seqN(0,num_of_modes));
         pod_basis = pod_basis_n_modes;
     }
-    this->Vt = pod_basis;
+
+    //this->Vt = pod_basis;
     /*
     fullBasis.reinit(snapshots.rows(), snapshots.cols());
 
@@ -181,7 +183,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
             fullBasis.set(m, n, pod_basis(m, n));
         }
     }
-    
+
     std::ofstream out_file("POD_basis.txt");
     unsigned int precision = 16;
     fullBasis.print_formatted(out_file, precision);
@@ -189,7 +191,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
     Epetra_Map system_matrix_map = epetra_system_matrix.RowMap();
     Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy, system_matrix_map, pod_basis.cols());
-    
+
 
 
     const int numMyElements = system_matrix_map.NumMyElements(); //Number of elements on the calling processor
@@ -200,11 +202,13 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
             epetra_basis.InsertGlobalValues(globalRow, 1, &pod_basis(globalRow, n), &n);
         }
     }
+
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     Epetra_Map domain_map((int)pod_basis.cols(), 0, epetra_comm);
 
     epetra_basis.FillComplete(domain_map, system_matrix_map);
     basis->reinit(epetra_basis);
+
     return;
 }
 
@@ -264,6 +268,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     MatrixXd energy(0,0);
     std::string path = dg->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
     std::string reference_type = "zero";
+    bool entropy_quad = false;
     std::vector<std::filesystem::path> files_in_directory;
     std::copy(std::filesystem::directory_iterator(path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
     std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
@@ -299,7 +304,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             // ROWS = nstate*global_quad_pts
             // COLS = num_of_snapshots
             num_of_snapshots += cols;
-            global_quad_points = rows/nstate;
+            global_quad_points = rows;
             snapshotMatrix.conservativeResize(rows, old_amount_of_snapshots + 2*cols); // Changing rows from rows/nstate and cols from 2*nstate*cols
             density.conservativeResize(rows/nstate, density.cols() + cols);
             for(int idim = 0; idim < dim; idim++){
@@ -358,9 +363,11 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             myfile.close();
         }
     }
+    if(entropy_quad){
+    // USING Nodal -> Entropy? This should be the same but it isnt.
     int solution_idx = 0;
-    for(int row = 0; row < global_quad_points; row++){
-        for(int col = 0; col < num_of_snapshots; col++){
+    for(int row = 0; row < density.rows(); row++){
+        for(int col = 0; col < density.cols(); col++){
             std::array<double,nstate> conservative_soln;
             for(int istate = 0; istate < nstate ; istate++){
                 const int conservative_density_case = 0;
@@ -397,20 +404,62 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
 
                 }
                 //snapshotMatrix(solution_idx+istate*n_quad_pts,col+num_of_snapshots) = entropy_var[nstate-istate-1];
-                /* OLD
-                snapshotMatrix(solution_idx+2*n_quad_pts,col) = density(row,col);
-                snapshotMatrix(solution_idx+1*n_quad_pts,col) = momentum(row,col);
-                snapshotMatrix(solution_idx+0*n_quad_pts,col) = energy(row,col);
-                snapshotMatrix(solution_idx+2*n_quad_pts,col+1*num_of_snapshots) = entropy_var[0];
-                snapshotMatrix(solution_idx+1*n_quad_pts,col+1*num_of_snapshots) = entropy_var[1];
-                snapshotMatrix(solution_idx+0*n_quad_pts,col+1*num_of_snapshots) = entropy_var[2];
-                */
+                //OLD comment out this block
+                //snapshotMatrix(solution_idx+2*n_quad_pts,col) = density(row,col);
+                //snapshotMatrix(solution_idx+1*n_quad_pts,col) = momentum(row,col);
+                //snapshotMatrix(solution_idx+0*n_quad_pts,col) = energy(row,col);
+                //snapshotMatrix(solution_idx+2*n_quad_pts,col+1*num_of_snapshots) = entropy_var[0];
+                //snapshotMatrix(solution_idx+1*n_quad_pts,col+1*num_of_snapshots) = entropy_var[1];
+                //snapshotMatrix(solution_idx+0*n_quad_pts,col+1*num_of_snapshots) = entropy_var[2];
+                
             }
         }
         solution_idx++;
         if(solution_idx % n_quad_pts == 0){
             solution_idx += (nstate-1)*n_quad_pts;
         }
+    }
+    } else {
+    // USING NODAL ENTROPY
+   
+    for(int col = 0; col < num_of_snapshots; col++){
+        int quad_num = 0;
+        int i_quad = -1;
+        int solution_num = 0;
+        int istate = 0;
+        for(int row = 0; row < global_quad_points; row++){
+            i_quad++;
+            if(i_quad == n_quad_pts){i_quad = 0; istate++;}
+            if(istate == nstate){istate = 0; solution_num += n_quad_pts*nstate;quad_num += n_quad_pts;}
+            double val  = 0;
+            switch(istate){
+                case energy_case:
+                    val = energy(quad_num+i_quad,col);
+                    break;
+                case density_case:
+                    val = density(quad_num+i_quad,col);
+                    break;
+                default:
+                    val = momentum[istate-1](quad_num+i_quad,col);
+                    break;
+            }
+            if(dg->solution.in_local_range(solution_num+istate*n_quad_pts+i_quad)){
+                dg->solution[solution_num+istate*n_quad_pts+i_quad] = val;
+            }
+            snapshotMatrix(solution_num+istate*n_quad_pts+i_quad,col) = val;
+        }
+        dg->calculate_global_entropy();
+        for(int row = 0; row < global_quad_points; row++){
+            if(dg->global_entropy.in_local_range(row)){
+                snapshotMatrix(row, col+1*num_of_snapshots) = dg->global_entropy[row];
+            }
+        }
+    }
+    for(int row = 0; row < global_quad_points; row++){
+        if(dg->solution.in_local_range(row)){
+            dg->solution[row] = snapshotMatrix(row, 0);
+        }
+    }
     }
     pcout << "Snapshot matrix generated." << std::endl;
     calculatePODBasis(snapshotMatrix, reference_type);
@@ -742,8 +791,69 @@ void OfflinePOD<dim>::debugMatrix(dealii::FullMatrix<double> M){
         pcout << cell->value() << std::endl;
     }
     return;
-};
+}
+template<int dim>
+void OfflinePOD<dim>::matchQuadratureLocation(){ // Currently only works for 2D, will need to be expanded to 3D
+    /*
+    std::ifstream location("/home/tyson/Codes/PHiLiP/build_release/location.txt");
+    std::vector<std::vector<double>> data;
+    std::string line;
+    while(std::getline(location,line)) {
+        std::stringstream ss(line);
+        std::vector<double> row;
+        double value;
 
+        while(ss >>value){
+            row.push_back(value);
+        }
+        data.push_back(row);
+    }
+    Eigen::MatrixXd snapshot_quad_locations(data.size(), data[0].size());
+    for (std::size_t i = 0; i < data.size(); ++i) {
+        snapshot_quad_locations.row(i) = Eigen::VectorXd::Map(data[i].data(), data[i].size());
+    }
+    dealii::LinearAlgebra::distributed::Vector<double> location_x;
+    dealii::LinearAlgebra::distributed::Vector<double> location_y;
+    dg->location2D(location_x,location_y);
+    dealii::LinearAlgebra::ReadWriteVector<double> read_x(location_x.size());
+    dealii::LinearAlgebra::ReadWriteVector<double> read_y(location_y.size());
+    read_x.import(location_x, dealii::VectorOperation::values::insert);
+    read_y.import(location_y, dealii::VectorOperation::values::insert);
+
+    Eigen::MatrixXd current_quad_locations(location_x.size(),2);
+    for(std::size_t i = 0; i < location_x.size(); i++){
+        current_quad_locations(i,0) = location_x(i);
+        current_quad_locations(i,1) = location_y(i);
+    }
+    std::vector<int> matchingIndices;
+    for (int i = 0; i < current_quad_locations.rows(); ++i) {
+        for (int j = 0; j < snapshot_quad_locations.rows(); ++j) {
+            if (current_quad_locations.row(i).isApprox(snapshot_quad_locations.row(j))) {
+                matchingIndices.push_back(j);
+                break;
+            }
+        }
+    }
+    for (std::size_t i = 0; i < matchingIndices.size();++i){
+        if((int)i != matchingIndices[i]) {
+            snapshotMatrix.row(i).swap(snapshotMatrix.row(matchingIndices[i]));
+        }
+    }*/
+    unsigned int n = snapshotMatrix.rows();
+    unsigned int num_of_cores = 10; // Num of cores used in online, must be specified, can be given in parameter file later Temp 4;
+    unsigned int cum_quad_pts = 0;
+    for(unsigned int i = 0; i < num_of_cores/2; i++){
+        unsigned int num_quad_pts_on_core = n/num_of_cores;
+        Eigen::VectorXi top_indices = Eigen::VectorXi::LinSpaced(num_quad_pts_on_core,cum_quad_pts,cum_quad_pts+num_quad_pts_on_core+1); // These wont work as its using MATLAB indices
+        Eigen::VectorXi bottom_indices = Eigen::VectorXi::LinSpaced(num_quad_pts_on_core,n-cum_quad_pts-num_quad_pts_on_core+1,n-cum_quad_pts); // Switch to Cpp (0 to n-1) not (1 to n)
+        //Eigen::MatrixXd temp = snapshotMatrix(top_indices, Eigen::all);
+        for (int i = 0; i < top_indices.size(); i++){
+            snapshotMatrix.row(top_indices(i)).swap(snapshotMatrix.row(bottom_indices(i)));
+        }
+        cum_quad_pts += num_quad_pts_on_core;
+    }
+
+}
 
 
 template class OfflinePOD <PHILIP_DIM>;

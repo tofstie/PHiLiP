@@ -85,6 +85,8 @@ public:
 
     bool enrichPOD();
 
+    void matchQuadratureLocation();
+
     void debugMatrix(dealii::FullMatrix<double> M);
     /*
     void compute_hyper_reduction(MatrixXd V_target, MatrixXd w_target);

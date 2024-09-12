@@ -440,11 +440,11 @@ private:
         dealii::Vector<real> &current_cell_rhs,
         const dealii::FEValues<dim,dim> &fe_values_lagrange);
     
-    void calculate_global_entropy(dealii::TrilinosWrappers::SparseMatrix &V) override;
+    void calculate_global_entropy() override;
     void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) override;
     void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V) override;
-    void quadrature_conservative_solution(dealii::LinearAlgebra::distributed::Vector<double> &nodal_coefficients,
-    dealii::LinearAlgebra::distributed::Vector<double> &quadrature_solution) override;
+    void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
+    dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
 }; // end of DGWeak class
 

@@ -112,6 +112,14 @@ public:
     /// Pointer to ode solver so it can be accessed externally.
     std::shared_ptr<ODE::ODESolverBase<dim, double>> ode_solver;
 
+#if PHILIP_DIM>1
+        /// Outputs all the necessary restart files
+        /// 📢MAKING PUBLIC FOR NOW FOR RESTART FILES IN POD_UNSTEADY
+        void output_restart_files(
+            const unsigned int current_restart_index,
+            const double constant_time_step,
+            const std::shared_ptr <dealii::TableHandler> unsteady_data_table) const;
+#endif
 private:
     /** Returns the column names of a dealii::TableHandler object
      *  given the first line of the file */
@@ -124,13 +132,7 @@ private:
     /// Converts a double to a string with scientific format and with full precision
     std::string double_to_string(const double value_input) const;
 
-#if PHILIP_DIM>1
-    /// Outputs all the necessary restart files
-    void output_restart_files(
-        const unsigned int current_restart_index,
-        const double constant_time_step,
-        const std::shared_ptr <dealii::TableHandler> unsteady_data_table) const;
-#endif
+
 
     /// Performs mesh adaptation.
     /** Currently implemented for steady state flows.
