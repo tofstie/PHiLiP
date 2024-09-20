@@ -547,7 +547,9 @@ void DGBase<dim,real,MeshType>::assemble_cell_residual (
     (void) fe_values_collection_face_ext;
     (void) fe_values_collection_subface;
     for (unsigned int iface=0; iface < dealii::GeometryInfo<dim>::faces_per_cell; ++iface) {
-
+        //if(cell->face_flip(iface)){
+        //    std::cout << "A FACE FLIPPED, please break" << std::endl;
+        //}
         auto current_face = current_cell->face(iface);
 
         // CASE 1: FACE AT BOUNDARY

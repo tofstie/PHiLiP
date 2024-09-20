@@ -44,6 +44,9 @@ public:
     /// Read snapshots to build POD basis
     bool getPODBasisFromSnapshots();
 
+    /// Read POD from File
+    bool loadPOD();
+
     /// POD basis
     void calculatePODBasis(MatrixXd snapshots, std::string reference_type);
     
@@ -88,6 +91,8 @@ public:
     void matchQuadratureLocation();
 
     void debugMatrix(dealii::FullMatrix<double> M);
+
+
     /*
     void compute_hyper_reduction(MatrixXd V_target, MatrixXd w_target);
     */

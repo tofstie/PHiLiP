@@ -63,6 +63,8 @@ public:
                    int iteration) const;
     std::array<std::vector<double>,4> compute_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const;
     std::array<double,2> integrate_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const;
+    void load_restart() const;
+    
     //void hyperReduction(double tol = 10) const;
     /// Compute Hyper-reduction points
     //std::tuple<int,int> computeHyperReduction(dealii::TrilinosWrappers::SparseMatrix V, dealii::LinearAlgebra::distributed::Vector w) const;

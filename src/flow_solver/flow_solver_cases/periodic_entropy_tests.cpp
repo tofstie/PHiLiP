@@ -208,7 +208,8 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
             } else if (quantity == IntegratedQuantityEnum::numerical_entropy) {
                 const double quadrature_entropy = this->euler_physics->compute_numerical_entropy_function(soln_at_q);
                 //Using std::cout because of cell->is_locally_owned check 
-                if (isnan(quadrature_entropy))  std::cout << "WARNING: NaN entropy detected at a node!"  << std::endl;
+                if (isnan(quadrature_entropy)){  
+                    std::cout << "WARNING: NaN entropy detected at a node!"  << std::endl;}
                 integrated_quantity += quadrature_entropy * quad_weights[iquad] * metric_oper.det_Jac_vol[iquad];
             } else if (quantity == IntegratedQuantityEnum::max_wave_speed) {
                 const double local_wave_speed = this->euler_physics->max_convective_eigenvalue(soln_at_q);

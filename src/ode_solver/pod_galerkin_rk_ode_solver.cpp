@@ -54,27 +54,9 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
         this->reduced_rk_stage[i] = 0.0;
         for(int j = 0; j < i; ++j){
             if(this->butcher_tableau->get_a(i,j) != 0){
-                /*
-                Epetra_Vector epetra_reduced_rk_stage_j(Epetra_DataAccess::View, reduced_map, this->reduced_rk_stage[j].begin());
-                dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_j;
-                Epetra_Vector epetra_stage_j(epetra_system_matrix.RowMap());
-                epetra_test_basis->Multiply(false, epetra_reduced_rk_stage_j, epetra_stage_j);
-                std::ofstream RHS_file("RHS" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
-                epetra_stage_j.Print(RHS_file);
-                epetra_to_dealii(epetra_reduced_rk_stage_j,dealii_rk_stage_j, solution_index); // Fix input types
-                */
                 dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_j;
                 Multiply(*epetra_test_basis,this->reduced_rk_stage[j],dealii_rk_stage_j,solution_index,false);
-                /*
-                Epetra_Vector epetra_reduced_rk_stage_j(Epetra_DataAccess::View, epetra_test_basis->DomainMap(), this->reduced_rk_stage[j].begin());
-                Epetra_Vector epetra_stage_j(epetra_test_basis->RangeMap());
-                
-
-                epetra_test_basis->Multiply(false, epetra_reduced_rk_stage_j, epetra_stage_j);
-                epetra_to_dealii(epetra_reduced_rk_stage_j,dealii_rk_stage_j, solution_index);
-                */
                 this->rk_stage[i].add(this->butcher_tableau->get_a(i,j),dealii_rk_stage_j);
-
             }
         } //sum(a_ij*V*k_j), explicit part
         if(pseudotime) {
@@ -83,14 +65,6 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
         }else {
             this->rk_stage[i]*=dt; 
         }//dt * sum(a_ij * k_j)
-        /* Note sure if this section is needed
-        Epetra_Vector epetra_reduced_x(Epetra_DataAccess::View, epetra_system_matrix.RowMap(), this->solution_update.begin());
-        Epetra_Vector epetra_W_reduced_x(epetra_test_basis->DomainMap()); // W*x̂
-        epetra_test_basis.Multiply(false, epetra_reduced_x, epetra_W_reduced_x);
-        dealii::LinearAlgebra::distributed::Vector<double> dealii_W_reduced_x;
-        epetra_to_dealii(epetra_W_reduced_x,dealii_W_reduced_x);
-        this->rk_stage[i].add(1.0,dealii_W_reduced_x,1.0,reference_solution); //+u_o + u_n + dt * sum(a_ij * W * k_j)
-        */
         this->rk_stage[i].add(1.0,this->solution_update);
         if (!this->butcher_tableau_aii_is_zero[i]){
             // Implicit, not sure on JFNK works for reduced order or not, assuming it does for now
@@ -126,21 +100,18 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
         if(this->all_parameters->use_inverse_mass_on_the_fly){
             //this->dg->apply_inverse_global_mass_matrix(this->dg->right_hand_side, this->rk_stage[i]); //rk_stage[i] = IMM*RHS = F(u_n + dt*sum(a_ij*k_j))
             // Not implmenting this yet as requires editting DG base
+            assert(1 == 0 && "Not Implemented: use_inverse_mass_on_the_fly=true && ode_solver_type=pod_galerkin_rk_solver");
         } else{
+            // Creating Reduced RHS
             dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
             Epetra_Vector eptra_rhs(Epetra_DataAccess::View, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
             Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
             std::ofstream epetra_rhs_file("eptra_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
             eptra_rhs.Print(epetra_rhs_file);
-            //head(eptra_rhs, 10);
             epetra_test_basis->Multiply(true,eptra_rhs,epetra_reduced_rhs);
-            //head(epetra_reduced_rhs, 10);
-            //std::cout << "Epetra Reduced RHS: " << epetra_reduced_rhs[0] << std::endl;
             std::ofstream reduced_file("epetra_reduced_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
             epetra_reduced_rhs.Print(reduced_file);
-            if (false) {
-                head(epetra_reduced_rhs, 10);
-            }
+            // Creating Linear Problem to find stage
             Epetra_Vector epetra_rk_stage_i(epetra_reduced_lhs->DomainMap()); // Ensure this is correct as well, since LHS is not transpose might need to be rangeMap
             Epetra_LinearProblem linearProblem(epetra_reduced_lhs.get(), &epetra_rk_stage_i, &epetra_reduced_rhs);
             //std::cout << linearProblem.CheckInput() << std::endl;
@@ -178,9 +149,11 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
             reduced_sum.add(dt* this->butcher_tableau->get_b(i),this->reduced_rk_stage[i]); 
         }
     }
+    // Convert Reduced order step to Full order step
     dealii::LinearAlgebra::distributed::Vector<double> dealii_update;
     Multiply(*epetra_test_basis,reduced_sum,dealii_update,solution_index,false);
     this->solution_update.add(1.0,dealii_update);
+
     this->dg->solution = this->solution_update; // u_0 + W*u_np1 = u_0 + W*u_n + dt* sum(W * k_i * b_i)
     if (this->limiter) {
         this->limiter->limit(this->dg->solution,
@@ -224,6 +197,7 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::allocate_ode_syst
     // Giving the system matrix the same map as pod matrix
     const Epetra_Map& pod_map = epetra_pod_basis.RowMap();
     Epetra_Import importer(pod_map, old_epetra_system_matrix.RowMap());
+    // Reordering 
     epetra_system_matrix = Epetra_CrsMatrix(old_epetra_system_matrix, importer, &pod_map, &pod_map);
     try {
         int glerror = epetra_system_matrix.FillComplete();
@@ -235,9 +209,12 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::allocate_ode_syst
         throw;
     }
     this->pcout << "System Matrix Imported" << std::endl;
+
+    // Generating test_basis and Reduced LHS
     epetra_test_basis = generate_test_basis(epetra_pod_basis, epetra_pod_basis); // These two lines will need to be updated for LSPG
     epetra_reduced_lhs = generate_reduced_lhs(epetra_system_matrix, *epetra_test_basis); // They need to be reinitialized every step for LSPG
-    // Runge-Kutta Allocation
+    
+    // Evaluating Mass Matrix
     this->solution_update.reinit(this->dg->right_hand_side);
     if(this->all_parameters->use_inverse_mass_on_the_fly == false) {
         this->pcout << " evaluating inverse mass matrix..." << std::flush;
@@ -256,6 +233,8 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::allocate_ode_syst
         this->reduced_rk_stage[i].reinit(reduced_index, this->mpi_communicator); // Add IndexSet
         this->rk_stage[i].reinit(this->dg->solution);
     }
+
+    // Setting up butcher_tableau
     this->butcher_tableau->set_tableau();
     
     this->butcher_tableau_aii_is_zero.resize(n_rk_stages);
@@ -265,35 +244,6 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::allocate_ode_syst
     for (int i=0; i<n_rk_stages; ++i) {
         if (this->butcher_tableau->get_a(i,i)==0.0)     this->butcher_tableau_aii_is_zero[i] = true;
     }
-    // ROM Allocation
-    /*Projection of initial conditions on reduced-order subspace, refer to Equation 19 in:
-    Washabaugh, K. M., Zahr, M. J., & Farhat, C. (2016).
-    On the use of discrete nonlinear reduced-order models for the prediction of steady-state flows past parametrically deformed complex geometries.
-    In 54th AIAA Aerospace Sciences Meeting (p. 1814).
-    */
-    
-   
-    /*
-    dealii::LinearAlgebra::distributed::Vector<double> reference_solution(this->dg->solution);
-    reference_solution.import(pod->getReferenceState(), dealii::VectorOperation::values::insert);
-
-    dealii::LinearAlgebra::distributed::Vector<double> initial_condition(this->dg->solution);
-    //initial_condition -= reference_solution;
-
-    const Epetra_CrsMatrix epetra_pod_basis = pod->getPODBasis()->trilinos_matrix();
-    Epetra_Vector epetra_reduced_solution(epetra_pod_basis.DomainMap());
-    Epetra_Vector epetra_initial_condition(Epetra_DataAccess::Copy, epetra_pod_basis.RangeMap(), initial_condition.begin());
-
-    epetra_pod_basis.Multiply(true, epetra_initial_condition, epetra_reduced_solution);
-
-    Epetra_Vector epetra_projection_tmp(epetra_pod_basis.RangeMap());
-    epetra_pod_basis.Multiply(false, epetra_reduced_solution, epetra_projection_tmp);
-
-    Epetra_Vector epetra_solution(Epetra_DataAccess::Copy, epetra_pod_basis.RangeMap(), this->dg->solution.begin());
-
-    epetra_solution = epetra_projection_tmp;
-    */
-    //this->dg->solution += reference_solution; // This here is the issue
 }   
 
 

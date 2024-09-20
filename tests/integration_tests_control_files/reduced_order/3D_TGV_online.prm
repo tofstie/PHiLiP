@@ -10,16 +10,15 @@ set run_type = integration_test
 set test_type = pod_unsteady
 
 # DG formulation
-set use_weak_form = true
-set flux_nodes_type = GL
+set use_weak_form = false
+set flux_nodes_type = GLL
 
 # NSFR
-set two_point_num_flux_type = Ra
-# set use_split_form = true
+set two_point_num_flux_type = CH
+set use_split_form = true
 set use_curvilinear_split_form = false
-set conv_num_flux = roe
 
-set flux_reconstruction = cHU
+set flux_reconstruction = cDG
 set use_periodic_bc = true
 
 set enable_higher_order_vtk_output = true
@@ -32,9 +31,12 @@ end
 subsection flow_solver
     set flow_case_type = taylor_green_vortex
     set poly_degree = 1
-    set final_time = 14
-    set courant_friedrichs_lewy_number = 0.003
+    set final_time = 0.35
+    set courant_friedrichs_lewy_number = 0.001
     set apply_initial_condition_method = project_initial_condition_function
+    subsection grid
+      set number_of_grid_elements_per_dimension = 8
+    end
 end
 
 # ODE solver
@@ -45,10 +47,11 @@ subsection ODE solver
     set ode_solver_type = runge_kutta
     set initial_time_step = 0.001
     set output_solution_every_x_steps = 10
-    #set runge_kutta_method = ssprk3_ex
+    #set runge_kutta_method = rk4_ex
 end
 
 # Reduced Order Model
 subsection reduced order
-  set output_snapshot_every_x_timesteps = 10
+  set output_snapshot_every_x_timesteps = 1
+
 end

@@ -42,6 +42,7 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
     }
 }
 
+
 template <int dim>
 bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
     bool file_found = false;
@@ -121,6 +122,68 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
     calculatePODBasis(snapshotMatrix, reference_type);
    
     return file_found;
+}
+
+template <int dim>
+bool OfflinePOD<dim>::loadPOD(){ // This only works on one core for now for debugging
+    std::string path = dg->all_parameters->reduced_order_param.path_to_search;
+    std::string full_path = path + "/POD_basis.txt";
+    std::ifstream PODFile(full_path);
+    if(!PODFile)
+    {
+        pcout << "Error opening file." << std::endl;
+        std::abort();
+    }
+    std::string line;
+    int rows = 0;
+    int cols = 0;
+    //First loop set to count rows and columns
+    while(std::getline(PODFile, line)){ //for each line
+        std::istringstream stream(line);
+        std::string field;
+        cols = 0;
+        while (getline(stream, field,' ')){ //parse data values on each line
+            if (field.empty()){ //due to whitespace
+                continue;
+            } else {
+                cols++;
+            }
+        }
+        rows++;
+    }
+    fullBasis.reinit(rows, cols);
+    const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
+    Epetra_Map system_matrix_map = epetra_system_matrix.RowMap();
+    Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy, system_matrix_map, cols);
+
+    int row = 0;
+    PODFile.clear();
+    PODFile.seekg(0); //Bring back to beginning of file
+    //Second loop set to build solutions matrix
+    while(std::getline(PODFile, line)){ //for each line
+        std::istringstream stream(line);
+        std::string field;
+        int col = 0;
+        while (getline(stream, field,' ')) { //parse data values on each line
+            if (field.empty()) {
+                continue;
+            } else {
+                double value = std::stod(field);
+                epetra_basis.InsertGlobalValues(row, 1, &value, &col);//This will work for however many solutions in each file
+                fullBasis.set(row, col, value);
+                col++;
+            }
+        }
+        row++;
+    }
+    PODFile.close();
+
+    Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
+    Epetra_Map domain_map((int)cols, 0, epetra_comm);
+
+    epetra_basis.FillComplete(domain_map, system_matrix_map);
+    basis->reinit(epetra_basis);
+    return true;
 }
 
 template <int dim>
@@ -463,6 +526,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     }
     pcout << "Snapshot matrix generated." << std::endl;
     calculatePODBasis(snapshotMatrix, reference_type);
+    //loadPOD();
     //enrichPOD();
     std::ofstream file("Entropy_snapshot.txt");
     const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");

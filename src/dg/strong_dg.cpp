@@ -1249,6 +1249,8 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
             for(int ref_dim=0; ref_dim<dim; ref_dim++){
                 dealii::FullMatrix<real> divergence_ref_flux_Hadamard_product(n_quad_pts, n_quad_pts_1D);
                 flux_basis.Hadamard_product(flux_basis_stiffness_skew_symm_oper_sparse[ref_dim], conv_ref_2pt_flux_at_q[istate][ref_dim], divergence_ref_flux_Hadamard_product); 
+                char zero = '0';
+                flux_basis_stiffness_skew_symm_oper_sparse[ref_dim].print_formatted(std::cout, 3, true, 0, &zero ,1.,0.);
                 //Hadamard product times the vector of ones.
                 for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
                     if(ref_dim == 0){
@@ -1606,7 +1608,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
                 entropy_var_face[istate] = projected_entropy_var_surf[istate][iquad_face];
             }
             std::array<real,nstate> soln_state_face;
-            soln_state_face= this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_face);
+            soln_state_face = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_face);
 
             //only do the n_quad_1D vol points that give non-zero entries from Hadamard product.
             for(unsigned int row_index = iquad_face * n_quad_pts_1D, column_index = 0; 
@@ -3214,6 +3216,20 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy()
         // Current reference element related to this physical cell
         const int i_fele = current_cell->active_fe_index();
         const unsigned int poly_degree = i_fele;
+        if(poly_degree != soln_basis_int.current_degree){
+        soln_basis_int.current_degree = poly_degree;
+        soln_basis_ext.current_degree = poly_degree;
+        flux_basis_int.current_degree = poly_degree;
+        flux_basis_ext.current_degree = poly_degree;
+        mapping_basis.current_degree  = poly_degree;
+        const unsigned int grid_degree = this->high_order_grid->fe_system.tensor_degree();
+        this->reinit_operators_for_cell_residual_loop(poly_degree, poly_degree, grid_degree, 
+                                                        soln_basis_int, soln_basis_ext, 
+                                                        flux_basis_int, flux_basis_ext, 
+                                                        flux_basis_stiffness, 
+                                                        soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+                                                        mapping_basis);
+}
         const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
         const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
         const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
@@ -3411,23 +3427,6 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     Eigen::MatrixXd PsuedoInv = VTV.inverse()*V_eigen_T;
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     Epetra_CrsMatrix pinvV = eig_to_epetra_matrix(PsuedoInv,PsuedoInv.cols(),PsuedoInv.rows(),epetra_comm);
-    //Epetra_CrsMatrix projection_Epetra = eig_to_epetra_matrix(projection_eigen, projection_eigen.cols(), projection_eigen.rows(), epetra_comm);
-    // All of this for printing
-    dealii::LAPACKFullMatrix<double> fullBasis;
-    fullBasis.reinit(PsuedoInv.rows(), PsuedoInv.cols());
-
-    for (unsigned int m = 0; m < PsuedoInv.rows(); m++) {
-        for (unsigned int n = 0; n < PsuedoInv.cols(); n++) {
-            fullBasis.set(m, n, PsuedoInv(m, n));
-        }
-    }
-    
-    // Printing  (Get rid of this later)
-    std::ofstream out_file("PsuedoInverse.txt");
-    std::ofstream out_file_epetra("PsuedoInverse_epetra.txt");
-    unsigned int precision = 16;
-    fullBasis.print_formatted(out_file, precision);
-    pinvV.Print(out_file_epetra);
     // Storing
     this->projection_matrix.reinit(pinvV);
 }

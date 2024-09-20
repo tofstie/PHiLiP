@@ -611,7 +611,7 @@ int EulerTaylorGreen<dim, nstate>::run_test() const
     const double initial_energy_mpi = (dealii::Utilities::MPI::sum(initial_energy, mpi_communicator));
     const double initial_entropy = compute_entropy(dg, poly_degree);
     const double initial_entropy_mpi = (dealii::Utilities::MPI::sum(initial_entropy, mpi_communicator));
-    //create a file to wirte entorpy and energy results to
+    //create a file to write entorpy and energy results to
     std::ofstream myfile (all_parameters_new.energy_file + ".gpl"  , std::ios::trunc);
     //loop over time
     while(ode_solver->current_time < finalTime){

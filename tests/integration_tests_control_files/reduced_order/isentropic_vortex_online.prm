@@ -20,9 +20,9 @@ set use_periodic_bc = true
 set conv_num_flux = two_point_flux
 set two_point_num_flux_type = CH
 
-subsection limiter
-  set bound_preserving_limiter = positivity_preservingZhang2010
-end
+#subsection limiter
+#  set bound_preserving_limiter = positivity_preservingZhang2010
+#end
 
 # ODE solver
 subsection ODE solver
@@ -47,7 +47,7 @@ subsection flow_solver
   subsection grid
     set grid_left_bound = -10.0
     set grid_right_bound = 10.0
-    set number_of_grid_elements_per_dimension = 32
+    set number_of_grid_elements_per_dimension = 64
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end

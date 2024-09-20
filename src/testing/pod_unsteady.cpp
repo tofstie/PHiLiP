@@ -113,6 +113,9 @@ const {
             all_param.euler_param.side_slip_angle);
     dealii::Table<1,double> output_solution_fixed_times;
     flow_solver->dg->evaluate_mass_matrices();
+    // Setting the RO restart file loader
+    bool restart_file_boolean = flow_solver_param.restart_computation_from_file == false && flow_solver_param.restart_file_index != 1;
+    int restart_number = (flow_solver_param.restart_file_index != 1) ? flow_solver_param.output_restart_files_every_x_steps*flow_solver_param.restart_file_index : 0;
     // Full Order flow solver (For L2 Errors)
     
     Parameters::AllParameters FOM_param = *(TestsBase::all_parameters);
@@ -183,11 +186,9 @@ const {
         std::shared_ptr<dealii::TableHandler> unsteady_data_table = std::make_shared<dealii::TableHandler>();
         std::shared_ptr<dealii::TableHandler> L2error_data_table = std::make_shared<dealii::TableHandler>();
         // no restart:
-        if(flow_solver_param.restart_computation_from_file == true) {
+        if(restart_file_boolean) {
             pcout << "Initializing data table from corresponding restart file... " << std::flush;
-            const std::string restart_filename_without_extension = flow_solver->get_restart_filename_without_extension(flow_solver_param.restart_file_index);
-            const std::string restart_unsteady_data_table_filename = flow_solver_param.unsteady_data_table_filename+std::string("-")+restart_filename_without_extension+std::string(".txt");
-            flow_solver->initialize_data_table_from_file(flow_solver_param.restart_files_directory_name + std::string("/") + restart_unsteady_data_table_filename,unsteady_data_table);
+            load_restart();
             pcout << "done." << std::endl;
         } else {
             pcout << "Writing unsteady data computed at initial time... " << std::endl;
@@ -278,14 +279,29 @@ const {
                                                  ((flow_solver->ode_solver->current_time + next_time_step) > current_desired_time_for_output_restart_files_every_dt_time_intervals));
                     if (is_output_time) {
                         const unsigned int file_number = int(round(current_desired_time_for_output_restart_files_every_dt_time_intervals / flow_solver_param.output_restart_files_every_dt_time_intervals));
-                        flow_solver->output_restart_files(file_number, next_time_step, unsteady_data_table);
+                        std::cout << file_number << std::endl;
+                        //flow_solver->output_restart_files(file_number, next_time_step, unsteady_data_table);
                         current_desired_time_for_output_restart_files_every_dt_time_intervals += flow_solver_param.output_restart_files_every_dt_time_intervals;
                     }
                 } else /*if (flow_solver_param.output_restart_files_every_x_steps > 0)*/ {
                     const bool is_output_iteration = (flow_solver->ode_solver->current_iteration % flow_solver_param.output_restart_files_every_x_steps == 0);
                     if (is_output_iteration) {
                         const unsigned int file_number = flow_solver->ode_solver->current_iteration / flow_solver_param.output_restart_files_every_x_steps;
-                        flow_solver->output_restart_files(file_number, next_time_step, unsteady_data_table);
+                        //flow_solver->output_restart_files(file_number, next_time_step, unsteady_data_table);
+                        std::ofstream file("restart_ROM_"+ std::to_string(file_number)+".txt");
+                        dealii::LinearAlgebra::ReadWriteVector<double> read_snapshot(flow_solver->dg->solution.size());
+                        read_snapshot.import(flow_solver->dg->solution, dealii::VectorOperation::values::insert);
+                        unsigned int precision = 16;
+                        dealii::LAPACKFullMatrix<double> current_solution;
+                        current_solution.reinit(flow_solver->dg->solution.size(),1);
+                        for( unsigned int n = 0; n < read_snapshot.size(); n++){
+                            current_solution.set(n,0,read_snapshot[n]);
+                        }
+                        current_solution.print_formatted(file, precision, true,0,"0"); // Added fix to 0?
+                        file.close();
+                        std::ofstream time_file("restart_ROM_time_"+ std::to_string(file_number)+".txt");
+                        time_file << std::to_string(flow_solver->ode_solver->current_time);
+                        time_file.close();
                     }
                 }
             }
@@ -295,7 +311,7 @@ const {
                 const bool is_output_iteration = (flow_solver->ode_solver->current_iteration % ode_param.output_solution_every_x_steps == 0);
                 if (is_output_iteration) {
                     pcout << "  ... Writing vtk solution file ..." << std::endl;
-                    const unsigned int file_number = flow_solver->ode_solver->current_iteration / ode_param.output_solution_every_x_steps;
+                    const unsigned int file_number = flow_solver->ode_solver->current_iteration / ode_param.output_solution_every_x_steps + restart_number;
                     flow_solver->dg->output_results_vtk(file_number,flow_solver->ode_solver->current_time);
                 }
             } else if(ode_param.output_solution_every_dt_time_intervals > 0.0) {
@@ -303,7 +319,7 @@ const {
                                              ((flow_solver->ode_solver->current_time + next_time_step) > flow_solver->ode_solver->current_desired_time_for_output_solution_every_dt_time_intervals));
                 if (is_output_time) {
                     pcout << "  ... Writing vtk solution file ..." << std::endl;
-                    const unsigned int file_number = int(round(flow_solver->ode_solver->current_desired_time_for_output_solution_every_dt_time_intervals / ode_param.output_solution_every_dt_time_intervals));
+                    const unsigned int file_number = int(round(flow_solver->ode_solver->current_desired_time_for_output_solution_every_dt_time_intervals / ode_param.output_solution_every_dt_time_intervals))+restart_number;
                     flow_solver->dg->output_results_vtk(file_number,flow_solver->ode_solver->current_time);
                     flow_solver->ode_solver->current_desired_time_for_output_solution_every_dt_time_intervals += ode_param.output_solution_every_dt_time_intervals;
                 }
@@ -319,7 +335,7 @@ const {
                 }
                 if(is_output_time) {
                     pcout << "  ... Writing vtk solution file ..." << std::endl;
-                    const int file_number = index_of_current_desired_fixed_time_to_output_solution+1; // +1 because initial time is 0
+                    const int file_number = index_of_current_desired_fixed_time_to_output_solution+1+restart_number; // +1 because initial time is 0
                     flow_solver->dg->output_results_vtk(file_number,flow_solver->ode_solver->current_time);
                     
                     // Update index s.t. it never goes out of bounds
@@ -782,6 +798,38 @@ void PODUnsteady<dim, nstate>
     }
 }
 
+template <int dim, int nstate>
+void PODUnsteady<dim, nstate>::
+load_restart() const{ // THIS WILL NOT WORK ON MULTIPLE CORES DUE TO IMPORTING
+//https://www.dealii.org/current/doxygen/deal.II/classLinearAlgebra_1_1distributed_1_1Vector.html#a7aa35d0eb07c003a38f7f6a3321dfeaa
+    std::string file_directory = flow_solver_param.restart_files_directory_name;
+    int file_iteration = flow_solver_param.restart_file_index;
+    std::string time_file_name = file_directory + "restart_ROM_time_" + std::to_string(file_iteration) + ".txt";
+    std::string solution_file_name = file_directory + "restart_ROM_" + std::to_string(file_iteration) + ".txt";
+    std::ifstream timeFile(time_file_name);
+    std::string time_line;
+    std::getline(timeFile, time_line);
+    flow_solver->ode_solver->current_time = std::stod(time_line);
+    std::ifstream solutionFile(solution_file_name);
+    std::string line;
+    int rows = 0;
+    while(std::getline(solutionFile, line)){
+        rows++;
+    }
+    solutionFile.clear();
+    solutionFile.seekg(0);
+    dealii::LinearAlgebra::distributed::Vector<double> read_in_vector;
+    read_in_vector.reinit(flow_solver->dg->solution);
+    int row = 0;
+    while(std::getline(solutionFile, line)){
+        if(read_in_vector.in_local_range(row)){
+            read_in_vector(row) = std::stod(line);
+        }
+        row++;
+    }
+    flow_solver->dg->solution.import(read_in_vector, dealii::VectorOperation::insert);
+
+}
 template class PODUnsteady<PHILIP_DIM,PHILIP_DIM+2>;
 
 }
