@@ -1,10 +1,8 @@
 # Listing of Parameters
 # ---------------------
-
 # Number of dimensions
-set dimension = 1
 
-# The PDE we want to solve.
+set dimension = 1
 set pde_type  = euler
 set run_type = integration_test
 set test_type = pod_unsteady
@@ -15,54 +13,47 @@ set flux_nodes_type = GLL
 
 # NSFR
 set two_point_num_flux_type = CH
-# set use_split_form = true
-set conv_num_flux = two_point_flux_with_roe_dissipation
+set use_split_form = true
+set conv_num_flux = two_point_flux_with_lax_friedrichs_dissipation
+set flux_reconstruction = cDG
 
 # Euler
 subsection euler
   set mach_infinity = 0.1
 end
 
-# Artical Diffusion 
-# Not implemented in Strong DG
-subsection artificial dissipation
-  set add_artificial_dissipation = true
-  set artificial_dissipation_type = laplacian
-  set mu_artificial_dissipation = 0.0002
-end
 
-subsection limiter
-  set use_tvb_limiter = true
-end
+# Limiter
+#subsection limiter
+#  set use_tvb_limiter = true
+#end
 
 # Flow Solver
 subsection flow_solver
     set flow_case_type = reflective_shock_tube
     set poly_degree = 1
     set final_time = 0.75
-    set courant_friedrichs_lewy_number = 0.75
-    set adaptive_time_step = true # I believe this does not work
+    set courant_friedrichs_lewy_number = 0.01
     subsection grid
         set grid_left_bound = 0
         set grid_right_bound = 1
-        set number_of_grid_elements_per_dimension = 5
+        set number_of_grid_elements_per_dimension = 250
     end
 end
 
 # ODE solver
 subsection ODE solver
   set ode_output = quiet
+  set initial_time_step = 0.005
   set ode_solver_type = pod_galerkin_rk_solver
-  #set ode_solver_type = runge_kutta
-  set initial_time_step = 0.01
-  #set output_solution_every_x_steps = 50
-  set output_solution_every_dt_time_intervals = 0.01
-  set runge_kutta_method = ssprk3_ex 
+  set output_solution_every_x_steps = 25
+  set runge_kutta_method = rk4_ex
 end
 
 # Reduced Order Model
 subsection reduced order
-  set output_snapshot_every_x_timesteps = 10
-  set path_to_search = /home/tyson/Desktop/Folder
+  set output_snapshot_every_x_timesteps = 1
+  set path_to_search = /home/tyson/Codes/PHiLiP/build_release
   set entropy_varibles_in_snapshots = true
+  set adaptation_tolerance = 0.000003
 end

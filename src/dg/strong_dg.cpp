@@ -1230,7 +1230,11 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
                                                           oneD_vol_quad_weights,
                                                           flux_basis_stiffness_skew_symm_oper_sparse);
     }
-
+    /*
+    char zero = '0';
+    std::cout << current_cell_index << std::endl;
+    flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout,3,true,0,&zero);
+    */
     //For each state we:
     //  1. Compute reference divergence.
     //  2. Then compute and write the rhs for the given state.
@@ -1249,8 +1253,8 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
             for(int ref_dim=0; ref_dim<dim; ref_dim++){
                 dealii::FullMatrix<real> divergence_ref_flux_Hadamard_product(n_quad_pts, n_quad_pts_1D);
                 flux_basis.Hadamard_product(flux_basis_stiffness_skew_symm_oper_sparse[ref_dim], conv_ref_2pt_flux_at_q[istate][ref_dim], divergence_ref_flux_Hadamard_product); 
-                char zero = '0';
-                flux_basis_stiffness_skew_symm_oper_sparse[ref_dim].print_formatted(std::cout, 3, true, 0, &zero ,1.,0.);
+                //char zero = '0';
+                //divergence_ref_flux_Hadamard_product.print_formatted(std::cout, 3, true, 0, &zero ,1.,0.);
                 //Hadamard product times the vector of ones.
                 for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
                     if(ref_dim == 0){
@@ -2416,6 +2420,12 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
 
         // Apply the surface Hadamard products and multiply with vector of ones for both off diagonal terms in
         // Eq.(15) in Chan, Jesse. "Skew-symmetric entropy stable modal discontinuous Galerkin formulations." Journal of Scientific Computing 81.1 (2019): 459-485.
+        /*
+        char zero = '0';
+        std::cout << current_cell_index << std::endl;
+        std::cout << iface << std::endl;
+        surf_oper_sparse_int.print_formatted(std::cout,3,true,0,&zero);
+        */
         for(int istate=0; istate<nstate; istate++){
             //first apply Hadamard product with the structure made above.
             dealii::FullMatrix<real> surface_ref_2pt_flux_int_Hadamard_with_surf_oper(n_face_quad_pts, n_quad_pts_1D_int);
@@ -2431,7 +2441,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
             surf_vol_ref_2pt_flux_interp_surf_ext[istate].resize(n_face_quad_pts);
             surf_vol_ref_2pt_flux_interp_vol_int[istate].resize(n_quad_pts_vol_int);
             surf_vol_ref_2pt_flux_interp_vol_ext[istate].resize(n_quad_pts_vol_ext);
-         
+
             for(unsigned int iface_quad=0; iface_quad<n_face_quad_pts; iface_quad++){
                 for(unsigned int iquad_int=0; iquad_int<n_quad_pts_1D_int; iquad_int++){
                     surf_vol_ref_2pt_flux_interp_surf_int[istate][iface_quad] 

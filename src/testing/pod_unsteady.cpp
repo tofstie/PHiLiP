@@ -131,7 +131,7 @@ const {
     // Outputting locations order
     dealii::LinearAlgebra::distributed::Vector<double> location_x;
     dealii::LinearAlgebra::distributed::Vector<double> location_y;
-    flow_solver->dg->location2D(location_x,location_y);
+    //flow_solver->dg->location2D(location_x,location_y);
     dealii::LinearAlgebra::ReadWriteVector<double> read_x(location_x.size());
     dealii::LinearAlgebra::ReadWriteVector<double> read_y(location_y.size());
     read_x.import(location_x, dealii::VectorOperation::values::insert);

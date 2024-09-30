@@ -26,7 +26,7 @@ subsection ODE solver
   set print_iteration_modulo = 5
   set ode_solver_type = pod_galerkin_rk_solver
   set runge_kutta_method = rk4_ex
-  set output_solution_every_x_steps = 1
+  set output_solution_every_x_steps = 4
 end
 
 # freestream Mach number
@@ -44,8 +44,8 @@ end
 
 subsection flow_solver
   set flow_case_type = isentropic_vortex
-  set poly_degree = 3
-  set final_time = 23.66431913239 #=20 * sqrt(1.4), time for vortex to advect around the domain
+  set poly_degree = 4
+  set final_time = 2.366431913239 #=20 * sqrt(1.4), time for vortex to advect around the domain
   set courant_friedrichs_lewy_number = 0.1
   set unsteady_data_table_filename = isentropic_vortex_time_table
   subsection grid
@@ -58,8 +58,9 @@ end
 
 # Reduced Order Model
 subsection reduced order
-  set output_snapshot_every_x_timesteps = 8
+  set output_snapshot_every_x_timesteps = 2
   set path_to_search = /home/tyson/Codes/PHiLiP/build_release
   set entropy_varibles_in_snapshots = true
   set adaptation_tolerance = 0.000003
+  set number_nodal_modes = 0
 end

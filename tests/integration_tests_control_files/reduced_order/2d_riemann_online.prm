@@ -30,7 +30,7 @@ subsection ODE solver
   set print_iteration_modulo = 5
   set ode_solver_type = runge_kutta 
   set runge_kutta_method = rk4_ex
-  set output_solution_every_x_steps = 1
+  set output_solution_every_x_steps = 12
 end
 
 # freestream Mach number
@@ -40,9 +40,9 @@ end
 
 subsection flow_solver
   set flow_case_type = riemann_problem
-  set poly_degree = 0
+  set poly_degree = 2
   set final_time = 0.25
-  set courant_friedrichs_lewy_number = 0.0625
+  set courant_friedrichs_lewy_number = 0.03125
   set unsteady_data_table_filename = riemann_problem_time_table
   subsection grid
     set grid_left_bound = -1
@@ -54,5 +54,5 @@ end
 
 # Reduced Order Model
 subsection reduced order
-  set output_snapshot_every_x_timesteps = 1
+  set output_snapshot_every_x_timesteps = 4
 end

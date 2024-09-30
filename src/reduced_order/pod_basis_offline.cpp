@@ -180,7 +180,7 @@ bool OfflinePOD<dim>::loadPOD(){ // This only works on one core for now for debu
 
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     Epetra_Map domain_map((int)cols, 0, epetra_comm);
-
+    fullBasis.reinit(0,0);
     epetra_basis.FillComplete(domain_map, system_matrix_map);
     basis->reinit(epetra_basis);
     return true;
@@ -228,7 +228,20 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all,Eigen::seqN(0,num_of_modes));
         pod_basis = pod_basis_n_modes;
     }
-
+    if(false){
+        double threshold = 0.9999;
+        Eigen::VectorXd singular_values = svd_one.singularValues();
+        double l1_norm = singular_values.sum();
+        double singular_value_cum_sum = 0;
+        for(int i = 0; i < singular_values.size();i++){
+            if(singular_value_cum_sum/l1_norm < threshold){
+                singular_value_cum_sum += singular_values(i);
+            } else {
+                pod_basis(Eigen::placeholders::all,Eigen::seqN(0,i));
+                pcout << "Total size of POD: " << i << std::endl;
+            }
+        }
+    }
     //this->Vt = pod_basis;
     /*
     fullBasis.reinit(snapshots.rows(), snapshots.cols());
@@ -724,7 +737,6 @@ bool OfflinePOD<dim>::getEntropyProjPODBasisFromSnapshots(){
 template <int dim>
 bool OfflinePOD<dim>::enrichPOD(){
     dg->evaluate_mass_matrices(false);
-    //int nstate = dim+2;
     int const poly_degree = dg->all_parameters->flow_solver_param.poly_degree;
     const unsigned int n_quad_pts  = dg->volume_quadrature_collection[poly_degree].size();
     const unsigned int n_quad_pts_1D  = dg->oneD_quadrature_collection[poly_degree].size();
@@ -770,9 +782,10 @@ bool OfflinePOD<dim>::enrichPOD(){
         cell->get_dof_indices (dofs_indices);
         //const bool Cartesian_element = (cell->manifold_id() == dealii::numbers::flat_manifold_id);
       
-        
+        char zero = '0';
+        unsigned int Nfaces = dealii::GeometryInfo<dim>::faces_per_cell;
         // Compute Q
-        dealii::FullMatrix<double> local_Q(n_dofs_cell);
+        dealii::FullMatrix<double> local_Q(n_quad_pts+n_face_quad_pts*Nfaces);
         // Top Left - Strong DG line 1213
         std::array<dealii::FullMatrix<double>,dim> flux_basis_stiffness_skew_symm_oper_sparse;
         for(int idim=0; idim<dim; idim++){
@@ -786,36 +799,46 @@ bool OfflinePOD<dim>::enrichPOD(){
                                                             oneD_vol_quad_weights,
                                                             flux_basis_stiffness_skew_symm_oper_sparse);
         local_Q.add(flux_basis_stiffness_skew_symm_oper_sparse[0],1.,0,0,0,0);
+
+        local_Q.print_formatted(std::cout,3,true,0,&zero);
         // Both Off diagonal terms - Strong DG line 1641
         
-        dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);
-        for (unsigned int iface=0; iface < dealii::GeometryInfo<dim>::faces_per_cell; ++iface) {
+        dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);    
+        for (unsigned int iface=0; iface < Nfaces; ++iface) {
             const int iface_1D = iface % 2;//the reference face number
             const int dim_not_zero = iface / 2;//reference direction of face integer division
+            const dealii::Tensor<1,dim,double> unit_ref_normal_int = dealii::GeometryInfo<dim>::unit_normal_vector[iface];
             std::vector<unsigned int> Hadamard_rows_sparsity_off(n_face_quad_pts * n_quad_pts_1D);//size n^{d+1}
             std::vector<unsigned int> Hadamard_columns_sparsity_off(n_face_quad_pts * n_quad_pts_1D);
-            flux_basis_ext.sum_factorized_Hadamard_surface_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off, dim_not_zero);
-            flux_basis_ext.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D, 
+            flux_basis_int.sum_factorized_Hadamard_surface_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off, dim_not_zero);
+            flux_basis_int.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D, 
                                                                         Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off,
-                                                                        flux_basis_ext.oneD_surf_operator[iface_1D], 
+                                                                        flux_basis_int.oneD_surf_operator[iface_1D], 
                                                                         oneD_quad_weights_vol,
                                                                         surf_oper_sparse,
-                                                                        dim_not_zero);
+                                                                        dim_not_zero);                 
             //debugMatrix(surf_oper_sparse);
-            local_Q.add(surf_oper_sparse,1.,n_quad_pts*(iface+1),0,0,0);
+            std::cout << unit_ref_normal_int << std::endl;
+
+            surf_oper_sparse *= unit_ref_normal_int[dim_not_zero];
+            
+            surf_oper_sparse.print_formatted(std::cout,3,true,0,&zero);
+            local_Q.add(surf_oper_sparse,-1.,n_quad_pts,n_quad_pts*(iface),0,0);
             dealii::FullMatrix<double> surf_oper_sparse_trans;
             surf_oper_sparse_trans.copy_transposed(surf_oper_sparse);
-            surf_oper_sparse_trans *= -1;
-            local_Q.add(surf_oper_sparse_trans,1.,0,n_quad_pts*(iface+1),0,0);
+            local_Q.add(surf_oper_sparse_trans,1.,n_quad_pts*(iface),n_quad_pts,0,0);
         }
         std::ofstream local_Q_file("local_Q_file.txt");
         local_Q.print(local_Q_file);
-        debugMatrix(flux_basis_stiffness_skew_symm_oper_sparse[0]);
+        local_Q.print_formatted(std::cout,3,true,0,&zero);
         global_Q.add(dofs_indices, local_Q);
        
     }
-
-    std::cout << "Max Row Sum: " << global_Q.linfty_norm() << std::endl;
+    //dealii::LinearAlgebra::distributed::Vector<double> ones;
+    //ones.reinit(dg->solution);
+    //ones.add(1.0);
+    //dealii::FullMatrix<double> Q1 = 
+    //std::cout << "Max Row Sum: " << global_Q.matrix_scalar_product(ones,ones) << std::endl;
     std::ofstream Q_file("Q_file.txt");
     global_Q.print(Q_file);
     Q->reinit(global_Q);
