@@ -39,6 +39,9 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("entropy_varibles_in_snapshots", "false",
                            dealii::Patterns::Bool(),
                            "Adds Entropy varibles to snapshots, false by default");
+        prm.declare_entry("singular_value_threshold", "1",
+                          dealii::Patterns::Double(0, dealii::Patterns::Double::max_double_value),
+                          "Threshold for the Singular Value cutoff");
     }
     prm.leave_subsection();
 }
@@ -49,6 +52,7 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
     {
         adaptation_tolerance = prm.get_double("adaptation_tolerance");
         reduced_residual_tolerance = prm.get_double("reduced_residual_tolerance");
+        singular_value_threshold = prm.get_double("singular_value_threshold");
         num_halton = prm.get_integer("num_halton");
         recomputation_coefficient = prm.get_integer("recomputation_coefficient");
         path_to_search = prm.get("path_to_search");

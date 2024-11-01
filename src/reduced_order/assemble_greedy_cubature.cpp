@@ -37,8 +37,10 @@ AssembleGreedyCubature<dim,nstate>::AssembleGreedyCubature(const PHiLiP::Paramet
         , V_target(V_target_input)
         , initial_weights(initial_weights)
         , A(std::make_shared<dealii::TrilinosWrappers::SparseMatrix>())
-        , b(b_input)
-{}
+
+{
+    b = b_input;
+}
 
 template<int dim, int nstate>
 dealii::LinearAlgebra::distributed::Vector<double> AssembleGreedyCubature<dim,nstate>::get_weights(){
@@ -52,7 +54,6 @@ std::vector<int> AssembleGreedyCubature<dim,nstate>::get_indices(){
 
 template<int dim, int nstate>
 void AssembleGreedyCubature<dim,nstate>::build_problem(){
-    /// Change the next two lines to be std::set
     std::set<int> z; // Set of integration points
     std::set<int> y; // Set of candidate points
     for (unsigned int i = 0; i < this->initial_weights.size(); i++){
@@ -60,8 +61,8 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
     }
     std::vector<int> y_vector(y.begin(), y.end());
     this->z_vector.assign(z.begin(), z.end());
-    // int total_num_of_int_points = V_target.n(); // Number of columns
-    unsigned int snapshots_and_weights = V_target.rows();
+    int total_num_of_int_points = V_target.rows(); // Number of quad(row)
+    unsigned int snapshots_and_weights = V_target.cols();
     int iteration = 0;
     unsigned int non_zeros = 0;
     // Define dealii IndexSet for p+1 size    
@@ -103,8 +104,8 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
         //const Epetra_CrsMatrix epetra_V_target  = V_target.trilinos_matrix();
         Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
         //Epetra_Map row_matrix_map = epetra_V_target.RowMap();
-        Epetra_Map row_matrix_map((int)V_target.rows(), 0, epetra_comm);
-        Epetra_Map domain_map_y((int)size_of_set_y, 0, epetra_comm);
+        Epetra_Map row_matrix_map((int)size_of_set_y, 0, epetra_comm);
+        Epetra_Map domain_map((int)V_target.cols(), 0, epetra_comm);
         Epetra_CrsMatrix V_target_y_Epetra(Epetra_DataAccess::Copy, row_matrix_map, size_of_set_y);
         /* Commenting this out for now
         for(unsigned int row = 0; row < snapshots_and_weights; row++){
@@ -119,7 +120,11 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             }
         }
         */
-        Eigen::MatrixXd V_target_y_Eigen = V_target(Eigen::placeholders::all,y_vector); 
+        Eigen::MatrixXd V_target_y_Eigen = V_target(y_vector, Eigen::placeholders::all);
+        for(int row = 0; row < V_target_y_Eigen.rows(); row++){
+            double row_norm = V_target_y_Eigen.row(row).norm();
+            V_target_y_Eigen.row(row) /= row_norm;
+        }
         const int numMyElements_y = row_matrix_map.NumMyElements(); //Number of elements on the calling processor
         for (int localRow = 0; localRow < numMyElements_y; ++localRow){
             const int globalRow = row_matrix_map.GID(localRow);
@@ -127,17 +132,15 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
                 V_target_y_Epetra.InsertGlobalValues(globalRow, 1, &V_target_y_Eigen(globalRow, n), &n);
             }
         }
-        V_target_y_Epetra.FillComplete(domain_map_y,row_matrix_map);
+        V_target_y_Epetra.FillComplete(domain_map,row_matrix_map);
         dealii::TrilinosWrappers::SparseMatrix V_target_y;
         V_target_y.reinit(V_target_y_Epetra);
         /// Compute the i_vector
-        double norm_V_target = V_target_y.linfty_norm();
-        V_target_y /= norm_V_target; 
         double norm_residual = residual.linfty_norm();
         residual /= norm_residual;
-        dealii::IndexSet y_domain_map = V_target_y.locally_owned_domain_indices();
-        dealii::LinearAlgebra::distributed::Vector<double> i_values_in_set_y(y_domain_map, this->mpi_communicator);
-        V_target_y.Tvmult(i_values_in_set_y, residual);
+        dealii::IndexSet y_map = V_target_y.locally_owned_range_indices();
+        dealii::LinearAlgebra::distributed::Vector<double> i_values_in_set_y(y_map, this->mpi_communicator);
+        V_target_y.vmult(i_values_in_set_y, residual);
         /// Below I need to be careful with multiple cores as the i may be different on different cores leading to complications
         /// Testing will need to be done after getting it to work on 1 core
 
@@ -193,26 +196,41 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
     ///3. Preform Least Squares
         /// Reassembling Target matrix to only include z indices
         
-        Epetra_Map domain_map_z((int)size_of_set_z, 0, epetra_comm);
-        Epetra_CrsMatrix V_target_z_Epetra(Epetra_DataAccess::Copy, row_matrix_map, size_of_set_z);
-        Eigen::MatrixXd V_target_z_Eigen = V_target(Eigen::placeholders::all,this->z_vector); 
-        const int numMyElements_z = row_matrix_map.NumMyElements(); //Number of elements on the calling processor
+        Epetra_Map row_map_z((int)size_of_set_z, 0, epetra_comm);
+        Epetra_CrsMatrix V_target_z_Epetra(Epetra_DataAccess::Copy, row_map_z, (int)V_target.cols());
+        Epetra_CrsMatrix V_target_z_T_Epetra(Epetra_DataAccess::Copy, domain_map, (int)size_of_set_z);
+        Eigen::MatrixXd V_target_z_Eigen = V_target(this->z_vector, Eigen::placeholders::all); 
+        Eigen::MatrixXd V_target_z_T_Eigen = V_target(this->z_vector, Eigen::placeholders::all);
+        V_target_z_T_Eigen.transposeInPlace();
+        // Building Vz
+        const int numMyElements_z = row_map_z.NumMyElements(); //Number of elements on the calling processor
         for (int localRow = 0; localRow < numMyElements_z; ++localRow){
             const int globalRow = row_matrix_map.GID(localRow);
             for(int n = 0 ; n < V_target_z_Eigen.cols() ; n++){
                 V_target_z_Epetra.InsertGlobalValues(globalRow, 1, &V_target_z_Eigen(globalRow, n), &n);
             }
         }
-        V_target_z_Epetra.FillComplete(domain_map_z,row_matrix_map);
+        V_target_z_Epetra.FillComplete(domain_map,row_map_z);
+        // Building VzT
+        const int numMyElements_z_T = domain_map.NumMyElements(); //Number of elements on the calling processor
+        for (int localRow = 0; localRow < numMyElements_z_T; ++localRow){
+            const int globalRow = row_matrix_map.GID(localRow);
+            for(int n = 0 ; n < V_target_z_T_Eigen.cols() ; n++){
+                V_target_z_T_Epetra.InsertGlobalValues(globalRow, 1, &V_target_z_T_Eigen(globalRow, n), &n);
+            }
+        }
+        V_target_z_T_Epetra.FillComplete(row_map_z,domain_map);
+
         dealii::TrilinosWrappers::SparseMatrix V_target_z;
         V_target_z.reinit(V_target_z_Epetra);
+        dealii::TrilinosWrappers::SparseMatrix V_target_z_T;
+        V_target_z_T.reinit(V_target_z_T_Epetra);
         dealii::LinearAlgebra::distributed::Vector<double> alpha(m_index, this->mpi_communicator);
         dealii::TrilinosWrappers::SparseMatrix LS_LHS;
         dealii::LinearAlgebra::distributed::Vector<double> LS_RHS(alpha);
         const Parameters::LinearSolverParam Linear_Solver_Param = this->all_parameters->linear_solver_param;
-        V_target_z.Tmmult(LS_LHS, V_target_z);
-
-        V_target_z.Tvmult(LS_RHS, b_distributed);
+        V_target_z.mmult(LS_LHS, V_target_z_T);
+        V_target_z.vmult(LS_RHS, b_distributed);
         solve_linear (
             LS_LHS,
             LS_RHS,
@@ -230,18 +248,31 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
     ///5. Preform NNLS
         if(min_value <= 0.){
             std::cout << "Create NNLS problem..."<< std::endl;
-            Epetra_Vector b_Epetra(Epetra_DataAccess::View, row_matrix_map, b_distributed.begin());
+            V_target_z_Eigen.transposeInPlace();
+            Epetra_CrsMatrix V_target_z_Epetra_nnls_solver(Epetra_DataAccess::Copy, domain_map, total_num_of_int_points);
+            const int numMyElements_nnls_solver = domain_map.NumMyElements(); //Number of elements on the calling processor
+            for (int localRow = 0; localRow < numMyElements_nnls_solver; ++localRow){
+                const int globalRow = row_matrix_map.GID(localRow);
+                for(int n = 0 ; n < V_target_z_Eigen.cols() ; n++){
+                    V_target_z_Epetra_nnls_solver.InsertGlobalValues(globalRow, 1, &V_target_z_Eigen(globalRow, n), &n);
+                }
+            }
+            V_target_z_Epetra_nnls_solver.FillComplete(row_map_z,domain_map);
+            Epetra_Vector b_Epetra(Epetra_DataAccess::View, domain_map, b_distributed.begin());
             /*  Todo: NNLS must always be solved with one core. However, it would be nice to run with multiple cores
                 One way to achieve this would be to build single core versions of each of the matrices used below,
                 after all MPI processes catch up with MPI_Barrier, compute the rank=0 ones, then redistribute the 
                 epetra matrices. This is not implemented until 1 core is working.
             */
-            NNLS_solver NNLS_prob(this->all_parameters, this->parameter_handler, V_target_z_Epetra, epetra_comm, b_Epetra);
+            
+            NNLS_solver NNLS_prob(this->all_parameters, this->parameter_handler, V_target_z_Epetra_nnls_solver, epetra_comm, b_Epetra, false, 200,1E-8 );
             std::cout << "Solve NNLS problem..."<< std::endl;
             bool exit_con = NNLS_prob.solve();
             std::cout << exit_con << std::endl;
 
             Epetra_Vector alpha_nnls_epetra = NNLS_prob.getSolution(); // Keep in Epetra until the new size of z can be determined
+            double l2_norm_alpha;
+            alpha_nnls_epetra.Norm2(&l2_norm_alpha);
     ///6. Fiddle with Sets for all alpha(z_0) = 0 
             // Fiddle here
             std::set<int> z_0;
@@ -272,17 +303,17 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             m_index.compress();
             m_index_g = m_index;
             /// Only get the new indices in z
-            Epetra_Map domain_map_z_nnls((int)size_of_set_z, 0, epetra_comm);
-            Epetra_CrsMatrix V_target_z_Epetra_nnls(Epetra_DataAccess::Copy, row_matrix_map, size_of_set_z);
-            Eigen::MatrixXd V_target_z_Eigen_nnls = V_target(Eigen::placeholders::all,this->z_vector); 
-            const int numMyElements_nnls = row_matrix_map.NumMyElements(); //Number of elements on the calling processor
+            Epetra_Map row_map_z_nnls((int)size_of_set_z, 0, epetra_comm);
+            Epetra_CrsMatrix V_target_z_Epetra_nnls(Epetra_DataAccess::Copy, row_map_z_nnls, (int)V_target.cols());
+            Eigen::MatrixXd V_target_z_Eigen_nnls = V_target(this->z_vector, Eigen::placeholders::all); 
+            const int numMyElements_nnls = row_map_z_nnls.NumMyElements(); //Number of elements on the calling processor
             for (int localRow = 0; localRow < numMyElements_nnls; ++localRow){
-                const int globalRow = row_matrix_map.GID(localRow);
+                const int globalRow = row_map_z_nnls.GID(localRow);
                 for(int n = 0 ; n < V_target_z_Eigen_nnls.cols() ; n++){
                     V_target_z_Epetra_nnls.InsertGlobalValues(globalRow, 1, &V_target_z_Eigen_nnls(globalRow, n), &n);
                 }
             }
-            V_target_z_Epetra_nnls.FillComplete(domain_map_z_nnls,row_matrix_map);
+            V_target_z_Epetra_nnls.FillComplete(domain_map,row_map_z_nnls);
             V_target_z.reinit(V_target_z_Epetra_nnls);
             // Remake smaller alpha
             alpha.reinit(m_index, this->mpi_communicator);
@@ -291,14 +322,21 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
                 alpha[new_idx] = alpha_nnls_epetra[*z_iter];
                 std::next(z_iter,1);
             }
+            
         }
     ///7. Update the Residual
         dealii::LinearAlgebra::distributed::Vector<double> Jz_alpha(b_distributed);
-        V_target_z.vmult(Jz_alpha, alpha);
+        V_target_z.Tvmult(Jz_alpha, alpha);
         residual.reinit(b_distributed); // Reset to Zero Vector
         residual.add(1,b_distributed,-1,Jz_alpha);
+
     ///8. Update Iterations and store last value of alpha
         iteration++;
+        if (iteration % 10 == 0) {
+            std::cout << "Points: " << size_of_set_z << std::endl;
+            std::cout << "Residual L2: " << residual.l2_norm() << std::endl;
+            std::cout << "Escape: " << residual.l2_norm()/b_distributed.l2_norm() << std::endl;
+        }
         non_zeros = size_of_set_z; // Equal to Cardinality of set z
         alpha_g.reinit(alpha);
         alpha_g.import(alpha,dealii::VectorOperation::insert);

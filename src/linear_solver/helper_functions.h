@@ -61,6 +61,8 @@ M load_csv (const std::string & path) {
 
 MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra);
 
+Epetra_Vector eig_to_epetra_vector(Eigen::VectorXd &a_eigen, int size, Epetra_MpiComm &Comm);
+
 MatrixXd lapack_to_eig_matrix(dealii::LAPACKFullMatrix<double> &lapack_matrix);
 
 dealii::LAPACKFullMatrix<double> eig_to_lapack_matrix(MatrixXd &eigen_matrix);

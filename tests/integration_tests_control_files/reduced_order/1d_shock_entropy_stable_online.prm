@@ -37,7 +37,7 @@ subsection flow_solver
     subsection grid
         set grid_left_bound = 0
         set grid_right_bound = 1
-        set number_of_grid_elements_per_dimension = 250
+        set number_of_grid_elements_per_dimension = 300
     end
 end
 
@@ -46,11 +46,11 @@ subsection ODE solver
   set ode_output = quiet
   set initial_time_step = 0.001
   set ode_solver_type = runge_kutta
-  set output_solution_every_x_steps = 25
+  set output_solution_every_x_steps = 0
   set runge_kutta_method = rk4_ex
 end
 
 # Reduced Order Model
 subsection reduced order
-  set output_snapshot_every_x_timesteps = 1
+  set output_snapshot_every_x_timesteps = 10
 end

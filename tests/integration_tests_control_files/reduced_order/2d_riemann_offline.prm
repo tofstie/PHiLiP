@@ -40,9 +40,9 @@ end
 
 subsection flow_solver
   set flow_case_type = riemann_problem
-  set poly_degree = 2
+  set poly_degree = 0
   set final_time = 0.25
-  set courant_friedrichs_lewy_number = 0.0625
+  set courant_friedrichs_lewy_number = 0.03125
   set unsteady_data_table_filename = riemann_problem_time_table
   subsection grid
     set grid_left_bound = -1
@@ -50,8 +50,8 @@ subsection flow_solver
     set number_of_grid_elements_per_dimension = 128
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
-  set output_restart_files = true
-  set output_restart_files_every_x_steps = 10
+  #set output_restart_files = true
+  #set output_restart_files_every_x_steps = 10
   ### for restarting
   set restart_computation_from_file = false
   #set restart_files_directory_name = /home/tyson/Codes/PHiLiP/build_release/
@@ -60,9 +60,9 @@ end
 
 # Reduced Order Model
 subsection reduced order
-    set output_snapshot_every_x_timesteps = 2
+    set output_snapshot_every_x_timesteps = 4
     set path_to_search = /home/tyson/Codes/PHiLiP/build_release
     set entropy_varibles_in_snapshots = true
     set adaptation_tolerance = 0.000003
-    set number_nodal_modes = 0
+    set number_nodal_modes = 100
 end

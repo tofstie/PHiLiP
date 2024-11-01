@@ -21,7 +21,7 @@
 #include <deal.II/base/timer.h>
 #include "reduced_order/assemble_greedy_residual.h"
 #include "tests.h"
-
+#include "linear_solver/helper_functions.h"
 // FOR TESTING TYPES
 #include <typeinfo>
 #include <limits>
@@ -58,11 +58,13 @@ PODUnsteady<dim,nstate>::PODUnsteady(
         } else {
             offline_pod = flow_solver->ode_solver->pod;
         }
-        if(false){ // Am I doing hyper reduction?!
+        if(true){ // Am I doing hyper reduction?!
             auto ode_solver_type = ode_param.ode_solver_type;
             HyperReduction::AssembleGreedyRes<dim,nstate> hyper_reduction(&all_param, parameter_handler, flow_solver->dg, offline_pod, ode_solver_type);
             hyper_reduction.build_weights();
-            hyper_reduction.build_initial_target();
+            std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
+            Eigen::MatrixXd basis = epetra_to_eig_matrix(pod_basis->trilinos_matrix());
+            hyper_reduction.build_chan_target(basis);
             hyper_reduction.build_problem();
         }
     }

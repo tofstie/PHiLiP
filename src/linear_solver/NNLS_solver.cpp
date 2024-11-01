@@ -239,7 +239,6 @@ bool NNLS_solver::solve(){
     int argmaxGradient = -1;
     const double maxGradient = grad_eig(index_set.tail(numActive)).maxCoeff(&argmaxGradient);
     argmaxGradient += numInactive_;
-
     residual = b_;
     A_.Multiply(false, x_, Ax);
     residual.Update(-1.0, Ax, 1.0); // residual = b - A*x

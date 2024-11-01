@@ -16,6 +16,7 @@ set flux_nodes_type = GLL
 # NSFR
 set two_point_num_flux_type = CH
 set use_split_form = true
+set conv_num_flux = two_point_flux
 set use_curvilinear_split_form = false
 
 set flux_reconstruction = cDG
@@ -23,16 +24,16 @@ set use_periodic_bc = true
 
 set enable_higher_order_vtk_output = true
 # Euler
-subsection euler
-  set mach_infinity = 0.1
-end
+#subsection euler
+#  set mach_infinity = 0.1
+#end
 
 # Flow Solver
 subsection flow_solver
     set flow_case_type = taylor_green_vortex
-    set poly_degree = 1
+    set poly_degree = 3
     set final_time = 0.35
-    set courant_friedrichs_lewy_number = 0.001
+    set courant_friedrichs_lewy_number = 0.0005
     set apply_initial_condition_method = project_initial_condition_function
     subsection grid
       set number_of_grid_elements_per_dimension = 8
@@ -46,12 +47,11 @@ subsection ODE solver
     set print_iteration_modulo = 100
     set ode_solver_type = runge_kutta
     set initial_time_step = 0.001
-    set output_solution_every_x_steps = 10
-    #set runge_kutta_method = rk4_ex
+    set output_solution_every_x_steps = 2000
+    set runge_kutta_method = rk4_ex
 end
 
 # Reduced Order Model
 subsection reduced order
-  set output_snapshot_every_x_timesteps = 1
-
+  set output_snapshot_every_x_timesteps = 20
 end

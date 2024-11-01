@@ -46,8 +46,8 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
     //Epetra_Map &reduced_map = epetra_test_basis->DomainMap();
     //Printing some matrices for debugging 
 
-    std::ofstream mass_file("mass_file" + std::to_string(this->mpi_rank) + ".txt");
-    epetra_reduced_lhs->Print(mass_file);
+    //std::ofstream mass_file("mass_file" + std::to_string(this->mpi_rank) + ".txt");
+    //epetra_reduced_lhs->Print(mass_file);
 
     for (int i = 0; i < n_rk_stages; ++i) {
         this->rk_stage[i] = 0.0;
@@ -95,8 +95,8 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
             this->dg->calculate_ROM_projected_entropy(pod_basis);
         }
         this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(i)))
-        std::ofstream RHS_file("RHS" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
-        this->dg->right_hand_side.print(RHS_file);
+        //std::ofstream RHS_file("RHS" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
+        //this->dg->right_hand_side.print(RHS_file);
         if(this->all_parameters->use_inverse_mass_on_the_fly){
             //this->dg->apply_inverse_global_mass_matrix(this->dg->right_hand_side, this->rk_stage[i]); //rk_stage[i] = IMM*RHS = F(u_n + dt*sum(a_ij*k_j))
             // Not implmenting this yet as requires editting DG base
@@ -106,11 +106,11 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
             dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
             Epetra_Vector eptra_rhs(Epetra_DataAccess::View, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
             Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
-            std::ofstream epetra_rhs_file("eptra_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
-            eptra_rhs.Print(epetra_rhs_file);
+            //std::ofstream epetra_rhs_file("eptra_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
+            //eptra_rhs.Print(epetra_rhs_file);
             epetra_test_basis->Multiply(true,eptra_rhs,epetra_reduced_rhs);
-            std::ofstream reduced_file("epetra_reduced_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
-            epetra_reduced_rhs.Print(reduced_file);
+            //std::ofstream reduced_file("epetra_reduced_rhs" + std::to_string(i) + "Processor " + std::to_string(this->mpi_rank) + ".txt");
+            //epetra_reduced_rhs.Print(reduced_file);
             // Creating Linear Problem to find stage
             Epetra_Vector epetra_rk_stage_i(epetra_reduced_lhs->DomainMap()); // Ensure this is correct as well, since LHS is not transpose might need to be rangeMap
             Epetra_LinearProblem linearProblem(epetra_reduced_lhs.get(), &epetra_rk_stage_i, &epetra_reduced_rhs);
@@ -127,10 +127,10 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::step_in_time (rea
             //std::cout << "Rows :" << epetra_reduced_lhs->NumGlobalRows() << "Cols :" << epetra_reduced_lhs->NumGlobalCols() <<std::endl;
             Solver.Solve();
             epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, reduced_index);
-            std::ofstream system_file("epetra_rk_stage_i" + std::to_string(i) + "Processor" + std::to_string(this->mpi_rank) + ".txt");
-            std::ofstream dealii_rk_stage_file("dealii_rk_stage_i" + std::to_string(i) + "Processor" + std::to_string(this->mpi_rank) + ".txt");
-            epetra_rk_stage_i.Print(system_file);
-            dealii_reduced_stage_i.print(dealii_rk_stage_file);
+            //std::ofstream system_file("epetra_rk_stage_i" + std::to_string(i) + "Processor" + std::to_string(this->mpi_rank) + ".txt");
+            //std::ofstream dealii_rk_stage_file("dealii_rk_stage_i" + std::to_string(i) + "Processor" + std::to_string(this->mpi_rank) + ".txt");
+            //epetra_rk_stage_i.Print(system_file);
+            //dealii_reduced_stage_i.print(dealii_rk_stage_file);
             this->reduced_rk_stage[i] = dealii_reduced_stage_i;
         }
     }
@@ -209,7 +209,13 @@ void PODGalerkinRKODESolver<dim, real, n_rk_stages, MeshType>::allocate_ode_syst
         throw;
     }
     this->pcout << "System Matrix Imported" << std::endl;
-
+    /*
+    std::ofstream mass_file("mass_file.txt");
+    char zero = '0';
+    dealii::LAPACKFullMatrix<double> printing_mass;
+    printing_mass.copy_from(this->dg->global_mass_matrix);
+    printing_mass.print_formatted(mass_file, 16, true,0,&zero);
+    */
     // Generating test_basis and Reduced LHS
     epetra_test_basis = generate_test_basis(epetra_pod_basis, epetra_pod_basis); // These two lines will need to be updated for LSPG
     epetra_reduced_lhs = generate_reduced_lhs(epetra_system_matrix, *epetra_test_basis); // They need to be reinitialized every step for LSPG
@@ -319,25 +325,11 @@ void PODGalerkinRKODESolver<dim,real,n_rk_stages,MeshType>::epetra_to_dealii(Epe
                                                                              dealii::IndexSet index_set)
 {
     const Epetra_BlockMap &epetra_map = epetra_vector.Map();
-    /*
-    std::ofstream dealii_to_epetra_map_file("dealii_map" + std::to_string(this->mpi_rank) + ".txt");
-    std::ofstream epetra_to_dealii_map_file("epetra_map" + std::to_string(this->mpi_rank) + ".txt");
-    dealii::LinearAlgebra::distributed::Vector<double> dealii_to_epetra_map(index_set, this->mpi_communicator);
-    for(unsigned int i = 0; i < dealii_to_epetra_map.size(); i++){
-        if(dealii_to_epetra_map.in_local_range(i)){
-            dealii_to_epetra_map[i] = i;
-        }
-    }
-    dealii_to_epetra_map.print(dealii_to_epetra_map_file);
-    Epetra_Vector epetra_to_dealii_map(Epetra_DataAccess::Copy, epetra_map, dealii_to_epetra_map.begin());
-    epetra_to_dealii_map.Print(epetra_to_dealii_map_file);
-    */
-    dealii_vector.reinit(index_set,this->mpi_communicator); // Need one for different size (reduced), one approach is to take in an IndexSet
+    dealii_vector.reinit(index_set,this->mpi_communicator);
     for(int i = 0; i < epetra_map.NumMyElements();++i){
-        int epetra_global_idx = epetra_map.GID(i);
-        int dealii_global_idx = epetra_global_idx;
-        if(dealii_vector.in_local_range(dealii_global_idx)){
-            dealii_vector[dealii_global_idx] = epetra_vector[epetra_global_idx];
+        int global_idx = epetra_map.GID(i);
+        if(dealii_vector.in_local_range(global_idx)){
+            dealii_vector[global_idx] = epetra_vector[i];
         }
     }
     dealii_vector.compress(dealii::VectorOperation::insert);

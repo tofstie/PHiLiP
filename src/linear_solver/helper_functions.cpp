@@ -64,6 +64,19 @@ MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra){
   return A;
 }
 
+Epetra_Vector eig_to_epetra_vector(Eigen::VectorXd &a_eigen, int size, Epetra_MpiComm &Comm){
+  // Create an Epetra Vector distributed along all cores in Comm
+  Epetra_Map vecMap(size,0,Comm);
+  Epetra_Vector a_epetra(vecMap);
+  // Fill the Epetra_Vector with values from the Eigen Vector
+  const int numMyElements = vecMap.NumMyElements();
+  for (int localElement = 0; localElement < numMyElements; localElement++){
+    const int globalElement = vecMap.GID(localElement);
+    a_epetra.ReplaceGlobalValues(1, &a_eigen(globalElement), &globalElement);
+  }
+  return a_epetra;
+}
+
 MatrixXd lapack_to_eig_matrix(dealii::LAPACKFullMatrix<double> &lapack_matrix){
   const unsigned int rows = lapack_matrix.m();
   const unsigned int cols = lapack_matrix.n();

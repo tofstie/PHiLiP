@@ -194,7 +194,6 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     International Journal for Numerical Methods in Engineering, 2011
     */
     //matchQuadratureLocation();  
-    int num_of_modes = dg->all_parameters->reduced_order_param.number_nodal_modes;
     VectorXd reference_state;
     pcout << "Computing POD basis..." << std::endl;
     if (reference_type == "mean"){
@@ -221,26 +220,27 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     std::ofstream sing_file("singular_values.txt");
     sing_file << singular_values;
     */
-    if (!num_of_modes == 0){
-        Assert(num_of_modes < pod_basis.cols(),
-         dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
-        // 📢 MatrixXd pod_basis_n_modes = Eigen::MatrixXd
-        Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all,Eigen::seqN(0,num_of_modes));
+    // Reduce POD Size using either number of modes or a singular value threshold
+    if(dg->all_parameters->reduced_order_param.number_nodal_modes > 0){
+        const int num_modes = dg->all_parameters->reduced_order_param.number_nodal_modes;
+        Assert(num_modes < pod_basis.cols(),
+        dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
+        Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,num_modes));
         pod_basis = pod_basis_n_modes;
     }
-    if(false){
-        double threshold = 0.9999;
+    else if (dg->all_parameters->reduced_order_param.singular_value_threshold < 1){
+        const double threshold = dg->all_parameters->reduced_order_param.singular_value_threshold;
         Eigen::VectorXd singular_values = svd_one.singularValues();
         double l1_norm = singular_values.sum();
-        double singular_value_cum_sum = 0;
-        for(int i = 0; i < singular_values.size();i++){
-            if(singular_value_cum_sum/l1_norm < threshold){
-                singular_value_cum_sum += singular_values(i);
-            } else {
-                pod_basis(Eigen::placeholders::all,Eigen::seqN(0,i));
-                pcout << "Total size of POD: " << i << std::endl;
-            }
+        double singular_value_cumm_sum = 0;
+        int iter = 0;
+        while(singular_value_cumm_sum/l1_norm < threshold){
+            singular_value_cumm_sum += singular_values(iter);
+            iter++;
         }
+        Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,iter));
+        pod_basis = pod_basis_n_modes;
+        
     }
     //this->Vt = pod_basis;
     /*
@@ -252,6 +252,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
         }
     }
     */
+    pcout << "Final size of POD: " << pod_basis.cols() << std::endl;
     fullBasis.reinit(pod_basis.rows(), pod_basis.cols());
 
     for (unsigned int m = 0; m < pod_basis.rows(); m++) {
@@ -540,7 +541,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     pcout << "Snapshot matrix generated." << std::endl;
     calculatePODBasis(snapshotMatrix, reference_type);
     //loadPOD();
-    //enrichPOD();
+    enrichPOD();
     std::ofstream file("Entropy_snapshot.txt");
     const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file.is_open()){
@@ -736,13 +737,12 @@ bool OfflinePOD<dim>::getEntropyProjPODBasisFromSnapshots(){
 
 template <int dim>
 bool OfflinePOD<dim>::enrichPOD(){
+    const int nstate = dim + 2; // Make this an actual nstate later
     dg->evaluate_mass_matrices(false);
     int const poly_degree = dg->all_parameters->flow_solver_param.poly_degree;
     const unsigned int n_quad_pts  = dg->volume_quadrature_collection[poly_degree].size();
     const unsigned int n_quad_pts_1D  = dg->oneD_quadrature_collection[poly_degree].size();
-    const unsigned int n_face_quad_pts  = dg->face_quadrature_collection[poly_degree].size();
     const std::vector<double> &oneD_vol_quad_weights = dg->oneD_quadrature_collection[poly_degree].get_weights();
-    const std::vector<double> &oneD_quad_weights_vol= dg->oneD_quadrature_collection[poly_degree].get_weights();
     const unsigned int init_grid_degree = dg->high_order_grid->fe_system.tensor_degree();
     std::vector<dealii::types::global_dof_index> dofs_indices;
     dealii::TrilinosWrappers::SparseMatrix global_Q;
@@ -782,10 +782,9 @@ bool OfflinePOD<dim>::enrichPOD(){
         cell->get_dof_indices (dofs_indices);
         //const bool Cartesian_element = (cell->manifold_id() == dealii::numbers::flat_manifold_id);
       
-        char zero = '0';
-        unsigned int Nfaces = dealii::GeometryInfo<dim>::faces_per_cell;
+        //char zero = '0';
         // Compute Q
-        dealii::FullMatrix<double> local_Q(n_quad_pts+n_face_quad_pts*Nfaces);
+        dealii::FullMatrix<double> local_Q(n_dofs_cell);
         // Top Left - Strong DG line 1213
         std::array<dealii::FullMatrix<double>,dim> flux_basis_stiffness_skew_symm_oper_sparse;
         for(int idim=0; idim<dim; idim++){
@@ -798,9 +797,12 @@ bool OfflinePOD<dim>::enrichPOD(){
                                                             flux_basis_stiffness.oneD_skew_symm_vol_oper, 
                                                             oneD_vol_quad_weights,
                                                             flux_basis_stiffness_skew_symm_oper_sparse);
-        local_Q.add(flux_basis_stiffness_skew_symm_oper_sparse[0],1.,0,0,0,0);
-
-        local_Q.print_formatted(std::cout,3,true,0,&zero);
+        for(int istate = 0; istate < nstate; ++istate){
+            local_Q.add(flux_basis_stiffness_skew_symm_oper_sparse[0],1.,istate*n_quad_pts,istate*n_quad_pts,0,0);
+        }
+        //local_Q.print_formatted(std::cout,3,true,0,&zero);
+        /*
+        
         // Both Off diagonal terms - Strong DG line 1641
         
         dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);    
@@ -811,26 +813,30 @@ bool OfflinePOD<dim>::enrichPOD(){
             std::vector<unsigned int> Hadamard_rows_sparsity_off(n_face_quad_pts * n_quad_pts_1D);//size n^{d+1}
             std::vector<unsigned int> Hadamard_columns_sparsity_off(n_face_quad_pts * n_quad_pts_1D);
             flux_basis_int.sum_factorized_Hadamard_surface_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off, dim_not_zero);
+            //std::cout << Hadamard_rows_sparsity_off.at(0) << Hadamard_columns_sparsity_off.at(0) << std::endl;
             flux_basis_int.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D, 
                                                                         Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off,
                                                                         flux_basis_int.oneD_surf_operator[iface_1D], 
                                                                         oneD_quad_weights_vol,
                                                                         surf_oper_sparse,
-                                                                        dim_not_zero);                 
+                                                                        dim_not_zero);    
+                                                                             
             //debugMatrix(surf_oper_sparse);
-            std::cout << unit_ref_normal_int << std::endl;
+            //std::cout << unit_ref_normal_int[dim_not_zero] << std::endl;
 
             surf_oper_sparse *= unit_ref_normal_int[dim_not_zero];
             
             surf_oper_sparse.print_formatted(std::cout,3,true,0,&zero);
-            local_Q.add(surf_oper_sparse,-1.,n_quad_pts,n_quad_pts*(iface),0,0);
-            dealii::FullMatrix<double> surf_oper_sparse_trans;
-            surf_oper_sparse_trans.copy_transposed(surf_oper_sparse);
-            local_Q.add(surf_oper_sparse_trans,1.,n_quad_pts*(iface),n_quad_pts,0,0);
+            //local_Q.add(surf_oper_sparse,-1.,n_quad_pts+n_face_quad_pts*iface,0,0,0);
+            //dealii::FullMatrix<double> surf_oper_sparse_trans;
+            //surf_oper_sparse_trans.copy_transposed(surf_oper_sparse);
+            //local_Q.add(surf_oper_sparse_trans,1.,0,n_quad_pts+n_face_quad_pts*iface,0,0);
         }
+        */
+
         std::ofstream local_Q_file("local_Q_file.txt");
         local_Q.print(local_Q_file);
-        local_Q.print_formatted(std::cout,3,true,0,&zero);
+        //local_Q.print_formatted(std::cout,3,true,0,&zero);
         global_Q.add(dofs_indices, local_Q);
        
     }
@@ -861,7 +867,7 @@ bool OfflinePOD<dim>::enrichPOD(){
     full_basis.copy_from(sparse_basis);
     enriched_basis.fill(full_basis,0,1);
     enriched_basis.fill(full_QV,0,full_basis.n()+1);
-    dealii::LAPACKFullMatrix<double> enriched_basis_LAPACK(n_quad_pts);
+    dealii::LAPACKFullMatrix<double> enriched_basis_LAPACK(enriched_basis.m(),enriched_basis.n());
     enriched_basis_LAPACK = enriched_basis;
     pcout << "Preforming LAPACK svd" << std::endl;
     enriched_basis_LAPACK.compute_svd();
