@@ -34,21 +34,21 @@ public:
     /// Maximum value of parameters
     std::vector<double> parameter_max_values;
 
-    /// Number of timesteps before snapshot should be added as snapshot
-    int output_snapshot_every_x_timesteps;
-
-    /// Number of nodal modes to be used in reduced order basis
-    int number_nodal_modes;
-    
-    /// Whether to include entropy varibles in snapshot
-    bool entropy_varibles_in_snapshots;
+    /// Number of modes to include in the POD Basis
+    int number_modes;
 
     /// Singular Value Threshold in the POD Basis
     double singular_value_threshold;
 
+    /// Number of timesteps before putting solution in snapshot matrix
+    int output_snapshot_every_x_timesteps;
+
+    /// Whether to include entropy varibles in snapshot
+    bool entropy_varibles_in_snapshots;
+
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
-    
+
     /// Parses input file and sets the variables.
     void parse_parameters (dealii::ParameterHandler &prm);
 

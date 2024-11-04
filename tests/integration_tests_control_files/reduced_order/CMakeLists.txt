@@ -18,7 +18,15 @@ add_test(
         if [ $return_val1 -ne 0 ] || [ $return_val2 -ne 0 ]; then exit 1; else exit 0; fi"
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
-
+set_tests_labels(1D_BURGERS_REWIENSKI_REDUCED_ORDER_CONSISTENCY REDUCED_ORDER
+                                                                1D
+                                                                SERIAL
+                                                                BURGERS_REWIENSKI
+                                                                IMPLICIT
+                                                                WEAK
+                                                                UNCOLLOCATED
+                                                                MODERATE
+                                                                INTEGRATION_TEST)
 # =======================================
 # Burgers Rewienski Adaptive Sampling (Two Parameters)
 # =======================================
@@ -28,6 +36,15 @@ add_test(
         COMMAND mpirun -np 1 ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_1D -i ${CMAKE_CURRENT_BINARY_DIR}/1d_burgers_rewienski_adaptive_sampling.prm
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
+set_tests_labels(1D_BURGERS_REWIENSKI_ADAPTIVE_SAMPLING REDUCED_ORDER
+                                                        1D
+                                                        SERIAL
+                                                        BURGERS_REWIENSKI
+                                                        IMPLICIT
+                                                        WEAK
+                                                        UNCOLLOCATED
+                                                        LONG
+                                                        INTEGRATION_TEST)
 
 # =======================================
 # Burgers Rewienski Adaptive Sampling (One Parameter - generates results for hyperreduction)
@@ -43,6 +60,15 @@ add_test(
         mv solution_snapshots_iteration_final.txt ./1d_burgers_one_param ; "
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
+set_tests_labels(1D_BURGERS_REWIENSKI_ONE_PARAM_ADAPTIVE_SAMPLING   REDUCED_ORDER
+                                                                    1D
+                                                                    SERIAL
+                                                                    BURGERS_REWIENSKI
+                                                                    IMPLICIT
+                                                                    WEAK
+                                                                    UNCOLLOCATED
+                                                                    MODERATE
+                                                                    INTEGRATION_TEST)
 
 # =======================================
 # Burgers Rewienski Adaptive Sampling Testing
@@ -83,7 +109,15 @@ add_test(
         if [ $return_val1 -ne 0 ] || [ $return_val2 -ne 0 ]; then exit 1; else exit 0; fi"
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
-
+set_tests_labels(INVISCID_NACA0012_REDUCED_ORDER_CONSISTENCY    REDUCED_ORDER
+                                                                2D
+                                                                PARALLEL
+                                                                EULER
+                                                                IMPLICIT
+                                                                WEAK
+                                                                UNCOLLOCATED
+                                                                QUICK
+                                                                INTEGRATION_TEST)
 # =======================================
 # Inviscid NACA0012 Adaptive Sampling
 # =======================================
@@ -99,6 +133,15 @@ add_test(
         mv solution_snapshots_iteration_final.txt ./NACA_rom_adapt_results ; "
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
+set_tests_labels(INVISCID_NACA0012_ADAPTIVE_SAMPLING    REDUCED_ORDER
+                                                        2D
+                                                        PARALLEL
+                                                        EULER
+                                                        IMPLICIT
+                                                        WEAK
+                                                        UNCOLLOCATED
+                                                        LONG
+                                                        INTEGRATION_TEST)
 
 # =======================================
 # Inviscid NACA0012 Adaptive Sampling Testing
@@ -130,13 +173,41 @@ add_test(
         COMMAND mpirun -np 1 ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_1D -i ${CMAKE_CURRENT_BINARY_DIR}/1d_burgers_rewienski_manufactured.prm
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
-
+set_tests_labels(1D_BURGERS_REWIENSKI_MANUFACTURED_SOLUTION REDUCED_ORDER
+                                                            1D
+                                                            SERIAL
+                                                            BURGERS_REWIENSKI
+                                                            IMPLICIT
+                                                            WEAK
+                                                            UNCOLLOCATED
+                                                            CONVERGENCE
+                                                            MODERATE
+                                                            INTEGRATION_TEST)
 # =======================================
-# 1D Euler Shock Entropy Stable solution
+# Unsteady Galerkin POD Runge-Kutta
 # =======================================
-configure_file(1d_shock_entropy_stable_online.prm 1d_shock_entropy_stable_online.prm COPYONLY)
+# Estimated run time: 125s
+configure_file(unsteady_reduced_order_testing.prm unsteady_reduced_order_testing.prm COPYONLY)
 add_test(
-        NAME 1D_EULER_SHOCK_ENTROPY_STABLE
-        COMMAND mpirun -np ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_1D -i ${CMAKE_CURRENT_BINARY_DIR}/1d_shock_entropy_stable_online.prm
+        NAME 2D_UNSTEADY_GALERKIN_RK
+        COMMAND
+        bash -c
+        "
+        rm -f *.txt;
+        mpirun -np ${MPIMAX} ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_2D -i ${CMAKE_CURRENT_BINARY_DIR}/unsteady_reduced_order_testing.prm
+        "
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
+set_tests_labels(2D_UNSTEADY_GALERKIN_RK        REDUCED_ORDER
+                                                2D
+                                                PARALLEL
+                                                EULER
+                                                RUNGE-KUTTA
+                                                STRONG-SPLIT
+                                                COLLOCATED
+                                                MODERATE
+                                                INTEGRATION_TEST)
+
+
+
+

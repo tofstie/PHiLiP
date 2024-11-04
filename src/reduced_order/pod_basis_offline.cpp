@@ -48,7 +48,7 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
     bool file_found = false;
     snapshotMatrix.resize(0,0);
     std::string path = dg->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
-    std::string reference_type = "zero";
+    std::string reference_type = "mean";
     std::vector<std::filesystem::path> files_in_directory;
     std::copy(std::filesystem::directory_iterator(path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
     std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
@@ -80,7 +80,7 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
                 }
                 rows++;
             }
-            
+
             snapshotMatrix.conservativeResize(rows, snapshotMatrix.cols()+cols);
 
             int row = 0;
@@ -104,11 +104,11 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
             myfile.close();
         }
     }
-    // Reordering Snapshot matrix to match for multiple cores
+    // Reordering Snapshot matrix to match for multiple cores (NEED TESTING 📢)
     dealii::LinearAlgebra::distributed::Vector<double> parallelized_order(dg->solution);
     for(unsigned int i = 0; i <  parallelized_order.size();i++){
         if(parallelized_order.in_local_range(i)){
-            parallelized_order(i) = i; 
+            parallelized_order(i) = i;
         }
     }
     dealii::LinearAlgebra::ReadWriteVector<double> order_vector(parallelized_order.size());
@@ -120,7 +120,7 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
     pcout << "Snapshot matrix generated." << std::endl;
 
     calculatePODBasis(snapshotMatrix, reference_type);
-   
+
     return file_found;
 }
 
@@ -193,14 +193,14 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     Kevin Carlberg, Charbel Bou-Mosleh, Charbel Farhat
     International Journal for Numerical Methods in Engineering, 2011
     */
-    //matchQuadratureLocation();  
+    //matchQuadratureLocation();
     VectorXd reference_state;
     pcout << "Computing POD basis..." << std::endl;
     if (reference_type == "mean"){
         reference_state = snapshots.rowwise().mean();
     } else if (reference_type == "zero"){
         reference_state = VectorXd::Zero(snapshots.rows(),1);
-    } 
+    }
     referenceState.reinit(reference_state.size());
     for(unsigned int i = 0 ; i < reference_state.size() ; i++){
         referenceState(i) = reference_state(i);
@@ -221,8 +221,8 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     sing_file << singular_values;
     */
     // Reduce POD Size using either number of modes or a singular value threshold
-    if(dg->all_parameters->reduced_order_param.number_nodal_modes > 0){
-        const int num_modes = dg->all_parameters->reduced_order_param.number_nodal_modes;
+    if(dg->all_parameters->reduced_order_param.number_modes > 0){
+        const int num_modes = dg->all_parameters->reduced_order_param.number_modes;
         Assert(num_modes < pod_basis.cols(),
         dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,num_modes));
@@ -240,7 +240,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
         }
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,iter));
         pod_basis = pod_basis_n_modes;
-        
+
     }
     //this->Vt = pod_basis;
     /*
@@ -264,12 +264,10 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     std::ofstream out_file("POD_basis.txt");
     unsigned int precision = 16;
     fullBasis.print_formatted(out_file, precision);
-   
+
     const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
     Epetra_Map system_matrix_map = epetra_system_matrix.RowMap();
     Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy, system_matrix_map, pod_basis.cols());
-
-
 
     const int numMyElements = system_matrix_map.NumMyElements(); //Number of elements on the calling processor
 
@@ -284,6 +282,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     Epetra_Map domain_map((int)pod_basis.cols(), 0, epetra_comm);
 
     epetra_basis.FillComplete(domain_map, system_matrix_map);
+
     basis->reinit(epetra_basis);
 
     return;
@@ -335,7 +334,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
 
     const int energy_case = 0;
     const int density_case = nstate-1;
-    
+
     snapshotMatrix.conservativeResize(0,0);
     MatrixXd density(0,0);
     std::array<MatrixXd,dim> momentum;
@@ -488,7 +487,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
                 //snapshotMatrix(solution_idx+2*n_quad_pts,col+1*num_of_snapshots) = entropy_var[0];
                 //snapshotMatrix(solution_idx+1*n_quad_pts,col+1*num_of_snapshots) = entropy_var[1];
                 //snapshotMatrix(solution_idx+0*n_quad_pts,col+1*num_of_snapshots) = entropy_var[2];
-                
+
             }
         }
         solution_idx++;
@@ -498,7 +497,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     }
     } else {
     // USING NODAL ENTROPY
-   
+
     for(int col = 0; col < num_of_snapshots; col++){
         int quad_num = 0;
         int i_quad = -1;
@@ -570,7 +569,7 @@ bool OfflinePOD<dim>::getEntropyProjPODBasisFromSnapshots(){
 
     const int energy_case = 0;
     const int density_case = nstate-1;
-    
+
     snapshotMatrix.conservativeResize(0,0);
     MatrixXd density(0,0);
     std::array<MatrixXd,dim> momentum;
@@ -707,7 +706,7 @@ bool OfflinePOD<dim>::getEntropyProjPODBasisFromSnapshots(){
                         snapshotMatrix(solution_idx+istate*n_quad_pts,col) = proj_entropy_conserv_var[nstate-1-istate];
                         break;
                 }
-                
+
                 /* OLD
                 snapshotMatrix(solution_idx+2*n_quad_pts,col) = density(row,col);
                 snapshotMatrix(solution_idx+1*n_quad_pts,col) = momentum(row,col);
@@ -748,9 +747,9 @@ bool OfflinePOD<dim>::enrichPOD(){
     dealii::TrilinosWrappers::SparseMatrix global_Q;
     global_Q.reinit(dg->global_mass_matrix);
     // Basis Def
-    OPERATOR::local_basis_stiffness<dim,2*dim,double> flux_basis_stiffness(1, dg->max_degree, init_grid_degree, true); 
-    OPERATOR::basis_functions<dim,2*dim,double> flux_basis_int(1, dg->max_degree, init_grid_degree); 
-    OPERATOR::basis_functions<dim,2*dim,double> flux_basis_ext(1, dg->max_degree, init_grid_degree); 
+    OPERATOR::local_basis_stiffness<dim,2*dim,double> flux_basis_stiffness(1, dg->max_degree, init_grid_degree, true);
+    OPERATOR::basis_functions<dim,2*dim,double> flux_basis_int(1, dg->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,double> flux_basis_ext(1, dg->max_degree, init_grid_degree);
 
     // 📢 Define Flux Basis 📢
     std::vector<std::array<unsigned int,dim>> Hadamard_rows_sparsity_volume(n_quad_pts * n_quad_pts_1D);//size n^{d+1}
@@ -781,7 +780,7 @@ bool OfflinePOD<dim>::enrichPOD(){
         dofs_indices.resize(n_dofs_cell);
         cell->get_dof_indices (dofs_indices);
         //const bool Cartesian_element = (cell->manifold_id() == dealii::numbers::flat_manifold_id);
-      
+
         //char zero = '0';
         // Compute Q
         dealii::FullMatrix<double> local_Q(n_dofs_cell);
@@ -790,11 +789,11 @@ bool OfflinePOD<dim>::enrichPOD(){
         for(int idim=0; idim<dim; idim++){
             flux_basis_stiffness_skew_symm_oper_sparse[idim].reinit(n_quad_pts, n_quad_pts_1D);
         }
-        
+
         // 📢 Define flux_basis_stiffness 📢
-        flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D, 
+        flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
                                                             Hadamard_rows_sparsity_volume, Hadamard_columns_sparsity_volume,
-                                                            flux_basis_stiffness.oneD_skew_symm_vol_oper, 
+                                                            flux_basis_stiffness.oneD_skew_symm_vol_oper,
                                                             oneD_vol_quad_weights,
                                                             flux_basis_stiffness_skew_symm_oper_sparse);
         for(int istate = 0; istate < nstate; ++istate){
@@ -802,10 +801,10 @@ bool OfflinePOD<dim>::enrichPOD(){
         }
         //local_Q.print_formatted(std::cout,3,true,0,&zero);
         /*
-        
+
         // Both Off diagonal terms - Strong DG line 1641
-        
-        dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);    
+
+        dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);
         for (unsigned int iface=0; iface < Nfaces; ++iface) {
             const int iface_1D = iface % 2;//the reference face number
             const int dim_not_zero = iface / 2;//reference direction of face integer division
@@ -814,18 +813,18 @@ bool OfflinePOD<dim>::enrichPOD(){
             std::vector<unsigned int> Hadamard_columns_sparsity_off(n_face_quad_pts * n_quad_pts_1D);
             flux_basis_int.sum_factorized_Hadamard_surface_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off, dim_not_zero);
             //std::cout << Hadamard_rows_sparsity_off.at(0) << Hadamard_columns_sparsity_off.at(0) << std::endl;
-            flux_basis_int.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D, 
+            flux_basis_int.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D,
                                                                         Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off,
-                                                                        flux_basis_int.oneD_surf_operator[iface_1D], 
+                                                                        flux_basis_int.oneD_surf_operator[iface_1D],
                                                                         oneD_quad_weights_vol,
                                                                         surf_oper_sparse,
-                                                                        dim_not_zero);    
-                                                                             
+                                                                        dim_not_zero);
+
             //debugMatrix(surf_oper_sparse);
             //std::cout << unit_ref_normal_int[dim_not_zero] << std::endl;
 
             surf_oper_sparse *= unit_ref_normal_int[dim_not_zero];
-            
+
             surf_oper_sparse.print_formatted(std::cout,3,true,0,&zero);
             //local_Q.add(surf_oper_sparse,-1.,n_quad_pts+n_face_quad_pts*iface,0,0,0);
             //dealii::FullMatrix<double> surf_oper_sparse_trans;
@@ -838,12 +837,12 @@ bool OfflinePOD<dim>::enrichPOD(){
         local_Q.print(local_Q_file);
         //local_Q.print_formatted(std::cout,3,true,0,&zero);
         global_Q.add(dofs_indices, local_Q);
-       
+
     }
     //dealii::LinearAlgebra::distributed::Vector<double> ones;
     //ones.reinit(dg->solution);
     //ones.add(1.0);
-    //dealii::FullMatrix<double> Q1 = 
+    //dealii::FullMatrix<double> Q1 =
     //std::cout << "Max Row Sum: " << global_Q.matrix_scalar_product(ones,ones) << std::endl;
     std::ofstream Q_file("Q_file.txt");
     global_Q.print(Q_file);
@@ -872,7 +871,7 @@ bool OfflinePOD<dim>::enrichPOD(){
     pcout << "Preforming LAPACK svd" << std::endl;
     enriched_basis_LAPACK.compute_svd();
     dealii::LAPACKFullMatrix<double> LAPACK_test_basis = enriched_basis_LAPACK.get_svd_u();
-    
+
     Vt = lapack_to_eig_matrix(LAPACK_test_basis); // Setting to Eigen for now
 
     return true;

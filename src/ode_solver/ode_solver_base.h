@@ -27,10 +27,11 @@ class ODESolverBase
 {
 public:
     /// Default constructor that will set the constants.
-    explicit ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input); ///< Constructor.
+    explicit ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input,
+                           std::shared_ptr< ProperOrthogonalDecomposition::PODBase<dim>> pod); ///< Default Constructor.
 
-    ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input,
-                  std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod);
+    /// Situational Constructor that will call the default with no POD.
+    ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> >  dg_input);
 
     virtual ~ODESolverBase() = default; ///< Destructor.
 
@@ -45,6 +46,7 @@ public:
 
     /// Evaluate steady state solution.
     virtual int steady_state ();
+
 
     /// Ramps up the solution from p0 all the way up to the given global_final_poly_degree.
     /** This first interpolates the current solution to the P0 space as an initial solution.
@@ -67,13 +69,18 @@ public:
     /// Virtual function to evaluate solution update
     virtual void step_in_time(real dt, const bool pseudotime) = 0;
 
+    /// Virtual function to evaluate automatic error adaptive time step
+    virtual double get_automatic_error_adaptive_step_size (real dt, const bool pseudotime);
+
+    /// Virtual function to evaluate initial automatic error adaptive time step
+    virtual double get_automatic_initial_step_size (real dt, const bool pseudotime);
+
     /// Virtual function to allocate the ODE system
     virtual void allocate_ode_system () = 0;
 
     double residual_norm; ///< Current residual norm. Only makes sense for steady state
     double residual_norm_decrease; ///< Current residual norm normalized by initial residual. Only makes sense for steady state
         /// Smart pointer to POD
-    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>>pod;
 
 
 protected:
@@ -93,6 +100,9 @@ protected:
 public:
     /// Smart pointer to DGBase
     std::shared_ptr<DGBase<dim,real,MeshType>> dg;
+
+    /// Smart pointer to PODBasis
+    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod;
 
     /// Pointer to BoundPreservingLimiter
     std::unique_ptr<BoundPreservingLimiter<dim,real>> limiter;

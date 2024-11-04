@@ -49,7 +49,7 @@ public:
 
     /// POD basis
     void calculatePODBasis(MatrixXd snapshots, std::string reference_type);
-    
+
 
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> basis;
 
@@ -80,7 +80,7 @@ public:
     dealii::ConditionalOStream pcout;
 
     //📣 Code below is Hyper-Reduction, maybe move this depending on the requirements later on
-    /// 
+    ///
 
     bool getEntropyPODBasisFromSnapshots();
 

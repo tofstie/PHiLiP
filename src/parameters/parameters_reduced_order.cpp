@@ -30,18 +30,18 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("parameter_max_values", "0.7, 4",
                           dealii::Patterns::List(dealii::Patterns::Double(), 0, 10, ","),
                           "Maximum values for parameters");
-        prm.declare_entry("output_snapshot_every_x_timesteps","0",
-                          dealii::Patterns::Integer(0,dealii::Patterns::Integer::max_int_value),
-                          "Number of Timesteps before snapshot is added");
-        prm.declare_entry("number_nodal_modes", "0",
+        prm.declare_entry("number_modes", "0",
                           dealii::Patterns::Integer(0, dealii::Patterns::Integer::max_int_value),
-                          "Number of Nodal Modes used in reduced basis");
-        prm.declare_entry("entropy_varibles_in_snapshots", "false",
-                           dealii::Patterns::Bool(),
-                           "Adds Entropy varibles to snapshots, false by default");
+                          "Number of modes used in the POD Basis");
         prm.declare_entry("singular_value_threshold", "1",
                           dealii::Patterns::Double(0, dealii::Patterns::Double::max_double_value),
                           "Threshold for the Singular Value cutoff");
+        prm.declare_entry("output_snapshot_every_x_timesteps","0",
+                          dealii::Patterns::Integer(0,dealii::Patterns::Integer::max_int_value),
+                          "Number of Timesteps before snapshot is added");
+        prm.declare_entry("entropy_varibles_in_snapshots", "false",
+                           dealii::Patterns::Bool(),
+                           "Adds Entropy varibles to snapshots, false by default");
     }
     prm.leave_subsection();
 }
@@ -55,9 +55,9 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         singular_value_threshold = prm.get_double("singular_value_threshold");
         num_halton = prm.get_integer("num_halton");
         recomputation_coefficient = prm.get_integer("recomputation_coefficient");
-        path_to_search = prm.get("path_to_search");
+        number_modes = prm.get_integer("number_modes");
         output_snapshot_every_x_timesteps = prm.get_integer("output_snapshot_every_x_timesteps");
-        number_nodal_modes = prm.get_integer("number_nodal_modes");
+        path_to_search = prm.get("path_to_search");
         entropy_varibles_in_snapshots = prm.get_bool("entropy_varibles_in_snapshots");
         std::string parameter_names_string = prm.get("parameter_names");
         std::unique_ptr<dealii::Patterns::PatternBase> ListPatternNames(new dealii::Patterns::List(dealii::Patterns::Anything(), 0, 10, ",")); //Note, in a future version of dealii, this may change from a unique_ptr to simply the object. Will need to use std::move(ListPattern) in next line.
