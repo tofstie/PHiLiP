@@ -11,7 +11,6 @@
 
 #include "dg/dg_base.hpp"
 #include "parameters/all_parameters.h"
-#include "reduced_order/pod_basis_base.h"
 
 namespace PHiLiP {
 namespace ODE {
@@ -27,11 +26,7 @@ class ODESolverBase
 {
 public:
     /// Default constructor that will set the constants.
-    explicit ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input,
-                           std::shared_ptr< ProperOrthogonalDecomposition::PODBase<dim>> pod); ///< Default Constructor.
-
-    /// Situational Constructor that will call the default with no POD.
-    ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> >  dg_input);
+    explicit ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input); ///< Constructor.
 
     virtual ~ODESolverBase() = default; ///< Destructor.
 
@@ -98,9 +93,6 @@ protected:
 public:
     /// Smart pointer to DGBase
     std::shared_ptr<DGBase<dim,real,MeshType>> dg;
-
-    /// Smart pointer to PODBasis
-    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod;
 
     /// Pointer to BoundPreservingLimiter
     std::unique_ptr<BoundPreservingLimiter<dim,real>> limiter;
