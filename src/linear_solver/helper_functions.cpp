@@ -91,9 +91,9 @@ Epetra_CrsMatrix eig_to_epetra_matrix(Eigen::MatrixXd &A_eig, Epetra_Map ColMap,
 MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra){
   // Create an empty Eigen structure
   MatrixXd A(A_epetra.NumGlobalRows(), A_epetra.NumGlobalCols());
-  int rank = A_epetra.Comm().MyPID();
-  std::ofstream sum_file("Input_"+std::to_string(rank)+".txt");
-  A_epetra.Print(sum_file);
+  //int rank = A_epetra.Comm().MyPID();
+  //std::ofstream sum_file("Input_"+std::to_string(rank)+".txt");
+  //A_epetra.Print(sum_file);
   // Fill the Eigen::MatrixXd from the Epetra_CrsMatrix
   for (int m = 0; m < A_epetra.NumGlobalRows(); m++) {
 

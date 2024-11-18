@@ -41,10 +41,10 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         this->rk_stage[istage] = this->solver.current_solution_estimate;
     }
     this->dg->solution = this->rk_stage[istage];
-    int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
-    std::ofstream file("solution_" + std::to_string(rank)+ ".txt");
-    print_dealii(file,this->solution_update);
-    this->dg->solution /= 1;
+    //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
+    //std::ofstream file("solution_" + std::to_string(rank)+ ".txt");
+    //print_dealii(file,this->solution_update);
+    //this->dg->solution /= 1;
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
@@ -65,16 +65,16 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
 
         Epetra_Vector epetra_rhs(Epetra_DataAccess::Copy, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
-        int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
-        std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
+        //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
+        //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
         dealii::LinearAlgebra::distributed::Vector<double> rhs = this->dg->right_hand_side;
-        print_dealii(dealii_rhs,rhs);
-        std::ofstream rhs_file("rhs_file_"+ std::to_string(rank)+ ".txt");
-        epetra_rhs.Print(rhs_file);
+        //print_dealii(dealii_rhs,rhs);
+        //std::ofstream rhs_file("rhs_file_"+ std::to_string(rank)+ ".txt");
+        //epetra_rhs.Print(rhs_file);
         Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
         epetra_test_basis->Multiply(true,epetra_rhs,epetra_reduced_rhs);
-        std::ofstream reduced_rhs_file("reduced_rhs_file_"+ std::to_string(rank)+ ".txt");
-        epetra_reduced_rhs.Print(reduced_rhs_file);
+        //std::ofstream reduced_rhs_file("reduced_rhs_file_"+ std::to_string(rank)+ ".txt");
+        //epetra_reduced_rhs.Print(reduced_rhs_file);
         // Creating Linear Problem to find stage
         Epetra_Vector epetra_rk_stage_i(epetra_reduced_lhs->DomainMap()); // Ensure this is correct as well, since LHS is not transpose might need to be rangeMap
         Epetra_LinearProblem linearProblem(epetra_reduced_lhs.get(), &epetra_rk_stage_i, &epetra_reduced_rhs);
@@ -87,9 +87,9 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, this->reduced_rk_stage[istage]);
         this->reduced_rk_stage[istage] = dealii_reduced_stage_i;
     }
-    int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
-    std::ofstream reduced_file("reduced_file_"+ std::to_string(rank)+ "_stage_"+std::to_string(istage)+".txt");
-    print_dealii(reduced_file,this->reduced_rk_stage[istage]);
+    //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
+    //std::ofstream reduced_file("reduced_file_"+ std::to_string(rank)+ "_stage_"+std::to_string(istage)+".txt");
+    //print_dealii(reduced_file,this->reduced_rk_stage[istage]);
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
@@ -101,17 +101,17 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::sum_stages(r
     for (int istage = 1; istage < n_rk_stages; ++istage){
         reduced_sum.add(dt* this->butcher_tableau->get_b(istage),this->reduced_rk_stage[istage]);
     }
-    int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
-    std::ofstream sum_file("sum_file_"+std::to_string(rank)+".txt");
-    print_dealii(sum_file,reduced_sum);
+    //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
+    //std::ofstream sum_file("sum_file_"+std::to_string(rank)+".txt");
+    //print_dealii(sum_file,reduced_sum);
     // Convert Reduced order step to Full order step
     dealii::LinearAlgebra::distributed::Vector<double> dealii_update;
     multiply(*epetra_test_basis,reduced_sum,dealii_update,this->dg->solution,false);
-    std::ofstream update_file("update_file_"+std::to_string(rank)+".txt");
-    print_dealii(update_file,dealii_update);
+    //std::ofstream update_file("update_file_"+std::to_string(rank)+".txt");
+    //print_dealii(update_file,dealii_update);
     this->solution_update.add(1.0,dealii_update);
-    std::ofstream new_solution_file("new_solution_file_"+std::to_string(rank)+".txt");
-    print_dealii(new_solution_file,this->solution_update);
+    //std::ofstream new_solution_file("new_solution_file_"+std::to_string(rank)+".txt");
+    //print_dealii(new_solution_file,this->solution_update);
     
 }
 
@@ -161,7 +161,7 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::allocate_run
         }
     //epetra_pod_basis.FillComplete();
     Epetra_Map reduced_map = epetra_pod_basis.DomainMap();
-    PrintMapInfo(reduced_map);
+    //PrintMapInfo(reduced_map);
     // Setting up Mass and Test Matrix
     Epetra_CrsMatrix old_epetra_system_matrix = this->dg->global_mass_matrix.trilinos_matrix();
     // Giving the system matrix the same map as pod matrix
