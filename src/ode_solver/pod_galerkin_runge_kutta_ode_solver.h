@@ -86,13 +86,17 @@ private:
     int multiply(Epetra_CrsMatrix &epetra_matrix,
                  dealii::LinearAlgebra::distributed::Vector<double> &input_dealii_vector,
                  dealii::LinearAlgebra::distributed::Vector<double> &output_dealii_vector,
-                 const dealii::IndexSet &index_set,
+                 dealii::LinearAlgebra::distributed::Vector<double> &index_vector,
                  const bool transpose);
 
     /// Function to convert a epetra_vector to dealii
     void epetra_to_dealii(Epetra_Vector &epetra_vector,
                           dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector,
-                          const dealii::IndexSet &index_set);
+                          dealii::LinearAlgebra::distributed::Vector<double> &index_vector);
+    void PrintMapInfo(const Epetra_Map &map);
+    void print_dealii(
+    std::ofstream &file,
+    dealii::LinearAlgebra::distributed::Vector<double> &vec);
 };
 
 } // ODE namespace

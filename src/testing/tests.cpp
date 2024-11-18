@@ -286,7 +286,7 @@ std::unique_ptr< TestsBase > TestsFactory<dim,nstate,MeshType>
     } else if(test_type == Test_enum::reduced_order) {
         if constexpr ((dim==2 && nstate==dim+2) || (dim==1 && nstate==1)) return std::make_unique<ReducedOrder<dim,nstate>>(parameters_input, parameter_handler_input);
     } else if(test_type == Test_enum::unsteady_reduced_order) {
-        if constexpr (dim==2 && nstate==dim+2) return std::make_unique<UnsteadyReducedOrder<dim,nstate>>(parameters_input, parameter_handler_input);
+        if constexpr (nstate==dim+2) return std::make_unique<UnsteadyReducedOrder<dim,nstate>>(parameters_input, parameter_handler_input);
     } else if(test_type == Test_enum::POD_adaptive_sampling_run) {
         if constexpr ((dim==2 && nstate==dim+2) || (dim==1 && nstate==1)) return std::make_unique<AdaptiveSamplingRun<dim,nstate>>(parameters_input,parameter_handler_input);
     } else if(test_type == Test_enum::adaptive_sampling_testing) {

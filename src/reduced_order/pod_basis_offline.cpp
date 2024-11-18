@@ -263,10 +263,13 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
 
     std::ofstream out_file("POD_basis.txt");
     unsigned int precision = 16;
-    fullBasis.print_formatted(out_file, precision);
-
+    char zero = 48;
+    fullBasis.print_formatted(out_file, precision, true, 0,&zero);
+    Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
     Epetra_Map system_matrix_map = epetra_system_matrix.RowMap();
+    //Epetra_Map col_map((int)pod_basis.cols(),(int)pod_basis.cols(), 0, epetra_comm);
+    Epetra_Map domain_map((int)pod_basis.cols(), 0, epetra_comm);
     Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy, system_matrix_map, pod_basis.cols());
 
     const int numMyElements = system_matrix_map.NumMyElements(); //Number of elements on the calling processor
@@ -274,15 +277,19 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     for (int localRow = 0; localRow < numMyElements; ++localRow){
         const int globalRow = system_matrix_map.GID(localRow);
         for(int n = 0 ; n < pod_basis.cols() ; n++){
-            epetra_basis.InsertGlobalValues(globalRow, 1, &pod_basis(globalRow, n), &n);
+            double value = pod_basis(globalRow, n);
+            epetra_basis.InsertGlobalValues(globalRow, 1, &value, &n);
         }
     }
-
-    Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
-    Epetra_Map domain_map((int)pod_basis.cols(), 0, epetra_comm);
-
+    int rank = epetra_comm.MyPID();
+    std::ofstream before_file("before_fill_"+std::to_string(rank)+".txt");
+    epetra_basis.Print(before_file);
+    PrintMapInfo(domain_map);
+    epetra_comm.Barrier();
     epetra_basis.FillComplete(domain_map, system_matrix_map);
-
+    std::ofstream file("AH" + std::to_string(epetra_comm.MyPID())+".txt");
+    epetra_basis.Print(file);
+    //PrintMapInfo(epetra_basis.DomainMap());
     basis->reinit(epetra_basis);
 
     return;
@@ -328,6 +335,8 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             dg->all_parameters->euler_param.angle_of_attack,
             dg->all_parameters->euler_param.side_slip_angle);
     bool file_found = false;
+    auto mpi_comm(MPI_COMM_WORLD);
+    const unsigned int n_procs = dealii::Utilities::MPI::n_mpi_processes(mpi_comm);
     int num_of_snapshots = 0;
     int global_quad_points = 0;
     int n_quad_pts = dg->volume_quadrature_collection[dg->all_parameters->flow_solver_param.poly_degree].size();
@@ -525,9 +534,38 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
             snapshotMatrix(solution_num+istate*n_quad_pts+i_quad,col) = val;
         }
         dg->calculate_global_entropy();
-        for(int row = 0; row < global_quad_points; row++){
-            if(dg->global_entropy.in_local_range(row)){
-                snapshotMatrix(row, col+1*num_of_snapshots) = dg->global_entropy[row];
+        
+        // Serialize the data in the global entropy
+
+        const unsigned int local_size = dg->global_entropy.local_size();
+
+        std::vector<double> local_data(local_size);
+        for(unsigned int i = 0; i < local_size; i++) {
+            local_data[i] = dg->global_entropy.local_element(i);
+        }
+
+        dealii::LinearAlgebra::distributed::Vector<double> this_entropy(this->dg->global_entropy);
+        int back = this_entropy.locally_owned_elements().pop_back();
+        int front = this_entropy.locally_owned_elements().pop_front();
+        std::vector<std::vector<double>> entropy_vectors = dealii::Utilities::MPI::all_gather(mpi_comm, local_data);
+        std::vector<int> back_vector = dealii::Utilities::MPI::all_gather(mpi_comm, back);
+        std::vector<int> front_vector = dealii::Utilities::MPI::all_gather(mpi_comm, front);
+        /*
+        std::vector<int> recv_count(n_procs);
+        std::vector<int> displacements(n_procs);
+        unsigned int start,end;
+        for(unsigned int i = 0; i < n_procs; ++i) {
+            if(rank == i) {
+                start = this->dg->global_entropy.local_ra
+            }
+        }
+        */
+
+        for(unsigned int m_proc = 0; m_proc < n_procs; m_proc++) {
+            for(int row = 0; row < global_quad_points; row++){
+                if(row >= front_vector[m_proc] && row <= back_vector[m_proc]){
+                    snapshotMatrix(row, col+1*num_of_snapshots) = entropy_vectors[m_proc][row-front_vector[m_proc]];
+                }
             }
         }
     }
@@ -540,8 +578,10 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     pcout << "Snapshot matrix generated." << std::endl;
     calculatePODBasis(snapshotMatrix, reference_type);
     //loadPOD();
-    enrichPOD();
-    std::ofstream file("Entropy_snapshot.txt");
+    //enrichPOD();
+
+    const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(mpi_comm);
+    std::ofstream file("Entropy_snapshot_"+std::to_string(rank)+".txt");
     const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file.is_open()){
         file << snapshotMatrix.format(CSVFormat);
@@ -945,6 +985,17 @@ void OfflinePOD<dim>::matchQuadratureLocation(){ // Currently only works for 2D,
         cum_quad_pts += num_quad_pts_on_core;
     }
 
+}
+    template <int dim>
+    void OfflinePOD<dim>::PrintMapInfo(const Epetra_Map &map) {
+    std::cout << "Map Information:" << std::endl;
+    std::cout << "  Number of Global Elements: " << map.NumGlobalElements() << std::endl;
+    std::cout << "  Number of Local Elements: " << map.NumMyElements() << std::endl;
+    std::cout << "  Min Global ID: " << map.MinAllGID() << std::endl;
+    std::cout << "  Max Global ID: " << map.MaxAllGID() << std::endl;
+    std::cout << "  Index Base: " << map.IndexBase() << std::endl;
+    std::cout << "  Number of Processes: " << map.Comm().NumProc() << std::endl;
+    std::cout << "  Process Rank: " << map.Comm().MyPID() << std::endl;
 }
 
 

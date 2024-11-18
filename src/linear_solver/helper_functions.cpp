@@ -68,7 +68,22 @@ Epetra_CrsMatrix eig_to_epetra_matrix(Eigen::MatrixXd &A_eig, int col, int row, 
           A.InsertGlobalValues(globalRow, 1, &A_eig(globalRow, n), &n);
       }
   }
+  A.FillComplete(ColMap, RowMap);
+  return A;
+}
 
+Epetra_CrsMatrix eig_to_epetra_matrix(Eigen::MatrixXd &A_eig, Epetra_Map ColMap, Epetra_Map RowMap){
+  // Create an empty Epetra structure with the right dimensions
+  Epetra_CrsMatrix A(Epetra_DataAccess::Copy, RowMap, ColMap.NumGlobalElements());
+  const int numMyElements = RowMap.NumMyElements();
+
+  // Fill the Epetra_CrsMatrix from the Eigen::MatrixXd
+  for (int localRow = 0; localRow < numMyElements; ++localRow){
+      const int globalRow = RowMap.GID(localRow);
+      for(int n = 0 ; n < A_eig.cols() ; n++){
+          A.InsertGlobalValues(globalRow, 1, &A_eig(globalRow, n), &n);
+      }
+  }
   A.FillComplete(ColMap, RowMap);
   return A;
 }
@@ -76,12 +91,47 @@ Epetra_CrsMatrix eig_to_epetra_matrix(Eigen::MatrixXd &A_eig, int col, int row, 
 MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra){
   // Create an empty Eigen structure
   MatrixXd A(A_epetra.NumGlobalRows(), A_epetra.NumGlobalCols());
+  int rank = A_epetra.Comm().MyPID();
+  std::ofstream sum_file("Input_"+std::to_string(rank)+".txt");
+  A_epetra.Print(sum_file);
   // Fill the Eigen::MatrixXd from the Epetra_CrsMatrix
   for (int m = 0; m < A_epetra.NumGlobalRows(); m++) {
-      double *row = A_epetra[m];
-      for (int n = 0; n < A_epetra.NumGlobalCols(); n++) {
-          A(m,n) = row[n];
-      }
+
+    /*int count = A_epetra.NumMyCols();
+    double *local_row = new double [count];
+    double *global_row = new double [A_epetra.NumGlobalCols()];
+    if(A_epetra.MyGRID(m)) {
+      local_row = A_epetra[m];
+    }
+    std::cout << local_row << std::endl;
+    A_epetra.Comm().GatherAll(local_row,global_row,count);
+    for (int n = 0; n < A_epetra.NumGlobalCols(); n++) {
+      A(m,n) = global_row[n];
+      std::cout << m << "X" << n << std::endl;
+    }
+    */
+    double *global_row = new double [A_epetra.NumGlobalCols()];
+    int *indicies = new int [A_epetra.NumGlobalCols()];
+    int num_entries = 0;
+
+    const int *GIDList = &m;
+    int *PIDList = new int[1];
+    int *LIDList = new int[1];
+    
+    A_epetra.RowMap().RemoteIDList(1, GIDList, PIDList, LIDList);
+    A_epetra.ExtractGlobalRowCopy(m,A_epetra.NumGlobalCols(),num_entries,global_row,indicies);
+    if(PIDList[0] != 0){
+      //std::cout << "Break here" << std::endl;
+    }
+    A_epetra.Comm().Broadcast(global_row,A_epetra.NumGlobalCols(),PIDList[0]);
+    A_epetra.Comm().Broadcast(indicies,A_epetra.NumGlobalCols(),PIDList[0]);
+    for (int n = 0; n < A_epetra.NumGlobalCols(); n++) {
+      A(m,indicies[n]) = global_row[n];
+    }
+    delete [] global_row;
+    delete [] indicies;
+    delete [] PIDList;
+    delete [] LIDList;
   }
   return A;
 }

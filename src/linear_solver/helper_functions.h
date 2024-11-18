@@ -33,6 +33,7 @@ void epetra_to_eig_vec(int col, Epetra_Vector &x, Eigen::MatrixXd &x_eig);
 /// @return Full Epetra_CrsMatrixss
 Epetra_CrsMatrix eig_to_epetra_matrix(Eigen::MatrixXd &A_eig, int col, int row, Epetra_MpiComm &Comm);
 
+Epetra_CrsMatrix eig_to_epetra_matrix(Eigen::MatrixXd &A_eig, Epetra_Map ColMap, Epetra_Map RowMap);
 /// @brief Returns an Epetra_Vector with entries from an Eigen::Vector structure
 /// @param a_eigen Eigen Vector to copy
 /// @param size size of vector

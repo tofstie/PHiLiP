@@ -111,7 +111,7 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
             if(j < V_mass.cols()){
                 J.col(j) = V_mass.col(j);
             } else {
-                J.col(j) = z_scale*Z_mass.col(j-Z_mass.cols());
+                J.col(j) = z_scale*Z_mass.col(j-V_mass.cols());
             }
         }
         Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);

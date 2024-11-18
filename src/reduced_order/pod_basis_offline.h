@@ -93,6 +93,8 @@ public:
     void debugMatrix(dealii::FullMatrix<double> M);
 
 
+    void PrintMapInfo(const Epetra_Map &map);
+
     /*
     void compute_hyper_reduction(MatrixXd V_target, MatrixXd w_target);
     */

@@ -38,10 +38,6 @@ subsection flow_solver
     subsection grid
       set number_of_grid_elements_per_dimension = 8
     end
-
-    subsection taylor_green_vortex
-      set do_calculate_numerical_entropy = true
-    end
 end
 
 # ODE solver
@@ -49,8 +45,8 @@ subsection ODE solver
     set ode_output = verbose
     set nonlinear_max_iterations = 500
     set print_iteration_modulo = 100
-    set ode_solver_type = pod_galerkin_rk_solver
-    set initial_time_step = 0.0001
+    set ode_solver_type = runge_kutta
+    set initial_time_step = 0.001
     set output_solution_every_x_steps = 2000
     set runge_kutta_method = rk4_ex
 end
@@ -58,8 +54,4 @@ end
 # Reduced Order Model
 subsection reduced order
   set output_snapshot_every_x_timesteps = 20
-  set path_to_search = /home/tyson/Codes/PHiLiP/build_release
-  #set entropy_varibles_in_snapshots = true
-  set adaptation_tolerance = 0.000003
-  set number_nodal_modes = 500
 end
