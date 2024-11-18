@@ -1,0 +1,53 @@
+# Listing of Parameters
+# ---------------------
+# Number of dimensions
+
+set dimension = 3 
+set run_type = integration_test 
+set pde_type = euler
+set test_type = unsteady_reduced_order
+
+# DG formulation
+set use_weak_form = false
+set use_split_form = true
+set flux_nodes_type = GLL
+
+set flux_reconstruction = cDG
+set use_inverse_mass_on_the_fly = false
+
+# Note: this was added to turn off check_same_coords() -- has no other function when dim!=1
+set use_periodic_bc = true
+
+# numerical fluxes
+set conv_num_flux = two_point_flux
+set two_point_num_flux_type = CH
+
+set enable_higher_order_vtk_output = true
+
+# ODE solver
+subsection ODE solver
+  set ode_output = verbose 
+  set print_iteration_modulo = 500
+  set ode_solver_type = runge_kutta 
+  set runge_kutta_method = rk4_ex
+  set initial_time_step = 0.001
+  set output_solution_every_x_steps = 2000
+end
+
+subsection linear solver
+  set linear_solver_output = quiet
+end
+
+subsection flow_solver
+  set flow_case_type = taylor_green_vortex
+  set poly_degree = 3
+  set final_time = 2.5
+  set courant_friedrichs_lewy_number = 0.0005
+  set apply_initial_condition_method = interpolate_initial_condition_function
+end
+
+subsection reduced order
+    set output_snapshot_every_x_timesteps = 15
+    set singular_value_threshold = 0.999999
+    set path_to_search = .
+end

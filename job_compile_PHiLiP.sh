@@ -6,11 +6,11 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=16                          ## <-- refer to https://docs.computecanada.ca/wiki/Advanced_MPI_scheduling
 #SBATCH --mem=63G                                     ## <-- total shared memory per node; refer to https://docs.computecanada.ca/wiki/Advanced_MPI_scheduling
-#SBATCH --mail-user=firstname.lastname@mail.mcgill.ca ## <-- for receiving job updates via email
+#SBATCH --mail-user=tyson.ofstie@mail.mcgill.ca ## <-- for receiving job updates via email
 #SBATCH --mail-type=ALL                               ## <-- what kind of updates to receive by email
 
 CLUSTER_NAME="narval" ## <-- Enter cluster name here in lowercase
-SLURM_USER="username" ## <-- Enter compute canada username here
+SLURM_USER="tofstie" ## <-- Enter compute canada username here
 NUM_PROCS="16"        ## WARNING: must correspond to nodes*(ntasks-per-node) above
 RUN_CTEST=false
 

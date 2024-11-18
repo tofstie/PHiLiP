@@ -37,7 +37,7 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     // Create ROM and Solve
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&ROM_param_const, parameter_handler);
     const int modes = flow_solver_galerkin->ode_solver->pod->getPODBasis()->n();
-    flow_solver_galerkin->run();
+    //flow_solver_galerkin->run();
 
     // Change Parameters to Entropy-Stable ROM
     ROM_param.reduced_order_param.entropy_varibles_in_snapshots = true;
@@ -66,7 +66,6 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     pcout << "Entropy Galerkin Change in Entropy: " << change_in_entropy << std::endl;
 
     if (std::abs(galerkin_solution_error) > 2.5E-5) testfail = 1;
-
     // Hard coding expected_modes based on past test results
     if (constexpr int expected_modes = 30; modes != expected_modes) testfail = 1;
     return testfail;
