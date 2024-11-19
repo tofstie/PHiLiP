@@ -146,13 +146,13 @@ MatrixXd OnlinePOD<dim>::getSnapshotMatrix() {
 template <int dim>
 std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> OnlinePOD<dim>::getSkewSymmetric() {
     return basis;
-};
+}
 
 /// This function is not defined for online basis calculations
 template <int dim>
 MatrixXd OnlinePOD<dim>::getTestBasis() {
     return snapshotMatrix;
-};
+}
 
 
 template class OnlinePOD <PHILIP_DIM>;
