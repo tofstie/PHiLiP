@@ -173,8 +173,9 @@ void AllParameters::declare_parameters (dealii::ParameterHandler &prm)
                       " shock_1d | "
                       " euler_naca0012 | "
                       " reduced_order | "
-                      " unsteady_reduced_order |"
-                      " convection_diffusion_periodicity |"
+                      " unsteady_reduced_order | "
+                      " unsteady_hyper_reduction | "
+                      " convection_diffusion_periodicity | "
                       " POD_adaptation | "
                       " POD_adaptive_sampling_run | "
                       " adaptive_sampling_testing | "
@@ -227,6 +228,7 @@ void AllParameters::declare_parameters (dealii::ParameterHandler &prm)
                       "  convection_diffusion_periodicity |"
                       "  reduced_order | "
                       "  unsteady_reduced_order | "
+                      "  unsteady_hyper_reduction | "
                       "  POD_adaptation | "
                       "  POD_adaptive_sampling_run | "
                       "  adaptive_sampling_testing | "
@@ -415,6 +417,7 @@ const std::string test_string = prm.get("test_type");
     else if (test_string == "shock_1d")                                 { test_type = shock_1d; }
     else if (test_string == "reduced_order")                            { test_type = reduced_order; }
     else if (test_string == "unsteady_reduced_order")                   { test_type = unsteady_reduced_order; }
+    else if (test_string == "unsteady_hyper_reduction")                 { test_type = unsteady_hyper_reduction; }
     else if (test_string == "POD_adaptation")                           { test_type = POD_adaptation; }
     else if (test_string == "POD_adaptive_sampling_run")                { test_type = POD_adaptive_sampling_run; }
     else if (test_string == "adaptive_sampling_testing")                { test_type = adaptive_sampling_testing; }

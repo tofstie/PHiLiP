@@ -7,6 +7,9 @@
 #include <sstream>
 #include "reduced_order/pod_basis_offline.h"
 #include "reduced_order/pod_basis_online.h"
+#include "reduced_order/assemble_ECSW_residual.h"
+#include "reduced_order/assemble_ECSW_jacobian.h"
+#include "linear_solver/NNLS_solver.h"
 #include "physics/initial_conditions/set_initial_condition.h"
 #include "mesh/mesh_adaptation/mesh_adaptation.h"
 #include <deal.II/base/timer.h>
@@ -91,8 +94,44 @@ FlowSolver<dim, nstate>::FlowSolver(
     {
         std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod);
-    }
-    else{
+    } else if (ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver){
+        std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
+        constexpr bool oneDoneNstate = dim == 1 && nstate == 1;
+        constexpr bool oneDthreeNState = dim+2 == nstate && dim != 1;
+        int num_of_cols = pod->getSnapshotMatrix().cols();
+        if (all_param.reduced_order_param.entropy_varibles_in_snapshots) num_of_cols /= 2;
+        std::cout << "Construct instance of Assembler..."<< std::endl;
+        std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
+        Eigen::MatrixXd snapshot_parameters(1,num_of_cols);
+        if(oneDoneNstate || oneDthreeNState) { // For templates
+            if (all_param.hyper_reduction_param.training_data == "residual")
+                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type);
+            else {
+                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type);
+            }
+        }
+        std::cout << "Build Problem..."<< std::endl;
+        constructer_NNLS_problem->build_problem();
+
+        // Transfer b vector (RHS of NNLS problem) to Epetra structure
+        Epetra_MpiComm Comm( MPI_COMM_WORLD );
+        Epetra_Map bMap = (constructer_NNLS_problem->A->trilinos_matrix()).RowMap();
+        Epetra_Vector b_Epetra (bMap);
+        auto b = constructer_NNLS_problem->b;
+        for(unsigned int i = 0 ; i < b.size() ; i++){
+            b_Epetra[i] = b(i);
+            std::cout << b(i) << std::endl;
+        }
+        constructer_NNLS_problem->A->trilinos_matrix().Print(std::cout);
+        // Solve NNLS Problem for ECSW weights
+        std::cout << "Create NNLS problem..."<< std::endl;
+        NNLS_solver NNLS_prob(&all_param, parameter_handler, constructer_NNLS_problem->A->trilinos_matrix(), Comm, b_Epetra);
+        std::cout << "Solve NNLS problem..."<< std::endl;
+        bool exit_con = NNLS_prob.solve();
+        std::cout << exit_con << std::endl;
+        Epetra_Vector weights = NNLS_prob.getSolution();
+        ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
+    } else {
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg);
     }
     // Allocate ODE solver after initializing DG

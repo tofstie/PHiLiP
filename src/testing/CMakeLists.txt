@@ -47,7 +47,8 @@ set(TESTS_SOURCE
     naca0012_unsteady_check_quick.cpp
     vortex_shedding.cpp
     pod_unsteady.cpp
-    )
+    unsteady_hyper_reduction.cpp
+)
 
 foreach(dim RANGE 1 3)
     # Output library

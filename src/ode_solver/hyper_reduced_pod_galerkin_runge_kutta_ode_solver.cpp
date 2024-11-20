@@ -1,5 +1,7 @@
 #include "hyper_reduced_pod_galerkin_runge_kutta_ode_solver.h"
 #include <EpetraExt_MatrixMatrix.h>
+#include <Epetra_LinearProblem.h>
+#include <Amesos_Lapack.h>
 namespace PHiLiP::ODE {
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
@@ -12,18 +14,20 @@ HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::Hy
                                                                                 : RungeKuttaBase<dim,real,n_rk_stages,MeshType>(dg_input, RRK_object_input, pod)
                                                                                 , pod(pod)
                                                                                 , ECSW_weights(weights)
+                                                                                , butcher_tableau(rk_tableau_input)
                                                                                 , epetra_pod_basis(pod->getPODBasis()->trilinos_matrix())
                                                                                 , epetra_test_basis(nullptr)
+                                                                                , epetra_trial_basis(nullptr)
 {}
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
-void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::calculate_stage_solution (int istage, real dt, const bool pseudotime) {
+void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::calculate_stage_solution (int istage, real dt, const bool /*pseudotime*/) {
     this->rk_stage[istage] = 0.0;
     this->reduced_rk_stage[istage] = 0.0;
     for(int j = 0; j < istage; ++j){
         if(this->butcher_tableau->get_a(istage,j) != 0){
             dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_j;
-            multiply(*epetra_test_basis,this->reduced_rk_stage[j],dealii_rk_stage_j,solution_index,false);
+            multiply(*epetra_test_basis,this->reduced_rk_stage[j],dealii_rk_stage_j,this->dg->solution,false);
             this->rk_stage[istage].add(this->butcher_tableau->get_a(istage,j),dealii_rk_stage_j);
         }
     } //sum(a_ij*V*k_j), explicit part
@@ -41,15 +45,50 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::calculate_stage_derivative (int istage, real dt) {
     this->dg->set_current_time(this->current_time + this->butcher_tableau->get_c(istage)*dt);
+    if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+        dealii::TrilinosWrappers::SparseMatrix pod_basis;
+        pod_basis.reinit(epetra_pod_basis);
+        this->dg->calculate_global_entropy();
+        this->dg->calculate_ROM_projected_entropy(pod_basis);
+    }
     this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
-    Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin());
-    std::shared_ptr<Epetra_Vector> hyper_reduced_rhs = generate_hyper_reduced_residual(epetra_right_hand_side, epetra_test_basis);
+    Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_trial_basis->RowMap(), this->dg->right_hand_side.begin());
+    std::shared_ptr<Epetra_Vector> hyper_reduced_rhs = generate_hyper_reduced_residual(epetra_right_hand_side, *epetra_trial_basis);
     hyper_reduced_rhs->Scale(-1.0);
+    if(this->all_parameters->use_inverse_mass_on_the_fly){
+        assert(1 == 0 && "Not Implemented: use_inverse_mass_on_the_fly=true && ode_solver_type=pod_galerkin_rk_solver\n Please set use_inverse_mass_on_the_fly=false and try again");
+    } else{
+        // Creating Reduced RHS
+        dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
+
+        Epetra_Vector epetra_rhs(Epetra_DataAccess::Copy, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
+        //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
+        //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
+        dealii::LinearAlgebra::distributed::Vector<double> rhs = this->dg->right_hand_side;
+        //print_dealii(dealii_rhs,rhs);
+        //std::ofstream rhs_file("rhs_file_"+ std::to_string(rank)+ ".txt");
+        //epetra_rhs.Print(rhs_file);
+        Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
+        epetra_test_basis->Multiply(true,epetra_rhs,epetra_reduced_rhs);
+        //std::ofstream reduced_rhs_file("reduced_rhs_file_"+ std::to_string(rank)+ ".txt");
+        //epetra_reduced_rhs.Print(reduced_rhs_file);
+        // Creating Linear Problem to find stage
+        Epetra_Vector epetra_rk_stage_i(epetra_reduced_lhs->DomainMap()); // Ensure this is correct as well, since LHS is not transpose might need to be rangeMap
+        Epetra_LinearProblem linearProblem(epetra_reduced_lhs.get(), &epetra_rk_stage_i, &epetra_reduced_rhs);
+        Amesos_Lapack Solver(linearProblem);
+        Teuchos::ParameterList List;
+        Solver.SetParameters(List); //Deprecated in future update, change?
+        Solver.SymbolicFactorization();
+        Solver.NumericFactorization();
+        Solver.Solve();
+        epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, this->reduced_rk_stage[istage]);
+        this->reduced_rk_stage[istage] = dealii_reduced_stage_i;
+    }
     return;
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
-void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::sum_stages (real dt, const bool pseudotime) {
+void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::sum_stages (real dt, const bool /*pseudotime*/) {
     dealii::LinearAlgebra::distributed::Vector<double> reduced_sum;
     reduced_sum.reinit(this->reduced_rk_stage[0]);
     for (int istage = 0; istage < n_rk_stages; ++istage){
@@ -57,7 +96,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     }
     // Convert Reduced order step to Full order step
     dealii::LinearAlgebra::distributed::Vector<double> dealii_update;
-    multiply(*epetra_test_basis,reduced_sum,dealii_update,solution_index,false);
+    multiply(*epetra_test_basis,reduced_sum,dealii_update,this->dg->solution,false);
     this->solution_update.add(1.0,dealii_update);
 }
 
@@ -87,8 +126,10 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     }
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
 
-    epetra_test_basis = generate_test_basis(epetra_pod_basis);
-    epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,epetra_test_basis.get());
+    epetra_test_basis = generate_test_basis(epetra_pod_basis, false);
+    epetra_trial_basis = generate_test_basis(epetra_pod_basis, true);
+
+    epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,*epetra_test_basis,*epetra_trial_basis);
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
@@ -102,7 +143,8 @@ real HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
-std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::generate_test_basis(const Epetra_CrsMatrix &pod_basis) {
+std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::generate_test_basis(const Epetra_CrsMatrix &pod_basis,
+                                                                                                                                    const bool trial_basis) {
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     Epetra_Map basis_rowmap = pod_basis.RowMap();
     Epetra_CrsMatrix hyper_reduced_basis(Epetra_DataAccess::Copy, basis_rowmap,pod_basis.NumGlobalCols());
@@ -167,7 +209,8 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
             EpetraExt::MatrixMatrix::Multiply(L_e_T, false, V_temp, false, V_global_e, true);
 
             // Add the contribution of the element to the hyper-reduced Jacobian with scaling from the weights
-            double scaling = ECSW_weights[cell->active_cell_index()];
+            double scaling = 1.0;
+            if (trial_basis) scaling = ECSW_weights[cell->active_cell_index()];
             EpetraExt::MatrixMatrix::Add(V_global_e, false, scaling, hyper_reduced_basis, 1.0);
         }
     }
@@ -240,7 +283,8 @@ std::shared_ptr<Epetra_Vector> HyperReducedPODGalerkinRungeKuttaODESolver<dim, r
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::generate_reduced_lhs(
     const Epetra_CrsMatrix &system_matrix,
-    const Epetra_CrsMatrix &test_basis)
+    const Epetra_CrsMatrix &test_basis,
+    const Epetra_CrsMatrix &trial_basis)
 {
     if (test_basis.RowMap().SameAs(system_matrix.RowMap()) && test_basis.NumGlobalRows() == system_matrix.NumGlobalRows()){
         Epetra_CrsMatrix epetra_reduced_lhs(Epetra_DataAccess::Copy, test_basis.DomainMap(), test_basis.NumGlobalCols());
@@ -249,7 +293,7 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
             std::cerr << "Error in first Matrix Multiplication" << std::endl;
             return nullptr;
         };
-        if (EpetraExt::MatrixMatrix::Multiply(test_basis, true, epetra_reduced_lhs_tmp, false, epetra_reduced_lhs) != 0){
+        if (EpetraExt::MatrixMatrix::Multiply(trial_basis, true, epetra_reduced_lhs_tmp, false, epetra_reduced_lhs) != 0){
             std::cerr << "Error in second Matrix Multiplication" << std::endl;
             return nullptr;
         };
@@ -267,18 +311,18 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
 }
 
 template<int dim, typename real, int n_rk_stages, typename MeshType>
-int HyperReducedPODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::multiply(Epetra_CrsMatrix &epetra_matrix,
-                                                                    dealii::LinearAlgebra::distributed::Vector<double> &input_dealii_vector,
-                                                                    dealii::LinearAlgebra::distributed::Vector<double> &output_dealii_vector,
-                                                                    const dealii::IndexSet &index_set,
-                                                                    const bool transpose // Transpose needs to be used with care of maps
-                                                                    )
+    int HyperReducedPODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::multiply(Epetra_CrsMatrix &epetra_matrix,
+                                                                        dealii::LinearAlgebra::distributed::Vector<double> &input_dealii_vector,
+                                                                        dealii::LinearAlgebra::distributed::Vector<double> &output_dealii_vector,
+                                                                        dealii::LinearAlgebra::distributed::Vector<double> &index_vector,
+                                                                        const bool transpose // Transpose needs to be used with care of maps
+                                                                        )
 {
     Epetra_Vector epetra_input(Epetra_DataAccess::View, epetra_matrix.DomainMap(), input_dealii_vector.begin());
     Epetra_Vector epetra_output(epetra_matrix.RangeMap());
     if(epetra_matrix.RangeMap().SameAs(epetra_output.Map()) && epetra_matrix.DomainMap().SameAs(epetra_input.Map())){
         epetra_matrix.Multiply(transpose, epetra_input, epetra_output);
-        epetra_to_dealii(epetra_output,output_dealii_vector,index_set);
+        epetra_to_dealii(epetra_output,output_dealii_vector,index_vector);
         return 0;
     } else {
         if(!epetra_matrix.RangeMap().SameAs(epetra_output.Map())){
@@ -292,19 +336,32 @@ int HyperReducedPODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::m
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void HyperReducedPODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::epetra_to_dealii(Epetra_Vector &epetra_vector,
-                                                                             dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector,
-                                                                             const dealii::IndexSet &index_set)
+                                                                                 dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector,
+                                                                                 dealii::LinearAlgebra::distributed::Vector<double> &index_vector)
 {
     const Epetra_BlockMap &epetra_map = epetra_vector.Map();
-    dealii_vector.reinit(index_set,this->mpi_communicator);
+    dealii_vector = index_vector;
     for(int i = 0; i < epetra_map.NumMyElements();++i){
         int global_idx = epetra_map.GID(i);
         if(dealii_vector.in_local_range(global_idx)){
             dealii_vector[global_idx] = epetra_vector[i];
         }
     }
-    dealii_vector.compress(dealii::VectorOperation::insert);
+    dealii_vector.update_ghost_values();
 
 }
-
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,1, dealii::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,2, dealii::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,3, dealii::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,4, dealii::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,1, dealii::parallel::shared::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,2, dealii::parallel::shared::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,3, dealii::parallel::shared::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,4, dealii::parallel::shared::Triangulation<PHILIP_DIM> >;
+#if PHILIP_DIM != 1
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,1, dealii::parallel::distributed::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,2, dealii::parallel::distributed::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,3, dealii::parallel::distributed::Triangulation<PHILIP_DIM> >;
+    template class HyperReducedPODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,4, dealii::parallel::distributed::Triangulation<PHILIP_DIM> >;
+#endif
 }

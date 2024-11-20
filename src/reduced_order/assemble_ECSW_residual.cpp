@@ -55,7 +55,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
     std::vector<dealii::types::global_dof_index> current_dofs_indices(max_dofs_per_cell); 
     int row_num = 0;
     int snap_num = 0;
-    for(auto snap_param : this->snapshot_parameters.rowwise()){
+    for(auto snap_param : this->snapshot_parameters.rowwise()){ // I do not like this for loop
         std::cout << "Snapshot Parameter Values" << std::endl;
         std::cout << snap_param << std::endl;
         dealii::LinearAlgebra::ReadWriteVector<double> snapshot_s;
@@ -73,6 +73,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         this->dg = flow_solver->dg;
 
         // Set solution to snapshot and re-compute the residual/Jacobian
+
         this->dg->solution = reference_solution;
         const bool compute_dRdW = true;
         this->dg->assemble_residual(compute_dRdW);

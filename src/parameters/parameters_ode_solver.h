@@ -20,7 +20,8 @@ public:
         pod_galerkin_solver, /// Proper Orthogonal Decomposition with Galerkin projection
         pod_petrov_galerkin_solver, /// Proper Orthogonal Decomposition with Petrov-Galerkin projection (LSPG)
         hyper_reduced_petrov_galerkin_solver, /// Proper Orthogonal Decomposition with Petrov-Galerkin projection (LSPG) and ECSW Hyper-reduction
-        pod_galerkin_runge_kutta_solver /// Proper Orthogonal Decomposition with Galerkin projection Runge Kutta (RK) explicit
+        pod_galerkin_runge_kutta_solver, /// Proper Orthogonal Decomposition with Galerkin projection Runge Kutta (RK) explicit
+        hyper_reduced_galerkin_runge_kutta_solver /// Proper Orthogonal Decomposition with Galerkin projection and ECSW Hyper-reduction with Runge Kutta
     };
 
     OutputEnum ode_output; ///< verbose or quiet.

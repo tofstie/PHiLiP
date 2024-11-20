@@ -30,7 +30,7 @@ AssembleECSWBase<dim,nstate>::AssembleECSWBase(
 template <int dim, int nstate>
 std::shared_ptr<Epetra_CrsMatrix> AssembleECSWBase<dim,nstate>::local_generate_test_basis(Epetra_CrsMatrix &system_matrix, const Epetra_CrsMatrix &pod_basis){
     using ODEEnum = Parameters::ODESolverParam::ODESolverEnum;
-    if(ode_solver_type == ODEEnum::pod_galerkin_solver){ 
+    if(ode_solver_type == ODEEnum::pod_galerkin_solver || ode_solver_type == ODEEnum::hyper_reduced_galerkin_runge_kutta_solver){
         return std::make_shared<Epetra_CrsMatrix>(pod_basis);
     }
     else if(ode_solver_type == ODEEnum::pod_petrov_galerkin_solver || ode_solver_type == ODEEnum::hyper_reduced_petrov_galerkin_solver){ 
@@ -46,7 +46,7 @@ std::shared_ptr<Epetra_CrsMatrix> AssembleECSWBase<dim,nstate>::local_generate_t
 }
 
 template <int dim, int nstate>
-Parameters::AllParameters AssembleECSWBase<dim, nstate>::reinitParams(const RowVectorXd& parameter) const{
+Parameters::AllParameters AssembleECSWBase<dim, nstate>::reinitParams(const RowVectorXd& parameter) const {
     // Copy all parameters
     PHiLiP::Parameters::AllParameters parameters = *(this->all_parameters);
 
@@ -87,6 +87,9 @@ Parameters::AllParameters AssembleECSWBase<dim, nstate>::reinitParams(const RowV
                 parameters.euler_param.mach_inf = parameter(0);
             }
         }
+    }
+    else if(flow_type == FlowCaseEnum::riemann_problem) {
+        std::cout << "Riemann problem" << std::endl;
     }
     else{
         std::cout << "Invalid flow case. You probably forgot to specify a flow case in the prm file." << std::endl;

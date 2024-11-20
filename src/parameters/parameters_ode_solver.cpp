@@ -43,6 +43,7 @@ void ODESolverParam::declare_parameters (dealii::ParameterHandler &prm)
                           " pod_galerkin | "
                           " pod_petrov_galerkin | "
                           " hyper_reduced_petrov_galerkin | "
+                          " hyper_reduced_galerkin_runge_kutta | "
                           " pod_galerkin_runge_kutta "),
                           "Type of ODE solver to use."
                           "Choices are "
@@ -53,6 +54,7 @@ void ODESolverParam::declare_parameters (dealii::ParameterHandler &prm)
                           " pod_galerkin | "
                           " pod_petrov_galerkin | "
                           " hyper_reduced_petrov_galerkin | "
+                          " hyper_reduced_galerkin_runge_kutta | "
                           " pod_galerkin_runge_kutta>.");
 
         prm.declare_entry("nonlinear_max_iterations", "500000",
@@ -199,6 +201,8 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
         else if (solver_string == "hyper_reduced_petrov_galerkin") { ode_solver_type = ODESolverEnum::hyper_reduced_petrov_galerkin_solver;
                                                            allocate_matrix_dRdW = true; }
         else if (solver_string == "pod_galerkin_runge_kutta") { ode_solver_type = ODESolverEnum::pod_galerkin_runge_kutta_solver;
+                                                            allocate_matrix_dRdW = true; }
+        else if (solver_string == "hyper_reduced_galerkin_runge_kutta") { ode_solver_type = ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver;
                                                             allocate_matrix_dRdW = true; }
 
         nonlinear_steady_residual_tolerance  = prm.get_double("nonlinear_steady_residual_tolerance");
