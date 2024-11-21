@@ -545,8 +545,12 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
         }
 
         dealii::LinearAlgebra::distributed::Vector<double> this_entropy(this->dg->global_entropy);
-        int back = this_entropy.locally_owned_elements().pop_back();
-        int front = this_entropy.locally_owned_elements().pop_front();
+        int back = global_quad_points + 1;
+        int front = global_quad_points + 1;
+        if(!this_entropy.locally_owned_elements().is_empty()){
+            back = this_entropy.locally_owned_elements().pop_back();
+            front = this_entropy.locally_owned_elements().pop_front();
+        }
         std::vector<std::vector<double>> entropy_vectors = dealii::Utilities::MPI::all_gather(mpi_comm, local_data);
         std::vector<int> back_vector = dealii::Utilities::MPI::all_gather(mpi_comm, back);
         std::vector<int> front_vector = dealii::Utilities::MPI::all_gather(mpi_comm, front);
