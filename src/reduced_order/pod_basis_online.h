@@ -33,6 +33,9 @@ public:
     ///Function to get POD reference state
     dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() override;
 
+    ///Function to get POD reference state
+    dealii::LinearAlgebra::distributed::Vector<double> getEntropyReferenceState() override;
+
     /// Function to get snapshot matrix used to build POD basis
     MatrixXd getSnapshotMatrix() override;
     Eigen::MatrixXd snapshotMatrix;
@@ -60,6 +63,9 @@ public:
 
     /// Reference state
     dealii::LinearAlgebra::ReadWriteVector<double> referenceState;
+
+    /// Reference state
+    dealii::LinearAlgebra::distributed::Vector<double> referenceEntropy;
 
     /// For sparsity pattern of system matrix
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix;

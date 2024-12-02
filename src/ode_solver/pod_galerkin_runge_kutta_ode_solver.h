@@ -75,6 +75,9 @@ protected:
     /// Pointer to Epetra Matrix for LHS
     std::shared_ptr<Epetra_CrsMatrix> epetra_reduced_lhs;
 
+    /// Reference Entropy (Reference Cons not needed)
+    dealii::LinearAlgebra::distributed::Vector<double> reference_entropy;
+
     /// dealII indexset for FO solution
     dealii::IndexSet solution_index;
 

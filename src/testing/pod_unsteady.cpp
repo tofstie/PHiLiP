@@ -717,9 +717,10 @@ void PODUnsteady<dim, nstate>
     double inner_product_ROM;
     // Assembling ROM vh^T*RHS
     if(all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
-         std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
+        std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
+        dealii::LinearAlgebra::distributed::Vector<double> reference_entropy = offline_pod->getEntropyReferenceState();
         flow_solver->dg->calculate_global_entropy();
-        flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis);
+        flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis,reference_entropy);
         flow_solver->dg->assemble_residual();
         dealii::LinearAlgebra::distributed::Vector<double> inner_product_vector_ROM;
         inner_product_vector_ROM.reinit(flow_solver->dg->projected_entropy);

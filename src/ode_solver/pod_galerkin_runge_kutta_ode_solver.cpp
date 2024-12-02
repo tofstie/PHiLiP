@@ -18,6 +18,7 @@ PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::PODGalerkinRungeK
             , epetra_system_matrix(Epetra_DataAccess::View, epetra_pod_basis.RowMap(), epetra_pod_basis.NumGlobalRows())
             , epetra_test_basis(nullptr)
             , epetra_reduced_lhs(nullptr)
+            , reference_entropy(pod->getEntropyReferenceState())
 {}
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
@@ -55,7 +56,7 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         dealii::TrilinosWrappers::SparseMatrix pod_basis;
         pod_basis.reinit(epetra_pod_basis);
         this->dg->calculate_global_entropy();
-        this->dg->calculate_ROM_projected_entropy(pod_basis);
+        this->dg->calculate_ROM_projected_entropy(pod_basis, reference_entropy);
     }
     this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
     if(this->all_parameters->use_inverse_mass_on_the_fly){
@@ -200,9 +201,9 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::allocate_run
 if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
         dealii::TrilinosWrappers::SparseMatrix pod_basis;
         pod_basis.reinit(epetra_pod_basis);
-        int rank = epetra_pod_basis.Comm().MyPID();
-        std::ofstream sum_file("Epetra_ODE_"+std::to_string(rank)+".txt");
-        epetra_pod_basis.Print(sum_file);
+        //int rank = epetra_pod_basis.Comm().MyPID();
+        //std::ofstream sum_file("Epetra_ODE_"+std::to_string(rank)+".txt");
+        //epetra_pod_basis.Print(sum_file);
         this->dg->calculate_projection_matrix(pod_basis);
     }
 

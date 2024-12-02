@@ -3348,6 +3348,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy()
             this->global_entropy[current_dofs_indices[i]] += local_entropy[i];
         } */
     }
+    /*
     const int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
     std::ofstream file("global_entropy_"+ std::to_string(rank) +".txt");
     for(unsigned int i = 0 ; i < this->global_entropy.size(); i++){
@@ -3361,6 +3362,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy()
         std::ofstream location_file("locations_" + std::to_string(idim)+".txt");
         location[idim].print(location_file);
     }
+    */
 
 }
 
@@ -3442,6 +3444,7 @@ template <int dim, int nstate, typename real, typename MeshType>
 void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V)
 {
     Eigen::MatrixXd V_eigen = epetra_to_eig_matrix(V.trilinos_matrix());
+    /*
     const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
     std::ofstream file("POD_Basis_"+std::to_string(rank)+".txt");
     const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
@@ -3449,7 +3452,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
         file << V_eigen.format(CSVFormat);
     }
     file.close();
-
+    */
     //Eigen::MatrixXd pinvV = V_eigen.completeOrthogonalDecomposition().pseudoInverse();
     //Eigen::PartialPivLU<Eigen::MatrixXd> lu = Eigen::PartialPivLU<Eigen::MatrixXd>(VTV);
     std::cout << "Calculating PseudeoInv" << std::endl;
@@ -3469,6 +3472,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     Epetra_Map Col_Map = V.trilinos_matrix().RowMap();
     Epetra_Map Row_Map = V.trilinos_matrix().DomainMap();
     Epetra_CrsMatrix pinvV = eig_to_epetra_matrix(PsuedoInv,Col_Map, Row_Map);
+    /*
     std::ofstream file2("pInv" + std::to_string(epetra_comm.MyPID()) + ".txt");
     if (file2.is_open()){
         file2 << PsuedoInv.format(CSVFormat);
@@ -3477,11 +3481,12 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     // Storing
     std::ofstream file3("pInv_Epetra"+ std::to_string(epetra_comm.MyPID()) + ".txt");
     pinvV.Print(file3);
+    */
     this->projection_matrix.reinit(pinvV);
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V)
+void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V, dealii::LinearAlgebra::distributed::Vector<double> &reference_entropy)
 {
     
     dealii::LinearAlgebra::distributed::Vector<double> temp_val (this->projection_matrix.locally_owned_range_indices(), this->mpi_communicator);
@@ -3496,18 +3501,21 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
     */
     // This is for comparing entropy difference
     //int n_proccesses = dealii::Utilities::MPI::n_mpi_processes(this->mpi_communicator);
-    int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
-    //this->projected_entropy /= pow(n_proccesses,1); 
+    //int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
+    //this->projected_entropy /= pow(n_proccesses,1);
+    this->projected_entropy.add(1.0,reference_entropy);
     this->projected_entropy.update_ghost_values();
-    std::ofstream proj_file("proj"+std::to_string(rank)+".txt");
-    this->projected_entropy.print(proj_file);
+    //std::ofstream proj_file("proj"+std::to_string(rank)+".txt");
+    //this->projected_entropy.print(proj_file);
     dealii::LinearAlgebra::distributed::Vector<double> entropy_diff(this->global_entropy);
     entropy_diff -= this->projected_entropy;
+    /*
     std::ofstream file("entropy_diff.txt");
     entropy_diff.print(file);
     std::ofstream temp_file("temp_file_"+std::to_string(rank)+".txt");
     temp_val.print(temp_file);
     entropy_diff /= 1;
+    */
 }
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;

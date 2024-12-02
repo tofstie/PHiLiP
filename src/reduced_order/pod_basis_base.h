@@ -25,6 +25,9 @@ public:
     /// Function to return reference state
     virtual dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() = 0;
 
+    /// Function to return reference entropy state
+    virtual dealii::LinearAlgebra::distributed::Vector<double> getEntropyReferenceState() = 0;
+
     /// Function to return snapshot matrix
     virtual MatrixXd getSnapshotMatrix() = 0;
 

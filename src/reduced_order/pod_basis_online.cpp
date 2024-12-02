@@ -138,6 +138,11 @@ dealii::LinearAlgebra::ReadWriteVector<double> OnlinePOD<dim>::getReferenceState
 }
 
 template <int dim>
+dealii::LinearAlgebra::distributed::Vector<double> OnlinePOD<dim>::getEntropyReferenceState() {
+    return referenceEntropy;
+}
+
+template <int dim>
 MatrixXd OnlinePOD<dim>::getSnapshotMatrix() {
     return snapshotMatrix;
 }

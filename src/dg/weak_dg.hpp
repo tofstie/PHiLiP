@@ -442,7 +442,7 @@ private:
     
     void calculate_global_entropy() override;
     void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) override;
-    void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V) override;
+    void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V, dealii::LinearAlgebra::distributed::Vector<double> &reference_entropy) override;
     void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
     dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0

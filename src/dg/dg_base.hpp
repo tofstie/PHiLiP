@@ -944,7 +944,7 @@ public:
     virtual void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) = 0;
 
     /// Calculates Reduced Order Projected Entropy 
-    virtual void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V) = 0;
+    virtual void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V, dealii::LinearAlgebra::distributed::Vector<double> &reference_entropy) = 0;
 
     /// Calculates the Quadrature Solution
     virtual void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x, dealii::LinearAlgebra::distributed::Vector<double> &location_y) = 0;
