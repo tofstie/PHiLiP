@@ -348,13 +348,15 @@ std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> ODESolverFactory<dim,real,MeshT
 {
     dealii::ConditionalOStream pcout(std::cout, dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)==0);
     using ODEEnum = Parameters::ODESolverParam::ODESolverEnum;
+    using RRKEnum = Parameters::ODESolverParam::RRKMethodEnum;
     const ODEEnum ode_solver_type = dg_input->all_parameters->ode_solver_param.ode_solver_type;
+    const RRKEnum rrk_method = dg_input->all_parameters->ode_solver_param.rrk_method;
 
-    if (ode_solver_type == ODEEnum::runge_kutta_solver && dg_input->all_parameters->flow_solver_param.do_calculate_numerical_entropy) {
+    if ((ode_solver_type == ODEEnum::runge_kutta_solver && dg_input->all_parameters->flow_solver_param.do_calculate_numerical_entropy && rrk_method != RRKEnum::RootFinding) || rrk_method == RRKEnum::NumEntropy) {
         // If calculating numerical entropy, select the class which has that functionality
             return std::make_shared<RKNumEntropy<dim,real,MeshType>>(rk_tableau);
     }
-    else if (ode_solver_type == ODEEnum::rrk_explicit_solver){
+    else if (ode_solver_type == ODEEnum::rrk_explicit_solver || !(rrk_method == RRKEnum::Empty || rrk_method == RRKEnum::Default)){
 
         using PDEEnum = Parameters::AllParameters::PartialDifferentialEquation;
         const PDEEnum pde_type = dg_input->all_parameters->pde_type;
@@ -375,7 +377,13 @@ std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> ODESolverFactory<dim,real,MeshT
             pcout << "PDE type has no assigned numerical entropy variable. Aborting..." << std::endl;
             std::abort();
         }
-
+        if (rrk_method == RRKEnum::RootFinding) {
+            numerical_entropy_type = NumEntropyEnum::nonlinear;
+            rrk_type_string = "Root-finding";
+        } else if (rrk_method == RRKEnum::Algebraic) {
+            numerical_entropy_type = NumEntropyEnum::energy;
+            rrk_type_string = "Algebraic";
+        }
         pcout << "Adding " << rrk_type_string << " Relaxation Runge Kutta to the ODE solver..." << std::endl;
         if (numerical_entropy_type==NumEntropyEnum::energy)
             return std::make_shared<AlgebraicRRKODESolver<dim,real,MeshType>>(rk_tableau);

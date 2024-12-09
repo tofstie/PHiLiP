@@ -41,6 +41,7 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         this->solver.solve(dt*this->butcher_tableau->get_a(istage,istage), this->rk_stage[istage]);
         this->rk_stage[istage] = this->solver.current_solution_estimate;
     }
+    this->relaxation_runge_kutta->store_stage_solutions(istage, this->rk_stage[istage]);
     this->dg->solution = this->rk_stage[istage];
     //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
     //std::ofstream file("solution_" + std::to_string(rank)+ ".txt");
@@ -59,6 +60,8 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         this->dg->calculate_ROM_projected_entropy(pod_basis, reference_entropy);
     }
     this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
+    this->relaxation_runge_kutta->store_projected_entropy(istage, this->dg->projected_entropy);
+    this->relaxation_runge_kutta->store_right_hand_side(istage, this->dg->right_hand_side);
     if(this->all_parameters->use_inverse_mass_on_the_fly){
         assert(1 == 0 && "Not Implemented: use_inverse_mass_on_the_fly=true && ode_solver_type=pod_galerkin_rk_solver\n Please set use_inverse_mass_on_the_fly=false and try again");
     } else{
@@ -125,6 +128,8 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::apply_limite
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 real PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::adjust_time_step(real dt)
 {
+    this->relaxation_parameter_RRK_solver = this->relaxation_runge_kutta->update_relaxation_parameter(dt, this->dg, this->rk_stage, this->solution_update);
+    dt *= this->relaxation_parameter_RRK_solver;
     this->modified_time_step = dt;
     return dt;
 }

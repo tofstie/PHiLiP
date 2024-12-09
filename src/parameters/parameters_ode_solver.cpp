@@ -137,6 +137,14 @@ void ODESolverParam::declare_parameters (dealii::ParameterHandler &prm)
                               dealii::Patterns::Double(),
                               "Tolerance for root-finding problem in entropy RRK ode solver."
                               "Defult 5E-10 is suitable in most cases.");
+            prm.declare_entry("rrk_method", "Default",
+                dealii::Patterns::Selection(
+                    " NumEntropy | "
+                        " Empty | "
+                        " RootFinding | "
+                        " Algebraic | "
+                        " Default "),
+                        "Override to Chose a RRK Method");
         }
         prm.leave_subsection();
 
@@ -288,6 +296,19 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
             else if (output_string_rrk == "quiet")   rrk_root_solver_output = quiet;
 
             relaxation_runge_kutta_root_tolerance = prm.get_double("relaxation_runge_kutta_root_tolerance");
+
+            const std::string rrk_method_string = prm.get("rrk_method");
+            if (rrk_method_string == "Empty") {
+                rrk_method = RRKMethodEnum::Empty;
+            } else if (rrk_method_string == "NumEntropy") {
+                rrk_method = RRKMethodEnum::NumEntropy;
+            } else if (rrk_method_string == "RootFinding") {
+                rrk_method = RRKMethodEnum::RootFinding;
+            } else if (rrk_method_string == "Algebraic") {
+                rrk_method = RRKMethodEnum::Algebraic;
+            } else if (rrk_method_string == "Default") {
+                rrk_method = RRKMethodEnum::Default;
+            }
         }
         prm.leave_subsection();
 

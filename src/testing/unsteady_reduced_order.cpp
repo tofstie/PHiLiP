@@ -33,6 +33,7 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     ROM_param.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::ODESolverEnum::pod_galerkin_runge_kutta_solver;
     ROM_param.ode_solver_param.allocate_matrix_dRdW = true;
     ROM_param.flow_solver_param.unsteady_data_table_filename = table_name + "_ROM";
+    ROM_param.use_inverse_mass_on_the_fly = false;
     const Parameters::AllParameters ROM_param_const = ROM_param;
 
     // Create ROM and Solve

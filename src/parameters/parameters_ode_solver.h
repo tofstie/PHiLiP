@@ -91,6 +91,18 @@ public:
     /// Tolerance for RRK root solver, default value 5E-10
     double relaxation_runge_kutta_root_tolerance;
 
+    /// RRK Enum
+    enum RRKMethodEnum {
+        NumEntropy,
+        Empty,
+        RootFinding,
+        Algebraic,
+        Default
+    };
+
+    /// RRK Override
+    RRKMethodEnum rrk_method;
+
     static void declare_parameters (dealii::ParameterHandler &prm); ///< Declares the possible variables and sets the defaults.
     void parse_parameters (dealii::ParameterHandler &prm); ///< Parses input file and sets the variables.
 };

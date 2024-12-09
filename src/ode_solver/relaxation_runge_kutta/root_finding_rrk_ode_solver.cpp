@@ -229,7 +229,9 @@ real RootFindingRRKODESolver<dim,real,MeshType>::compute_integrated_numerical_en
     }
     std::shared_ptr < Physics::Euler<dim, dim+2, double > > euler_physics = std::dynamic_pointer_cast<Physics::Euler<dim,dim+2,double>>(
                 Physics::PhysicsFactory<dim,dim+2,double>::create_Physics(&parameters_euler));
-    
+    if (parameters_euler.reduced_order_param.entropy_varibles_in_snapshots == true) {
+
+    }
     const int nstate = dim+2;
     double integrated_quantity = 0.0;
 

@@ -16,6 +16,8 @@ RKNumEntropy<dim,real,MeshType>::RKNumEntropy(
         , pcout(std::cout, mpi_rank==0)
 {
     this->rk_stage_solution.resize(n_rk_stages);
+    this->rk_projected_entropy.resize(n_rk_stages);
+    this->rk_right_hand_side.resize(n_rk_stages);
    
 }
 
@@ -25,6 +27,22 @@ void RKNumEntropy<dim,real,MeshType>::store_stage_solutions(const int istage, co
     //Store the solution value
     //This function is called before rk_stage is modified to hold the time-derivative
     this->rk_stage_solution[istage] = rk_stage_i; 
+}
+
+template <int dim, typename real, typename MeshType>
+void RKNumEntropy<dim,real,MeshType>::store_projected_entropy(const int istage, const dealii::LinearAlgebra::distributed::Vector<double> projected_entropy)
+{
+    //Store the solution value
+    //This function is called before rk_stage is modified to hold the time-derivative
+    this->rk_projected_entropy[istage] = projected_entropy;
+}
+
+template <int dim, typename real, typename MeshType>
+void RKNumEntropy<dim,real,MeshType>::store_right_hand_side(const int istage, const dealii::LinearAlgebra::distributed::Vector<double> right_hand_side)
+{
+    //Store the solution value
+    //This function is called before rk_stage is modified to hold the time-derivative
+    this->rk_right_hand_side[istage] = right_hand_side;
 }
 
 template <int dim, typename real, typename MeshType>
@@ -123,34 +141,42 @@ real RKNumEntropy<dim,real,MeshType>::compute_FR_entropy_contribution(const real
         // therefore, RHS = M * rk_stage = M * du/dt
         dealii::LinearAlgebra::distributed::Vector<double> M_matrix_times_rk_stage(dg->solution);
         dealii::LinearAlgebra::distributed::Vector<double> MpK_matrix_times_rk_stage(dg->solution);
-        if(dg->all_parameters->use_inverse_mass_on_the_fly)
-        {
-            dg->apply_global_mass_matrix(rk_stage[istage],M_matrix_times_rk_stage,
-                    false, // use_auxiliary_eq,
-                    true // use M norm
-                    );
-
-            dg->apply_global_mass_matrix(rk_stage[istage],MpK_matrix_times_rk_stage,
-                    false, // use_auxiliary_eq,
-                    false // use M+K norm
-                    );
+        if(dg->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::ODESolverEnum::pod_galerkin_runge_kutta_solver) {
+            M_matrix_times_rk_stage = this->rk_right_hand_side[istage];
+            MpK_matrix_times_rk_stage = this->rk_right_hand_side[istage]; // This is wrong
         } else {
-            this->pcout << "ERROR: FR Numerical entropy estimate currently not compatible with use_inverse_mass_matrix = false. Please modify params." << std::endl;
-            std::abort();
+            if(dg->all_parameters->use_inverse_mass_on_the_fly)
+            {
+                dg->apply_global_mass_matrix(rk_stage[istage],M_matrix_times_rk_stage,
+                        false, // use_auxiliary_eq,
+                        true // use M norm
+                        );
+
+                dg->apply_global_mass_matrix(rk_stage[istage],MpK_matrix_times_rk_stage,
+                        false, // use_auxiliary_eq,
+                        false // use M+K norm
+                        );
+            } else {
+                this->pcout << "ERROR: FR Numerical entropy estimate currently not compatible with use_inverse_mass_matrix = false. Please modify params." << std::endl;
+                std::abort();
+            }
         }
-        
         // transform solution into entropy variables based on PDE type
         using PDEEnum = Parameters::AllParameters::PartialDifferentialEquation;
         dealii::LinearAlgebra::distributed::Vector<double> entropy_var_hat_global=0;
         if (dg->all_parameters->pde_type == PDEEnum::burgers_inviscid){
             entropy_var_hat_global = this->rk_stage_solution[istage];
         } else if (dg->all_parameters->pde_type == PDEEnum::euler || dg->all_parameters->pde_type == PDEEnum::navier_stokes) {
-            entropy_var_hat_global = this->compute_entropy_vars(this->rk_stage_solution[istage], dg);
+            if (dg->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+                entropy_var_hat_global = this->rk_projected_entropy[istage];
+            } else {
+                entropy_var_hat_global = this->compute_entropy_vars(this->rk_stage_solution[istage], dg);
+            }
         } else {
             this->pcout << "ERROR: Cannot store FR-corrected numerical entropy for this PDE type. Aborting..." << std::endl;
             std::abort();
         }
-        
+
         double entropy_contribution_stage = 0;
         if (compute_K_norm) {
             entropy_contribution_stage = entropy_var_hat_global * MpK_matrix_times_rk_stage - entropy_var_hat_global * M_matrix_times_rk_stage;

@@ -37,6 +37,15 @@ public:
         // Do not store anything
     };
 
+    virtual void store_projected_entropy(const int /*istage*/,
+        const dealii::LinearAlgebra::distributed::Vector<double> /*projected_entropy*/) {
+        // Do not store anything
+    };
+    virtual void store_right_hand_side(const int /*istage*/,
+        const dealii::LinearAlgebra::distributed::Vector<double> /*right_hand_side*/) {
+        // Do not store anything
+    };
+
     /// Return the relaxation parameter per the RRK method.
     /** Returns 1.0, corresponding to no modification to dt
      ** when RRK is not used*/
