@@ -41,8 +41,7 @@ public:
         std::shared_ptr<DGBase<dim,double>> &dg_input, 
         std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod,
         MatrixXd snapshot_parameters_input,
-        Parameters::ODESolverParam::ODESolverEnum ode_solver_type,
-        Epetra_MpiComm &Comm);
+        Parameters::ODESolverParam::ODESolverEnum ode_solver_type);
 
     /// Destructor
     ~AssembleECSWRes () {};

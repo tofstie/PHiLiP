@@ -456,8 +456,6 @@ public:
      */
     dealii::Vector<double> max_dt_cell;
 
-    dealii::Vector<double> reduced_mesh_weights;
-
     /// Artificial dissipation in each cell.
     dealii::Vector<double> artificial_dissipation_coeffs;
 

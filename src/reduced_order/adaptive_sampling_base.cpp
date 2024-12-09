@@ -7,7 +7,6 @@
 #include "reduced_order_solution.h"
 #include "flow_solver/flow_solver.h"
 #include "flow_solver/flow_solver_factory.h"
-#include "testing/rom_import_helper_functions.h"
 #include <cmath>
 #include "rbf_interpolation.h"
 #include "ROL_Algorithm.hpp"
@@ -195,7 +194,6 @@ void AdaptiveSamplingBase<dim, nstate>::placeInitialSnapshots() const{
         dealii::LinearAlgebra::distributed::Vector<double> fom_solution = solveSnapshotFOM(snap_param);
         nearest_neighbors->updateSnapshots(snapshot_parameters, fom_solution);
         current_pod->addSnapshot(fom_solution);
-        this->fom_locations.emplace_back(fom_solution);
     }
 }
 
@@ -323,8 +321,6 @@ void AdaptiveSamplingBase<dim, nstate>::configureInitialParameterSpace() const
                                 parameter1_range[1], 0.5*(parameter2_range[1] - parameter2_range[0])+parameter2_range[0],
                                 0.5*(parameter1_range[1] - parameter1_range[0])+parameter1_range[0], 0.5*(parameter2_range[1] - parameter2_range[0])+parameter2_range[0];
 
-        snapshot_parameters.conservativeResize(snapshot_parameters.rows() + n_halton, snapshot_parameters.cols());
-
         double *seq = nullptr;
         for (int i = 0; i < n_halton; i++)
         {
@@ -332,22 +328,14 @@ void AdaptiveSamplingBase<dim, nstate>::configureInitialParameterSpace() const
             for (int j = 0; j < 2; j++)
             {
                 if(j == 0){
-                    snapshot_parameters(i+9, j) = seq[j]*(parameter1_range[1] - parameter1_range[0])+parameter1_range[0];
+                    snapshot_parameters(i+5, j) = seq[j]*(parameter1_range[1] - parameter1_range[0])+parameter1_range[0];
                 }
                 else if(j == 1){
-                    snapshot_parameters(i+9, j) = seq[j]*(parameter2_range[1] - parameter2_range[0])+parameter2_range[0];
+                    snapshot_parameters(i+5, j) = seq[j]*(parameter2_range[1] - parameter2_range[0])+parameter2_range[0];
                 }
             }
         }
         delete [] seq;
-
-        std::string path = all_parameters->reduced_order_param.lhs_snap_path;
-        this->pcout << path << std::endl;
-        if(!path.empty()){
-            this->pcout << "LHS Points " << std::endl;
-            std::string path = all_parameters->reduced_order_param.lhs_snap_path;
-            Tests::getSnapshotParamsFromFile(snapshot_parameters, path);
-        }
 
         this->pcout << snapshot_parameters << std::endl;
     }

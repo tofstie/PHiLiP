@@ -7,7 +7,6 @@
 #include "hrom_test_location.h"
 #include <eigen/Eigen/Dense>
 #include "nearest_neighbors.h"
-#include "adaptive_sampling_base.h"
 
 namespace PHiLiP {
 using DealiiVector = dealii::LinearAlgebra::distributed::Vector<double>;
@@ -29,46 +28,76 @@ Derivation of the new error indicator will likely be detailed in Calista Biondic
 */
 
 template <int dim, int nstate>
-class HyperreducedSamplingErrorUpdated: public AdaptiveSamplingBase<dim,nstate>
+class HyperreducedSamplingErrorUpdated
 {
 public:
     /// Constructor
     HyperreducedSamplingErrorUpdated(const PHiLiP::Parameters::AllParameters *const parameters_input,
                      const dealii::ParameterHandler &parameter_handler_input);
 
-    /// Run test
-    int run_sampling () const override;
+    /// Destructor
+    ~HyperreducedSamplingErrorUpdated() {};
 
-    /// Compute RBF and find max error
-    RowVectorXd getMaxErrorROM() const override;
+    const Parameters::AllParameters *const all_parameters; ///< Pointer to all parameters
 
-    /// Placement of ROMs
-    bool placeROMLocations(const MatrixXd& rom_points, Epetra_Vector weights) const;
+    /// Parameter handler for storing the .prm file being ran
+    const dealii::ParameterHandler &parameter_handler;
 
-    /// Compute true/actual error at all ROM points (error in functional between FOM and ROM solution)
-    void trueErrorROM(const MatrixXd& rom_points, Epetra_Vector weights) const;
+    /// Matrix of snapshot parameters
+    mutable MatrixXd snapshot_parameters;
 
-    /// Solve FOM and ROM, return error in functional between the models
-    double solveSnapshotROMandFOM(const RowVectorXd& parameter, Epetra_Vector weights) const;
+    /// Vector of parameter-ROMTestLocation pairs
+    mutable std::vector<std::unique_ptr<ProperOrthogonalDecomposition::HROMTestLocation<dim,nstate>>> rom_locations;
 
-    /// Updates nearest ROM points to snapshot if error discrepancy is above tolerance
-    void updateNearestExistingROMs(const RowVectorXd& parameter, Epetra_Vector weights) const;
+    /// Maximum error
+    mutable double max_error;
 
-    /// Solve reduced-order solution
-    std::unique_ptr<ProperOrthogonalDecomposition::ROMSolution<dim,nstate>> solveSnapshotROM(const RowVectorXd& parameter, Epetra_Vector weights) const;
+    /// Most up to date POD basis
+    std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> current_pod;
 
-    /// Copy all elements in matrix A to all cores
-    Epetra_Vector allocateVectorToSingleCore(const Epetra_Vector &b) const;
-
-    /// Output for each iteration
-    void outputIterationData(std::string iteration) const override;
-
-    /// Vector of parameter-HROMTestLocation pairs
-    mutable std::vector<std::unique_ptr<ProperOrthogonalDecomposition::HROMTestLocation<dim,nstate>>> hrom_locations;
+    /// Nearest neighbors of snapshots
+    std::shared_ptr<ProperOrthogonalDecomposition::NearestNeighbors> nearest_neighbors;
 
     /// Ptr vector of ECSW Weights
     mutable std::shared_ptr<Epetra_Vector> ptr_weights;
 
+    const MPI_Comm mpi_communicator; ///< MPI communicator.
+    const int mpi_rank; ///< MPI rank.
+
+    /// ConditionalOStream.
+    /** Used as std::cout, but only prints if mpi_rank == 0
+     */
+    dealii::ConditionalOStream pcout;
+
+    /// Run test
+    int run_sampling () const;
+
+    /// Placement of initial snapshots
+    void placeInitialSnapshots() const;
+
+    /// Placement of ROMs
+    bool placeROMLocations(const MatrixXd& rom_points, Epetra_Vector weights) const;
+
+    /// Updates nearest ROM points to snapshot if error discrepancy is above tolerance
+    void updateNearestExistingROMs(const RowVectorXd& parameter, Epetra_Vector weights) const;
+
+    /// Compute RBF and find max error
+    RowVectorXd getMaxErrorROM() const;
+
+    /// Solve full-order snapshot
+    dealii::LinearAlgebra::distributed::Vector<double> solveSnapshotFOM(const RowVectorXd& parameter) const;
+
+    /// Solve reduced-order solution
+    std::unique_ptr<ProperOrthogonalDecomposition::ROMSolution<dim,nstate>> solveSnapshotROM(const RowVectorXd& parameter, Epetra_Vector weights) const;
+
+    /// Reinitialize parameters
+    Parameters::AllParameters reinitParams(const RowVectorXd& parameter) const;
+
+    /// Set up parameter space depending on test case
+    void configureInitialParameterSpace() const;
+
+    /// Output for each iteration
+    void outputIterationData(std::string iteration) const;
 };
 
 }

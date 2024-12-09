@@ -4,7 +4,6 @@
 #include "tests.h"
 #include "parameters/all_parameters.h"
 #include <eigen/Eigen/Dense>
-#include <Epetra_Vector.h>
 
 namespace PHiLiP {
 namespace Tests {
@@ -26,14 +25,20 @@ public:
     /// Reinitialize parameters
     Parameters::AllParameters reinitParams(const int max_iter) const;
 
-    /// Copy all elements in matrix A to all cores
-    Epetra_Vector allocateVectorToSingleCore(const Epetra_Vector &b) const;
+    /// Read ROM locations from the text file
+    bool getROMParamsFromFile() const;
 
     /// Conduct hyperreduction and evaluate HROM at ROM points
     int run_test () const override;
 
     /// Dummy parameter handler because flowsolver requires it
     const dealii::ParameterHandler &parameter_handler;
+
+    /// Matrix of snapshot parameters
+    mutable MatrixXd snapshot_parameters;
+
+    /// Matrix of ROM points
+    mutable MatrixXd rom_points;
     
 };
 } // End of Tests namespace

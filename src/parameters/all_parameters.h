@@ -214,8 +214,7 @@ public:
         hyper_adaptive_sampling_new_error,
         low_density,
         vortex_shedding,
-        pod_unsteady,
-        halton_sampling_run
+        pod_unsteady
     };
     /// Store selected TestType from the input file.
     TestType test_type;

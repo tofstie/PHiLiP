@@ -79,28 +79,11 @@ public:
         Epetra_MpiComm &Comm, 
         Epetra_Vector &b);
 
-    NNLS_solver(
-        const Parameters::AllParameters *const parameters_input,
-        const dealii::ParameterHandler &parameter_handler_input,
-        const Epetra_CrsMatrix &A,
-        bool trans_A, 
-        Epetra_MpiComm &Comm, 
-        Epetra_Vector &b);
-
     /// Constructor w/ Gradient Exit Condition
     NNLS_solver(
         const Parameters::AllParameters *const parameters_input,
         const dealii::ParameterHandler &parameter_handler_input,
         const Epetra_CrsMatrix &A, 
-        Epetra_MpiComm &Comm, 
-        Epetra_Vector &b, 
-        bool grad_exit_crit);
-
-    NNLS_solver(
-        const Parameters::AllParameters *const parameters_input,
-        const dealii::ParameterHandler &parameter_handler_input,
-        const Epetra_CrsMatrix &A,
-        bool trans_A, 
         Epetra_MpiComm &Comm, 
         Epetra_Vector &b, 
         bool grad_exit_crit);
@@ -116,23 +99,11 @@ public:
         int LS_iter, 
         double LS_tol);
 
-    NNLS_solver(        
-        const Parameters::AllParameters *const parameters_input,
-        const dealii::ParameterHandler &parameter_handler_input,
-        const Epetra_CrsMatrix &A,
-        bool trans_A, 
-        Epetra_MpiComm &Comm, 
-        Epetra_Vector &b, 
-        bool iter_solver, 
-        int LS_iter, 
-        double LS_tol);
-
     /// Common Constructor w/ Gradient Exit Condition & Iterative Linear Solver
     NNLS_solver(
         const Parameters::AllParameters *const parameters_input,
         const dealii::ParameterHandler &parameter_handler_input,
         const Epetra_CrsMatrix &A, 
-        bool trans_A,
         Epetra_MpiComm &Comm, 
         Epetra_Vector &b, 
         bool grad_exit_crit, 
@@ -141,7 +112,7 @@ public:
         double LS_tol);
  
     /// Destructor
-    ~NNLS_solver() {};
+    virtual ~NNLS_solver() {};
 
     /// Call to solve NNLS problem
     bool solve();
@@ -188,8 +159,6 @@ public:
     bool iter_solver_;
     /// Boolean to use an exit Condition depending on maximum gradent
     bool grad_exit_crit_;
-    /// Boolean to use an exit Condition depending on maximum gradent
-    bool trans_A_;
     /// Number of iterations in the NNLS solver
     int iter_;
 
@@ -226,7 +195,7 @@ private:
     *   @param A Epetra_CrsMatrix to reallocate on a single core
     *   @return An Epetra_CrsMatrix with the data of A distributed on a single core
     */
-    Epetra_CrsMatrix allocateMatrixToSingleCore(const Epetra_CrsMatrix &A, bool trans_A);
+    Epetra_CrsMatrix allocateMatrixToSingleCore(const Epetra_CrsMatrix &A);
     
     /** @brief Allocates the incoming b vector to a single core
     *   @param b Epetra_Vector to reallocate on a single core

@@ -43,9 +43,6 @@ public:
     /// Vector of parameter-ROMTestLocation pairs
     mutable std::vector<std::unique_ptr<ProperOrthogonalDecomposition::ROMTestLocation<dim,nstate>>> rom_locations;
 
-    /// Vector of parameter-ROMTestLocation pairs
-    mutable std::vector<dealii::LinearAlgebra::distributed::Vector<double>> fom_locations;
-
     /// Maximum error
     mutable double max_error;
 
@@ -70,7 +67,7 @@ public:
     void placeInitialSnapshots() const;
 
     /// Compute RBF and find max error
-    virtual RowVectorXd getMaxErrorROM() const;
+    RowVectorXd getMaxErrorROM() const;
 
     /// Solve full-order snapshot
     dealii::LinearAlgebra::distributed::Vector<double> solveSnapshotFOM(const RowVectorXd& parameter) const;
@@ -82,7 +79,7 @@ public:
     void configureInitialParameterSpace() const;
 
     /// Output for each iteration
-    virtual void outputIterationData(std::string iteration) const;
+    void outputIterationData(std::string iteration) const;
 };
 
 }
