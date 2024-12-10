@@ -8,7 +8,16 @@ namespace ODE {
 template <int dim, typename real, typename MeshType>
 RootFindingRRKODESolver<dim,real,MeshType>::RootFindingRRKODESolver(
             std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau_input)
-        : RRKODESolverBase<dim,real,MeshType>(rk_tableau_input)
+        : RootFindingRRKODESolver(rk_tableau_input,nullptr)
+{
+}
+
+template <int dim, typename real, typename MeshType>
+RootFindingRRKODESolver<dim,real,MeshType>::RootFindingRRKODESolver(
+            std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau_input,
+            std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod)
+        : RRKODESolverBase<dim,real,MeshType>(rk_tableau_input),
+        pod(pod)
 {
 }
 
@@ -230,7 +239,11 @@ real RootFindingRRKODESolver<dim,real,MeshType>::compute_integrated_numerical_en
     std::shared_ptr < Physics::Euler<dim, dim+2, double > > euler_physics = std::dynamic_pointer_cast<Physics::Euler<dim,dim+2,double>>(
                 Physics::PhysicsFactory<dim,dim+2,double>::create_Physics(&parameters_euler));
     if (parameters_euler.reduced_order_param.entropy_varibles_in_snapshots == true) {
-
+        dealii::TrilinosWrappers::SparseMatrix pod_basis;
+        dealii::LinearAlgebra::distributed::Vector<double> ref_state = pod->getEntropyReferenceState();
+        pod_basis.reinit(pod->getPODBasis()->trilinos_matrix());
+        dg->calculate_global_entropy();
+        dg->calculate_ROM_projected_entropy(pod_basis,ref_state);
     }
     const int nstate = dim+2;
     double integrated_quantity = 0.0;
@@ -361,28 +374,31 @@ real RootFindingRRKODESolver<dim,real,MeshType>::compute_entropy_change_estimate
 {
     double entropy_change_estimate = 0;
 
+    dealii::LinearAlgebra::distributed::Vector<double> entropy_var_hat_global;
+    dealii::LinearAlgebra::distributed::Vector<double> mass_matrix_times_rk_stage(dg->solution);
     for (int istage = 0; istage<this->n_rk_stages; ++istage){
+        if(pod) {
+            entropy_var_hat_global = this->rk_projected_entropy[istage];
+            mass_matrix_times_rk_stage = this->rk_right_hand_side[istage];
+        } else {
+            // Recall rk_stage is IMM * RHS
+            // therefore, RHS = M * rk_stage = M * du/dt
+            if(dg->all_parameters->use_inverse_mass_on_the_fly)
+            {
+                if (use_M_norm_for_entropy_change_est)
+                    dg->apply_global_mass_matrix(rk_stage[istage], mass_matrix_times_rk_stage,
+                            false, // use_auxiliary_eq,
+                            true // use_M_norm
+                            );
+                else
+                    dg->apply_global_mass_matrix(rk_stage[istage],mass_matrix_times_rk_stage);
 
-        // Recall rk_stage is IMM * RHS
-        // therefore, RHS = M * rk_stage = M * du/dt
-        dealii::LinearAlgebra::distributed::Vector<double> mass_matrix_times_rk_stage(dg->solution);
-        if(dg->all_parameters->use_inverse_mass_on_the_fly)
-        {
-            if (use_M_norm_for_entropy_change_est)
-                dg->apply_global_mass_matrix(rk_stage[istage], mass_matrix_times_rk_stage,
-                        false, // use_auxiliary_eq,
-                        true // use_M_norm
-                        );
+            }
             else
-                dg->apply_global_mass_matrix(rk_stage[istage],mass_matrix_times_rk_stage);
-
+                dg->global_mass_matrix.vmult( mass_matrix_times_rk_stage, rk_stage[istage]);
+            //transform solution into entropy variables
+            entropy_var_hat_global = this->compute_entropy_vars(this->rk_stage_solution[istage],dg);
         }
-        else
-            dg->global_mass_matrix.vmult( mass_matrix_times_rk_stage, rk_stage[istage]);
-        
-        //transform solution into entropy variables
-        dealii::LinearAlgebra::distributed::Vector<double> entropy_var_hat_global = this->compute_entropy_vars(this->rk_stage_solution[istage],dg);
-        
         double entropy = entropy_var_hat_global * mass_matrix_times_rk_stage;
         
         entropy_change_estimate += this->butcher_tableau->get_b(istage) * entropy;

@@ -91,6 +91,7 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, this->reduced_rk_stage[istage]);
         this->reduced_rk_stage[istage] = dealii_reduced_stage_i;
     }
+    multiply(*epetra_test_basis,this->reduced_rk_stage[istage],this->rk_stage[istage],this->dg->solution,false);
     //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
     //std::ofstream reduced_file("reduced_file_"+ std::to_string(rank)+ "_stage_"+std::to_string(istage)+".txt");
     //print_dealii(reduced_file,this->reduced_rk_stage[istage]);

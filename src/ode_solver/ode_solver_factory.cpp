@@ -238,7 +238,7 @@ std::shared_ptr<ODESolverBase<dim,real,MeshType>> ODESolverFactory<dim,real,Mesh
     dealii::ConditionalOStream pcout(std::cout, dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)==0);
 
     std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau = create_RKTableau(dg_input);
-    std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> RRK_object = create_RRKObject(dg_input, rk_tableau);
+    std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> RRK_object = create_RRKObject(dg_input, rk_tableau, pod);
 
     const int n_rk_stages = dg_input->all_parameters->ode_solver_param.n_rk_stages;
     using ODEEnum = Parameters::ODESolverParam::ODESolverEnum;
@@ -395,6 +395,59 @@ std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> ODESolverFactory<dim,real,MeshT
     }
 }
 
+template <int dim, typename real, typename MeshType>
+std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> ODESolverFactory<dim,real,MeshType>::create_RRKObject( std::shared_ptr< DGBase<dim,real,MeshType> > dg_input,
+       std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau,
+       std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod )
+{
+    dealii::ConditionalOStream pcout(std::cout, dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)==0);
+    using ODEEnum = Parameters::ODESolverParam::ODESolverEnum;
+    using RRKEnum = Parameters::ODESolverParam::RRKMethodEnum;
+    const ODEEnum ode_solver_type = dg_input->all_parameters->ode_solver_param.ode_solver_type;
+    const RRKEnum rrk_method = dg_input->all_parameters->ode_solver_param.rrk_method;
+
+    if ((ode_solver_type == ODEEnum::runge_kutta_solver && dg_input->all_parameters->flow_solver_param.do_calculate_numerical_entropy && rrk_method != RRKEnum::RootFinding) || rrk_method == RRKEnum::NumEntropy) {
+        // If calculating numerical entropy, select the class which has that functionality
+            return std::make_shared<RKNumEntropy<dim,real,MeshType>>(rk_tableau);
+    }
+    else if (ode_solver_type == ODEEnum::rrk_explicit_solver || !(rrk_method == RRKEnum::Empty || rrk_method == RRKEnum::Default)){
+
+        using PDEEnum = Parameters::AllParameters::PartialDifferentialEquation;
+        const PDEEnum pde_type = dg_input->all_parameters->pde_type;
+        using NumFluxEnum = Parameters::AllParameters::TwoPointNumericalFlux;
+        const NumFluxEnum two_point_num_flux_type = dg_input->all_parameters->two_point_num_flux_type;
+
+        enum NumEntropyEnum {energy, nonlinear};
+        NumEntropyEnum numerical_entropy_type;
+        std::string rrk_type_string;
+        if (pde_type == PDEEnum::burgers_inviscid){
+            numerical_entropy_type = NumEntropyEnum::energy;
+            rrk_type_string = "Algebraic";
+        } else if ((pde_type == PDEEnum::euler || pde_type == PDEEnum::navier_stokes)
+                    && (two_point_num_flux_type != NumFluxEnum::KG)){
+            numerical_entropy_type = NumEntropyEnum::nonlinear;
+            rrk_type_string = "Root-finding";
+        } else{
+            pcout << "PDE type has no assigned numerical entropy variable. Aborting..." << std::endl;
+            std::abort();
+        }
+        if (rrk_method == RRKEnum::RootFinding) {
+            numerical_entropy_type = NumEntropyEnum::nonlinear;
+            rrk_type_string = "Root-finding";
+        } else if (rrk_method == RRKEnum::Algebraic) {
+            numerical_entropy_type = NumEntropyEnum::energy;
+            rrk_type_string = "Algebraic";
+        }
+        pcout << "Adding " << rrk_type_string << " Relaxation Runge Kutta to the ODE solver..." << std::endl;
+        if (numerical_entropy_type==NumEntropyEnum::energy)
+            return std::make_shared<AlgebraicRRKODESolver<dim,real,MeshType>>(rk_tableau);
+        else if (numerical_entropy_type==NumEntropyEnum::nonlinear)
+            return std::make_shared<RootFindingRRKODESolver<dim,real,MeshType>>(rk_tableau,pod);
+        else return nullptr; // no need for message as numerical_entropy_type has already been checked
+    } else {
+        return std::make_shared<EmptyRRKBase<dim,real,MeshType>> (rk_tableau);
+    }
+}
 template class ODESolverFactory<PHILIP_DIM, double, dealii::Triangulation<PHILIP_DIM>>;
 template class ODESolverFactory<PHILIP_DIM, double, dealii::parallel::shared::Triangulation<PHILIP_DIM>>;
 #if PHILIP_DIM != 1

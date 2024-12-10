@@ -24,6 +24,10 @@ public:
     explicit RootFindingRRKODESolver(
             std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau_input);
 
+    explicit RootFindingRRKODESolver(
+            std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau_input,
+            std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod);
+
 protected:
 
     /// Compute relaxation parameter numerically (i.e. if energy is NOT the entropy variable)
@@ -61,6 +65,8 @@ protected:
 private:
     /// Storing cumulative entropy change for output 
     real FR_entropy_cumulative = 0;
+    /// POD
+    std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod;
 
 };
 
