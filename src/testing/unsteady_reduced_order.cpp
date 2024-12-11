@@ -39,13 +39,13 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     // Create ROM and Solve
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&ROM_param_const, parameter_handler);
     const int modes = flow_solver_galerkin->ode_solver->pod->getPODBasis()->n();
-    //flow_solver_galerkin->run();
+    flow_solver_galerkin->run();
 
     // Change Parameters to Entropy-Stable ROM
     ROM_param.reduced_order_param.entropy_varibles_in_snapshots = true;
     ROM_param.flow_solver_param.unsteady_data_table_filename = table_name + "_ESROM";
     const Parameters::AllParameters Entropy_ROM_param_const = ROM_param;
-    // Create ROM and Solve
+    // Create ESROM and Solve
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_entropy_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&Entropy_ROM_param_const, parameter_handler);
     const double initial_entropy = flow_solver_case->compute_entropy(flow_solver_entropy_galerkin->dg);
 

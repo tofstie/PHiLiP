@@ -378,7 +378,9 @@ real RootFindingRRKODESolver<dim,real,MeshType>::compute_entropy_change_estimate
     dealii::LinearAlgebra::distributed::Vector<double> mass_matrix_times_rk_stage(dg->solution);
     for (int istage = 0; istage<this->n_rk_stages; ++istage){
         if(pod) {
-            entropy_var_hat_global = this->rk_projected_entropy[istage];
+            // rk_stage is not as easily convertable to RHS
+            // used stored RHS from RK method
+            // I can just added this to the if state below later
             mass_matrix_times_rk_stage = this->rk_right_hand_side[istage];
         } else {
             // Recall rk_stage is IMM * RHS
@@ -397,8 +399,8 @@ real RootFindingRRKODESolver<dim,real,MeshType>::compute_entropy_change_estimate
             else
                 dg->global_mass_matrix.vmult( mass_matrix_times_rk_stage, rk_stage[istage]);
             //transform solution into entropy variables
-            entropy_var_hat_global = this->compute_entropy_vars(this->rk_stage_solution[istage],dg);
         }
+        entropy_var_hat_global = this->compute_entropy_vars(this->rk_stage_solution[istage],dg);
         double entropy = entropy_var_hat_global * mass_matrix_times_rk_stage;
         
         entropy_change_estimate += this->butcher_tableau->get_b(istage) * entropy;
