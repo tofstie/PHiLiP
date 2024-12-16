@@ -87,13 +87,3 @@ and place them in
       ${CMAKE_CURRENT_SOURCE_DIR}, or simply run get_gmsh_mesh_files_local.sh"
       )
 endif()
-
-set (filename "2d_cylinder.msh")
-if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${filename})
-    message(SEND_ERROR
-"Missing 3D GMSH file named ${filename}. Please download them from
-    https://drive.google.com/drive/folders/1xaQRTCd8VXDeaV1alQ5oHI_YMm2X0X5R?usp=sharing
-and place them in
-      ${CMAKE_CURRENT_SOURCE_DIR}, or simply run get_gmsh_mesh_files_local.sh"
-      )
-endif()
