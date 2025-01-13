@@ -100,6 +100,8 @@ public:
     /// Update POD and Snapshot Parameters
     void updateSnapshots(dealii::LinearAlgebra::distributed::Vector<double> fom_solution);
 
+    void updateFOMLocations(MatrixXd &snapshot_matrix);
+
     /// Update POD and Snapshot Parameters
     void updatePODSnaps(std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod_update, MatrixXd snapshot_parameters_update);
 

@@ -150,6 +150,21 @@ void AssembleECSWBase<dim, nstate>::updateSnapshots(dealii::LinearAlgebra::distr
 }
 
 template <int dim, int nstate>
+void AssembleECSWBase<dim, nstate>::updateFOMLocations(MatrixXd &snapshot_matrix) {
+    const int num_of_snapshots = snapshot_matrix.cols();
+    const int quad_points = snapshot_matrix.rows();
+    for(int col = 0; col < num_of_snapshots; col++) {
+        dealii::LinearAlgebra::distributed::Vector<double> fom_solution(this->dg->solution);
+        for(int row = 0; row < quad_points; row++) {
+            if(fom_solution.in_local_range(row)) fom_solution[row] = snapshot_matrix(row, col);
+            std::cout << fom_solution[row] << std::endl;
+        }
+        updateSnapshots(fom_solution);
+    }
+}
+
+
+template <int dim, int nstate>
 void AssembleECSWBase<dim, nstate>::updatePODSnaps(std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod_update,    
                                                     MatrixXd snapshot_parameters_update) {
     this->pod = pod_update;

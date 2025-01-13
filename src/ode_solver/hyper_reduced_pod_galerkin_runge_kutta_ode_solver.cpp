@@ -61,10 +61,9 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         // Creating Reduced RHS
         dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
 
-        Epetra_Vector epetra_rhs(Epetra_DataAccess::Copy, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
+        Epetra_Vector epetra_rhs(*hyper_reduced_rhs); // Flip to range map?
         //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
         //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
-        dealii::LinearAlgebra::distributed::Vector<double> rhs = this->dg->right_hand_side;
         //print_dealii(dealii_rhs,rhs);
         //std::ofstream rhs_file("rhs_file_"+ std::to_string(rank)+ ".txt");
         //epetra_rhs.Print(rhs_file);
@@ -130,6 +129,13 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     epetra_trial_basis = generate_test_basis(epetra_pod_basis, true);
 
     epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,*epetra_test_basis,*epetra_trial_basis);
+
+    // Store weights into DG (FIX FOR MULTICORE LATER)
+    dealii::Vector<double> weights_dealii(ECSW_weights.GlobalLength());
+    for(unsigned int i = 0; i < weights_dealii.size(); ++i) {
+        weights_dealii[i] = ECSW_weights[i];
+    }
+    this->dg->reduced_mesh_weights = weights_dealii;
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
@@ -143,12 +149,67 @@ real HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
-std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::generate_test_basis(const Epetra_CrsMatrix &pod_basis,
-                                                                                                                                    const bool trial_basis) {
+std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::generate_hyper_reduced_mass_matrix(
+    const dealii::TrilinosWrappers::SparseMatrix& mass_matrix)
+{
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
+    Epetra_CrsMatrix epetra_mass_matrix = mass_matrix.trilinos_matrix();
+    const unsigned int max_dofs_per_cell = this->dg->dof_handler.get_fe_collection().max_dofs_per_cell();
+    std::vector<dealii::types::global_dof_index> current_dofs_indices(max_dofs_per_cell);
+    /// GET ids
+    std::set<unsigned int> rowIDs;
+    for (const auto &cell : this->dg->dof_handler.active_cell_iterators()) {
+        if (ECSW_weights[cell->active_cell_index()] != 0 ) {
+            for (unsigned int quad_id : current_dofs_indices) {
+                rowIDs.insert(quad_id);
+            }
+        }
+    }
+    const int hyper_reduced_size = rowIDs.size();
+    Epetra_Map hyper_reduced_map(hyper_reduced_size,0,epetra_comm);
+    Epetra_CrsMatrix hyper_reduced_basis(Epetra_DataAccess::Copy, hyper_reduced_map,hyper_reduced_size);
+
+    return std::make_shared<Epetra_CrsMatrix>(hyper_reduced_basis);
+}
+
+template <int dim, typename real, int n_rk_stages, typename MeshType>
+std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::generate_test_basis(const Epetra_CrsMatrix &pod_basis,
+                                                                                                                                        const bool trial_basis) {
+    Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
+    /*
+    Epetra_Map column_map = pod_basis.DomainMap();
+    int num_of_modes = column_map.NumGlobalElements();
+    const unsigned int max_dofs_per_cell = this->dg->dof_handler.get_fe_collection().max_dofs_per_cell();
+    std::vector<dealii::types::global_dof_index> current_dofs_indices(max_dofs_per_cell);
+    /// GET ids
+    std::set<unsigned int> rowIDs;
+    for (const auto &cell : this->dg->dof_handler.active_cell_iterators()) {
+        if (ECSW_weights[cell->active_cell_index()] != 0 ) {
+            for (unsigned int quad_id : current_dofs_indices) {
+                rowIDs.insert(quad_id);
+            }
+        }
+    }
+    const int hyper_reduced_size = rowIDs.size();
+    Epetra_Map hyper_reduced_row_map(hyper_reduced_size,0,epetra_comm);
+    /// Filter Test Basis using Row ids
+    Epetra_CrsMatrix hyper_reduced_basis(Epetra_DataAccess::Copy, hyper_reduced_row_map,num_of_modes);
+    int hyper_rowID = 0;
+    for( int FOM_rowID : rowIDs ) {
+        int num_entries = 0;
+        double *global_row = new double [num_of_modes];
+        int *indicies = new int [num_of_modes];
+        pod_basis.ExtractGlobalRowCopy(FOM_rowID,num_of_modes,num_entries,global_row,indicies);
+        hyper_reduced_basis.InsertGlobalValues(hyper_rowID,num_of_modes,global_row,indicies);
+        hyper_rowID++;
+    }
+    hyper_reduced_basis.FillComplete(column_map,hyper_reduced_row_map);
+    */
     Epetra_Map basis_rowmap = pod_basis.RowMap();
+    Epetra_Map basis_domainmap = pod_basis.DomainMap();
     Epetra_CrsMatrix hyper_reduced_basis(Epetra_DataAccess::Copy, basis_rowmap,pod_basis.NumGlobalCols());
     const int N = pod_basis.NumGlobalRows();
+    const int number_modes = pod_basis.NumGlobalCols();
     const unsigned int max_dofs_per_cell = this->dg->dof_handler.get_fe_collection().max_dofs_per_cell();
     std::vector<dealii::types::global_dof_index> current_dofs_indices(max_dofs_per_cell);
     std::vector<dealii::types::global_dof_index> neighbour_dofs_indices(max_dofs_per_cell);
@@ -160,7 +221,7 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
 
             current_dofs_indices.resize(n_dofs_curr_cell);
             cell->get_dof_indices(current_dofs_indices);
-
+    /*
             double *row = new double[pod_basis.NumGlobalCols()];
             int *global_indices = new int[pod_basis.NumGlobalCols()];
             int numE;
@@ -174,47 +235,33 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
             }
             delete[] row;
             delete[] global_indices;
+            */
             // Create L_e matrix and transposed L_e matrixfor current cell
             Epetra_Map LeRowMap(n_dofs_curr_cell, 0, epetra_comm);
             Epetra_CrsMatrix L_e(Epetra_DataAccess::Copy, LeRowMap, N);
-            Epetra_CrsMatrix L_e_T(Epetra_DataAccess::Copy, basis_rowmap, n_dofs_curr_cell);
-            Epetra_Map LePLUSRowMap(neighbour_dofs_curr_cell, 0, epetra_comm);
-            Epetra_CrsMatrix L_e_PLUS(Epetra_DataAccess::Copy, LePLUSRowMap, N);
             const double posOne = 1.0;
 
             for(int i = 0; i < n_dofs_curr_cell; i++){
                 const int col = current_dofs_indices[i];
                 L_e.InsertGlobalValues(i, 1, &posOne , &col);
-                L_e_T.InsertGlobalValues(col, 1, &posOne , &i);
             }
             L_e.FillComplete(basis_rowmap, LeRowMap);
-            L_e_T.FillComplete(LeRowMap, basis_rowmap);
-
-            for(int i = 0; i < neighbour_dofs_curr_cell; i++){
-                const int col = neighbour_dofs_indices[i];
-                L_e_PLUS.InsertGlobalValues(i, 1, &posOne , &col);
-            }
-            L_e_PLUS.FillComplete(basis_rowmap, LePLUSRowMap);
 
             // Find contribution of element to the Jacobian
-            Epetra_CrsMatrix V_L_e_T(Epetra_DataAccess::Copy, basis_rowmap, neighbour_dofs_curr_cell);
-            Epetra_CrsMatrix V_e_m(Epetra_DataAccess::Copy, LeRowMap, neighbour_dofs_curr_cell);
-            EpetraExt::MatrixMatrix::Multiply(pod_basis, false, L_e_PLUS, true, V_L_e_T, true);
-            EpetraExt::MatrixMatrix::Multiply(L_e, false, V_L_e_T, false, V_e_m, true);
-
-            // Jacobian for this element in the global dimensions
-            Epetra_CrsMatrix V_temp(Epetra_DataAccess::Copy, LeRowMap, N);
-            Epetra_CrsMatrix V_global_e(Epetra_DataAccess::Copy, basis_rowmap, N);
-            EpetraExt::MatrixMatrix::Multiply(V_e_m, false, L_e_PLUS, false, V_temp, true);
-            EpetraExt::MatrixMatrix::Multiply(L_e_T, false, V_temp, false, V_global_e, true);
+            Epetra_CrsMatrix V_L_e_T(Epetra_DataAccess::Copy, LeRowMap, number_modes);
+            Epetra_CrsMatrix V_e_m(Epetra_DataAccess::Copy, basis_rowmap, number_modes);
+            EpetraExt::MatrixMatrix::Multiply(L_e, false, pod_basis, false, V_L_e_T, true);
+            EpetraExt::MatrixMatrix::Multiply(L_e, true, V_L_e_T, false, V_e_m, true);
 
             // Add the contribution of the element to the hyper-reduced Jacobian with scaling from the weights
             double scaling = 1.0;
             if (trial_basis) scaling = ECSW_weights[cell->active_cell_index()];
-            EpetraExt::MatrixMatrix::Add(V_global_e, false, scaling, hyper_reduced_basis, 1.0);
+            EpetraExt::MatrixMatrix::Add(V_e_m, false, scaling, hyper_reduced_basis, 1.0);
         }
     }
-    hyper_reduced_basis.FillComplete();
+    hyper_reduced_basis.FillComplete(basis_domainmap, basis_rowmap);
+    std::ofstream file("HR_Pod_basis.txt");
+    hyper_reduced_basis.Print(file);
     return std::make_shared<Epetra_CrsMatrix>(hyper_reduced_basis);
 }
 

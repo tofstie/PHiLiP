@@ -44,9 +44,10 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
     else{
         training_snaps = num_snaps_POD;
     }
+    training_snaps = 1;
     const int rank = this->Comm_.MyPID();
-    int length = epetra_system_matrix.NumMyRows()/nstate;
-    int *local_elements = new int[length];
+    //int length = epetra_system_matrix.NumMyRows()/nstate;
+    int *local_elements = new int[num_elements_N_e];
     int ctr = 0;
     for (const auto &cell : this->dg->dof_handler.active_cell_iterators())
     {
@@ -56,7 +57,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         }
     }
     Epetra_Map RowMap((n_reduced_dim_POD*training_snaps), (n_reduced_dim_POD*training_snaps), 0, this->Comm_); // Number of rows in residual based training matrix = n * (number of training snapshots)
-    Epetra_Map ColMap(num_elements_N_e, length, local_elements, 0, this->Comm_);
+    Epetra_Map ColMap(num_elements_N_e, num_elements_N_e, local_elements, 0, this->Comm_);
     Epetra_Map dMap((n_reduced_dim_POD*training_snaps), (rank == 0) ?  (n_reduced_dim_POD*training_snaps) : 0,  0, this->Comm_);
 
     delete[] local_elements;
@@ -75,6 +76,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
 
         // Modifiy parameters for snapshot location and create new flow solver
         Parameters::AllParameters params = this->reinitParams(snap_param);
+        params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
         std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&params, this->parameter_handler);
         this->dg = flow_solver->dg;
 

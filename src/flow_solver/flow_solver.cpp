@@ -88,44 +88,51 @@ FlowSolver<dim, nstate>::FlowSolver(
         SetInitialCondition<dim,nstate,double>::set_initial_condition(flow_solver_case->initial_condition_function, dg, &all_param);
     }
     dg->solution.update_ghost_values();
+    constexpr bool oneDoneNstate = dim == 1 && nstate == 1;
+    constexpr bool oneDthreeNState = dim+2 == nstate && dim != 1;
     if( ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_solver ||
         ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver ||
         ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver)
     {
         std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod);
-    } else if (ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver){
+    } else if (ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver &&
+                (oneDoneNstate || oneDthreeNState)){
         std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
-        constexpr bool oneDoneNstate = dim == 1 && nstate == 1;
-        constexpr bool oneDthreeNState = dim+2 == nstate && dim != 1;
-        int num_of_cols = pod->getSnapshotMatrix().cols();
+        Eigen::MatrixXd snapshot_matrix = pod->getSnapshotMatrix();
+        int num_of_cols = snapshot_matrix.cols();
         if (all_param.reduced_order_param.entropy_varibles_in_snapshots) num_of_cols /= 2;
         std::cout << "Construct instance of Assembler..."<< std::endl;
         std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
         Eigen::MatrixXd snapshot_parameters(1,num_of_cols);
+        Epetra_MpiComm Comm( MPI_COMM_WORLD );
         if(oneDoneNstate || oneDthreeNState) { // For templates
             if (all_param.hyper_reduction_param.training_data == "residual")
-                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type);
+                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);
             else {
-                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type);
+                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type, Comm);
             }
         }
         std::cout << "Build Problem..."<< std::endl;
+
+        constructer_NNLS_problem->updateFOMLocations(snapshot_matrix);
         constructer_NNLS_problem->build_problem();
 
         // Transfer b vector (RHS of NNLS problem) to Epetra structure
-        Epetra_MpiComm Comm( MPI_COMM_WORLD );
-        Epetra_Map bMap = (constructer_NNLS_problem->A->trilinos_matrix()).RowMap();
+
+        Epetra_Map bMap = (constructer_NNLS_problem->A_T->trilinos_matrix()).DomainMap();
         Epetra_Vector b_Epetra (bMap);
         auto b = constructer_NNLS_problem->b;
         for(unsigned int i = 0 ; i < b.size() ; i++){
             b_Epetra[i] = b(i);
             std::cout << b(i) << std::endl;
         }
-        constructer_NNLS_problem->A->trilinos_matrix().Print(std::cout);
+        Epetra_CrsMatrix A = constructer_NNLS_problem->A_T->trilinos_matrix();
+        std::ofstream file_test("Test1.txt");
+        constructer_NNLS_problem->A_T->trilinos_matrix().Print(file_test);
         // Solve NNLS Problem for ECSW weights
         std::cout << "Create NNLS problem..."<< std::endl;
-        NNLS_solver NNLS_prob(&all_param, parameter_handler, constructer_NNLS_problem->A->trilinos_matrix(), Comm, b_Epetra);
+        NNLS_solver NNLS_prob(&all_param, parameter_handler, A, true, Comm, b_Epetra);
         std::cout << "Solve NNLS problem..."<< std::endl;
         bool exit_con = NNLS_prob.solve();
         std::cout << exit_con << std::endl;
@@ -134,6 +141,11 @@ FlowSolver<dim, nstate>::FlowSolver(
     } else {
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg);
     }
+
+    // Set the default ECSW Weights (1 vector)
+    dealii::Vector<float> default_weights(dg->triangulation->n_active_cells());
+    default_weights.add(1.0);
+    this->dg->reduced_mesh_weights = default_weights;
     // Allocate ODE solver after initializing DG
     ode_solver->allocate_ode_system();
 
@@ -149,6 +161,8 @@ FlowSolver<dim, nstate>::FlowSolver(
         time_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
         time_pod->addSnapshot(dg->solution);
     }
+
+
 
     // output a copy of the input parameters file
     if(flow_solver_param.output_restart_files == true) {

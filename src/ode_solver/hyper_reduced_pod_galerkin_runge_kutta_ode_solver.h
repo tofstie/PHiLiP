@@ -65,6 +65,9 @@ private:
     /// dealII indexset for RO solution
     dealii::IndexSet reduced_index;
 
+    /// Generate Hyper-Reduced Mass Matrix
+    std::shared_ptr<Epetra_CrsMatrix> generate_hyper_reduced_mass_matrix(const dealii::TrilinosWrappers::SparseMatrix& mass_matrix);
+
     /// Generate test basis
     std::shared_ptr<Epetra_CrsMatrix> generate_test_basis(const Epetra_CrsMatrix &pod_basis, const bool trial_basis);
 
