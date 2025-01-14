@@ -249,17 +249,11 @@ bool NNLS_solver::solve(){
   numInactive_ = 0;
   // Pre-mult by A^T
   Epetra_CrsMatrix AtA(Epetra_DataAccess::Copy, A_.ColMap(), A_.NumMyCols());
-  std::cout << A_.NumMyCols() << std::endl;
-  std::cout << A_.NumGlobalRows() << std::endl;
-  std::cout << AtA.NumMyCols() << std::endl;
-  std::cout << AtA.NumMyRows() << std::endl;
-  std::cout << b_.MyLength() << std::endl;
   EpetraExt::MatrixMatrix::Multiply(A_, true, A_, false, AtA);
   std::ofstream fs("test.txt");
   A_.Print(fs);
   Epetra_Vector Atb (A_.ColMap());
   A_.Multiply(true, b_, Atb);
-  Atb.Print(std::cout);
   Epetra_Vector AtAx (A_.ColMap());
   Epetra_Vector Ax (A_.RowMap());
   Epetra_MultiVector gradient (A_.ColMap(), 1);
@@ -278,11 +272,9 @@ bool NNLS_solver::solve(){
 
     gradient = Atb;
     gradient.Update(-1.0, AtAx, 1.0); // gradient = A^T * (b-A*x)
-    AtAx.Print(std::cout);
     grad_col = *gradient(0);
     for(int i = 0; i < gradient.MyLength() ; ++i){
       grad_eig[i] = grad_col[i];
-      std::cout << grad_eig[i] << std::endl;
     }
 
     // Find the maximum element of the gradient in the active set
@@ -303,6 +295,7 @@ bool NNLS_solver::solve(){
     residual.Norm2(normRes);
     double normb[1];
     b_.Norm2(normb);
+    double normA = A_.NormInf();
     // Old exit condition dependent on the maxGradient
     // Original exit condition presented in "SOLVING LEAST SQUARES PROBLEMS", by Charles L. Lawson and
     // Richard J. Hanson, Prentice-Hall, 1974
@@ -314,6 +307,8 @@ bool NNLS_solver::solve(){
         std::cout << normb[0] << std::endl;
         std::cout << "Norm-2 of the residual (b-A*x)" << std::endl;
         std::cout << normRes[0] << std::endl;
+        std::cout << "Norm-1 of A" << std::endl;
+        std::cout << normA << std::endl;
         multi_x_ = allocateVectorToMultipleCores(this->x_);
         return true;
       }
@@ -458,7 +453,6 @@ Epetra_CrsMatrix NNLS_solver::allocateMatrixToSingleCore(const Epetra_CrsMatrix 
       double *row = A_temp[i];
       for (int n = 0; n < A_cols; n++) {
           A_trans.InsertGlobalValues(n, 1, &row[n], &i);
-          std::cout << row[n] << std::endl;
       }
     }
     A_trans.FillComplete(single_core_row_A, single_core_col_A);

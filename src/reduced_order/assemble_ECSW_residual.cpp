@@ -79,10 +79,20 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
         std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&params, this->parameter_handler);
         this->dg = flow_solver->dg;
-
+        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+            dealii::TrilinosWrappers::SparseMatrix pod_basis;
+            pod_basis.reinit(epetra_pod_basis);
+            this->dg->calculate_projection_matrix(pod_basis);
+        }
         // Set solution to snapshot and re-compute the residual/Jacobian
         this->dg->solution = this->fom_locations[snap_num];
         const bool compute_dRdW = true;
+        if(params.reduced_order_param.entropy_varibles_in_snapshots){
+            dealii::TrilinosWrappers::SparseMatrix pod_basis;
+            pod_basis.reinit(epetra_pod_basis);
+            this->dg->calculate_global_entropy();
+            this->dg->calculate_ROM_projected_entropy(pod_basis);
+        }
         this->dg->assemble_residual(compute_dRdW);
         Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::Copy, epetra_system_matrix.RowMap(), this->dg->right_hand_side.begin());
         Epetra_Vector local_rhs = this->copyVectorToAllCores(epetra_right_hand_side);

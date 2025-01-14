@@ -38,7 +38,7 @@ end
 subsection flow_solver
   set flow_case_type = riemann_problem
   set poly_degree = 1
-  set final_time = 0.05
+  set final_time = 0.25
   set courant_friedrichs_lewy_number = 0.03125
   set unsteady_data_table_filename = riemann_problem_time_table
   subsection grid
@@ -56,7 +56,7 @@ subsection reduced order
 end
 
 subsection hyperreduction
-    set NNLS_tol = 1e-8
+    set NNLS_tol = 1e-15
     set NNLS_max_iter = 50000
     set training_data = residual
 end

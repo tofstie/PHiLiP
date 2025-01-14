@@ -39,6 +39,8 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->solver.solve(dt*this->butcher_tableau->get_a(istage,istage), this->rk_stage[istage]);
         this->rk_stage[istage] = this->solver.current_solution_estimate;
     }
+    std::ofstream rk_stage_file("rk_stage_file_stage_" + std::to_string(istage) + ".txt");
+    this->rk_stage[istage].print(rk_stage_file);
     this->dg->solution = this->rk_stage[istage];
 }
 
@@ -97,6 +99,8 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     dealii::LinearAlgebra::distributed::Vector<double> dealii_update;
     multiply(*epetra_test_basis,reduced_sum,dealii_update,this->dg->solution,false);
     this->solution_update.add(1.0,dealii_update);
+    std::ofstream new_solution_file("new_solution_file.txt");
+    this->solution_update.print(new_solution_file);
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>

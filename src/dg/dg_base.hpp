@@ -960,6 +960,7 @@ public:
     dealii::LinearAlgebra::distributed::Vector<double> projected_entropy;
     /// ROM Projected Face Entropy
     dealii::LinearAlgebra::distributed::Vector<double> projected_face_entropy;
+    /// Hyper-Reduction ECSW Nodal Projection
 }; // end of DGBase class
 
 } // PHiLiP namespace

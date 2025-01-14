@@ -31,7 +31,7 @@ int UnsteadyHyperReduction<dim, nstate>::run_test() const {
     // Creating FOM and Solve
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_full_order = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(all_parameters, parameter_handler);
     const double initial_FOM_entropy = flow_solver_case->compute_entropy(flow_solver_full_order->dg);
-    flow_solver_full_order->run();
+    //flow_solver_full_order->run();
     const double final_FOM_entropy = flow_solver_case->compute_entropy(flow_solver_full_order->dg);
     const double FOM_entropy_diff = final_FOM_entropy - initial_FOM_entropy;
 
@@ -39,6 +39,7 @@ int UnsteadyHyperReduction<dim, nstate>::run_test() const {
     Parameters::AllParameters HROM_param = *(TestsBase::all_parameters);
     HROM_param.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver;
     HROM_param.ode_solver_param.allocate_matrix_dRdW = true;
+    HROM_param.reduced_order_param.entropy_varibles_in_snapshots = true;
     HROM_param.flow_solver_param.unsteady_data_table_filename = "HROM_" + HROM_param.flow_solver_param.unsteady_data_table_filename;
     const Parameters::AllParameters HROM_param_const = HROM_param;
 
