@@ -115,7 +115,7 @@ FlowSolver<dim, nstate>::FlowSolver(
         std::cout << "Construct instance of Assembler..."<< std::endl;
 
         std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
-        Eigen::MatrixXd snapshot_parameters(1,num_of_cols);
+        Eigen::MatrixXd snapshot_parameters(num_of_cols,1);
         Epetra_MpiComm Comm( MPI_COMM_WORLD );
         if(oneDoneNstate || oneDthreeNState) { // For templates
             if (all_param.hyper_reduction_param.training_data == "residual")
@@ -136,7 +136,6 @@ FlowSolver<dim, nstate>::FlowSolver(
         auto b = constructer_NNLS_problem->b;
         for(unsigned int i = 0 ; i < b.size() ; i++){
             b_Epetra[i] = b(i);
-            std::cout << b(i) << std::endl;
         }
         Epetra_CrsMatrix A = constructer_NNLS_problem->A_T->trilinos_matrix();
         std::ofstream file_test("Test1.txt");

@@ -269,7 +269,6 @@ bool NNLS_solver::solve(){
       return true;
     }
     AtA.Multiply(false, this->x_, AtAx);
-
     gradient = Atb;
     gradient.Update(-1.0, AtAx, 1.0); // gradient = A^T * (b-A*x)
     grad_col = *gradient(0);

@@ -146,6 +146,8 @@ Epetra_Vector AssembleECSWBase<dim,nstate>::copyVectorToAllCores(const Epetra_Ve
 
 template <int dim, int nstate>
 void AssembleECSWBase<dim, nstate>::updateSnapshots(dealii::LinearAlgebra::distributed::Vector<double> fom_solution){
+    std::ofstream outfile("fom_solution.txt");
+    fom_solution.print(outfile);
     fom_locations.emplace_back(fom_solution);
 }
 

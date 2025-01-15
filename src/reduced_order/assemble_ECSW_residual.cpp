@@ -70,6 +70,12 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
     std::vector<dealii::types::global_dof_index> current_dofs_indices(max_dofs_per_cell); 
     int row_num = 0;
     int snap_num = 0;
+    if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+        dealii::TrilinosWrappers::SparseMatrix pod_basis;
+        pod_basis.reinit(epetra_pod_basis);
+        this->dg->calculate_projection_matrix(pod_basis);
+    }
+    Epetra_CrsMatrix projection_matrix_basis = this->dg->projection_matrix.trilinos_matrix();
     for(auto snap_param : this->snapshot_parameters.rowwise()){
         this->pcout << "Snapshot Parameter Values" << std::endl;
         this->pcout << snap_param << std::endl;
@@ -79,11 +85,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
         std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&params, this->parameter_handler);
         this->dg = flow_solver->dg;
-        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
-            dealii::TrilinosWrappers::SparseMatrix pod_basis;
-            pod_basis.reinit(epetra_pod_basis);
-            this->dg->calculate_projection_matrix(pod_basis);
-        }
+        this->dg->projection_matrix.reinit(projection_matrix_basis);
         // Set solution to snapshot and re-compute the residual/Jacobian
         this->dg->solution = this->fom_locations[snap_num];
         const bool compute_dRdW = true;
