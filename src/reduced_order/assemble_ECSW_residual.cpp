@@ -28,12 +28,16 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
     const Epetra_CrsMatrix epetra_pod_basis = this->pod->getPODBasis()->trilinos_matrix();
     Epetra_CrsMatrix epetra_system_matrix = this->dg->system_matrix.trilinos_matrix();
 
+    //TIMING
+    std::chrono::duration<double> residualTiming(0);
+    std::chrono::duration<double> multTiming(0);
+    std::chrono::duration<double> buildDuration(0);
     // Get dimensions of the problem
     int num_snaps_POD = snapshotMatrix.cols(); // Number of snapshots used to build the POD basis
     int n_reduced_dim_POD = epetra_pod_basis.NumGlobalCols(); // Reduced subspace dimension
     int N_FOM_dim = epetra_pod_basis.NumGlobalRows(); // Length of solution vector
     int num_elements_N_e = this->dg->triangulation->n_active_cells(); // Number of elements (equal to N if there is one DOF per cell)
-
+    int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
     // Create empty and temporary C and d structs
     int training_snaps;
     // Check if all or a subset of the snapshots will be used for training
@@ -41,13 +45,17 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         this->pcout << "LIMITED NUMBER OF SNAPSHOTS"<< std::endl;
         training_snaps = this->all_parameters->hyper_reduction_param.num_training_snaps;
     }
-    else{
+    else if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+        training_snaps = num_snaps_POD/2;
+    }
+    else {
         training_snaps = num_snaps_POD;
     }
-    training_snaps = 1;
+
+
     const int rank = this->Comm_.MyPID();
-    //int length = epetra_system_matrix.NumMyRows()/nstate;
-    int *local_elements = new int[num_elements_N_e];
+    int length = epetra_system_matrix.NumMyRows()/(n_quad_pts*nstate);
+    int *local_elements = new int[length];
     int ctr = 0;
     for (const auto &cell : this->dg->dof_handler.active_cell_iterators())
     {
@@ -57,7 +65,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         }
     }
     Epetra_Map RowMap((n_reduced_dim_POD*training_snaps), (n_reduced_dim_POD*training_snaps), 0, this->Comm_); // Number of rows in residual based training matrix = n * (number of training snapshots)
-    Epetra_Map ColMap(num_elements_N_e, num_elements_N_e, local_elements, 0, this->Comm_);
+    Epetra_Map ColMap(num_elements_N_e, length, local_elements, 0, this->Comm_);
     Epetra_Map dMap((n_reduced_dim_POD*training_snaps), (rank == 0) ?  (n_reduced_dim_POD*training_snaps) : 0,  0, this->Comm_);
 
     delete[] local_elements;
@@ -83,12 +91,14 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         // Modifiy parameters for snapshot location and create new flow solver
         Parameters::AllParameters params = this->reinitParams(snap_param);
         params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
+        params.reduced_order_param.entropy_varibles_in_snapshots = false;
         std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&params, this->parameter_handler);
         this->dg = flow_solver->dg;
         this->dg->projection_matrix.reinit(projection_matrix_basis);
         // Set solution to snapshot and re-compute the residual/Jacobian
         this->dg->solution = this->fom_locations[snap_num];
         const bool compute_dRdW = true;
+        auto start_residual = std::chrono::high_resolution_clock::now();
         if(params.reduced_order_param.entropy_varibles_in_snapshots){
             dealii::TrilinosWrappers::SparseMatrix pod_basis;
             pod_basis.reinit(epetra_pod_basis);
@@ -96,6 +106,8 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
             this->dg->calculate_ROM_projected_entropy(pod_basis);
         }
         this->dg->assemble_residual(compute_dRdW);
+        auto end_residual = std::chrono::high_resolution_clock::now();
+        residualTiming += end_residual - start_residual;
         Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::Copy, epetra_system_matrix.RowMap(), this->dg->right_hand_side.begin());
         Epetra_Vector local_rhs = this->copyVectorToAllCores(epetra_right_hand_side);
 
@@ -130,6 +142,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
                 L_e.FillComplete(LeColMap, LeRowMap);
 
                 // Extract residual contributions of the current cell into global dimension
+                auto start_mult = std::chrono::high_resolution_clock::now();
                 Epetra_Vector local_r(LeRowMap);
                 Epetra_Vector global_r_e(LeColMap);
                 L_e.Multiply(false, local_rhs, local_r);
@@ -140,6 +153,9 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
                 Epetra_Vector c_se(cseRowMap);
 
                 local_test_basis.Multiply(true, global_r_e, c_se);
+                auto end_mult = std::chrono::high_resolution_clock::now();
+                multTiming += end_mult - start_mult;
+                auto start_build = std::chrono::high_resolution_clock::now();
                 double *c_se_array = new double[n_reduced_dim_POD];
 
                 c_se.ExtractCopy(c_se_array);
@@ -150,6 +166,8 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
                     C_T.InsertGlobalValues(cell_num, 1, &c_se_array[k], &place);
                 }
                 delete[] c_se_array;
+                auto end_build = std::chrono::high_resolution_clock::now();
+                buildDuration += end_build - start_build;
             }
         }
         row_num+=n_reduced_dim_POD;

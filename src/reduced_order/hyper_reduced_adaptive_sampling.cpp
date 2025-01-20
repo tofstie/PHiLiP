@@ -44,16 +44,16 @@ int HyperreducedAdaptiveSampling<dim, nstate>::run_sampling() const
     this->placeInitialSnapshots();
     this->current_pod->computeBasis();
 
-    auto ode_solver_type = Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_petrov_galerkin_solver;
-    
+    auto ode_solver_type_HRPGS = Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_petrov_galerkin_solver;
+
     // Find C and d for NNLS Problem
     Epetra_MpiComm Comm( MPI_COMM_WORLD );
     this->pcout << "Construct instance of Assembler..."<< std::endl;  
     std::unique_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
     if (this->all_parameters->hyper_reduction_param.training_data == "residual")         
-        constructer_NNLS_problem = std::make_unique<HyperReduction::AssembleECSWRes<dim,nstate>>(this->all_parameters, this->parameter_handler, flow_solver->dg, this->current_pod, this->snapshot_parameters, ode_solver_type, Comm);
+        constructer_NNLS_problem = std::make_unique<HyperReduction::AssembleECSWRes<dim,nstate>>(this->all_parameters, this->parameter_handler, flow_solver->dg, this->current_pod, this->snapshot_parameters, ode_solver_type_HRPGS, Comm);
     else {
-        constructer_NNLS_problem = std::make_unique<HyperReduction::AssembleECSWJac<dim,nstate>>(this->all_parameters, this->parameter_handler, flow_solver->dg, this->current_pod, this->snapshot_parameters, ode_solver_type, Comm);
+        constructer_NNLS_problem = std::make_unique<HyperReduction::AssembleECSWJac<dim,nstate>>(this->all_parameters, this->parameter_handler, flow_solver->dg, this->current_pod, this->snapshot_parameters, ode_solver_type_HRPGS, Comm);
     }
 
     for (int k = 0; k < this->snapshot_parameters.rows(); k++){
@@ -109,7 +109,7 @@ int HyperreducedAdaptiveSampling<dim, nstate>::run_sampling() const
     this->pcout << "FUNCTIONAL FROM FOM" << std::endl;
     this->pcout << functional_FOM->evaluate_functional(false, false) << std::endl;
 
-    solveFunctionalHROM(functional_ROM, *ptr_weights);
+    //solveFunctionalHROM(functional_ROM, *ptr_weights);
     
     delete NNLS_prob;
     
@@ -189,13 +189,13 @@ int HyperreducedAdaptiveSampling<dim, nstate>::run_sampling() const
 
         this->pcout << "Max error is: " << this->max_error << std::endl;
         
-        solveFunctionalHROM(functional_ROM, *ptr_weights);
+        //solveFunctionalHROM(functional_ROM, *ptr_weights);
 
         this->pcout << "FUNCTIONAL FROM ROMs" << std::endl;
         std::ofstream output_file("rom_functional" + std::to_string(iteration+1) +".txt");
 
         std::ostream_iterator<double> output_iterator(output_file, "\n");
-        std::copy(std::begin(rom_functional), std::end(rom_functional), output_iterator);
+        //std::copy(std::begin(rom_functional), std::end(rom_functional), output_iterator);
 
         iteration++;
 
@@ -227,7 +227,7 @@ int HyperreducedAdaptiveSampling<dim, nstate>::run_sampling() const
     std::ofstream output_file("rom_functional.txt");
 
     std::ostream_iterator<double> output_iterator(output_file, "\n");
-    std::copy(std::begin(rom_functional), std::end(rom_functional), output_iterator);
+    //std::copy(std::begin(rom_functional), std::end(rom_functional), output_iterator);
 
     return 0;
 }

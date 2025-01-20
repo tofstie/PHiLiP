@@ -54,23 +54,29 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->dg->calculate_ROM_projected_entropy(pod_basis);
     }
     this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
-    Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_trial_basis->RowMap(), this->dg->right_hand_side.begin());
-    std::shared_ptr<Epetra_Vector> hyper_reduced_rhs = generate_hyper_reduced_residual(epetra_right_hand_side, *epetra_trial_basis);
-    hyper_reduced_rhs->Scale(-1.0);
+    Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin());
+    std::ofstream epetra_right_hand_side_file("epetra_right_hand_side"+std::to_string(istage)+".txt");
+    epetra_right_hand_side.Print(epetra_right_hand_side_file);
+    std::shared_ptr<Epetra_Vector> hyper_reduced_rhs = generate_hyper_reduced_residual(epetra_right_hand_side, *epetra_test_basis);
+    hyper_reduced_rhs->Scale(1.0);
+    std::ofstream hyper_reduced_rhs_file("hyper_reduced_rhs"+std::to_string(istage)+".txt");
+    hyper_reduced_rhs->Print(hyper_reduced_rhs_file);
     if(this->all_parameters->use_inverse_mass_on_the_fly){
         assert(1 == 0 && "Not Implemented: use_inverse_mass_on_the_fly=true && ode_solver_type=pod_galerkin_rk_solver\n Please set use_inverse_mass_on_the_fly=false and try again");
     } else{
         // Creating Reduced RHS
         dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
 
-        Epetra_Vector epetra_rhs(*hyper_reduced_rhs); // Flip to range map?
+        Epetra_Vector epetra_reduced_rhs(*hyper_reduced_rhs); // Flip to range map?
         //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
         //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
         //print_dealii(dealii_rhs,rhs);
         //std::ofstream rhs_file("rhs_file_"+ std::to_string(rank)+ ".txt");
         //epetra_rhs.Print(rhs_file);
-        Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
-        epetra_test_basis->Multiply(true,epetra_rhs,epetra_reduced_rhs);
+        //Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
+        //epetra_trial_basis->Multiply(true,epetra_rhs,epetra_reduced_rhs);
+        std::ofstream epetra_reduced_right_hand_side_file("epetra_reduced_right_hand_side"+std::to_string(istage)+".txt");
+        epetra_reduced_rhs.Print(epetra_reduced_right_hand_side_file);
         //std::ofstream reduced_rhs_file("reduced_rhs_file_"+ std::to_string(rank)+ ".txt");
         //epetra_reduced_rhs.Print(reduced_rhs_file);
         // Creating Linear Problem to find stage
@@ -104,8 +110,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
-void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::allocate_runge_kutta_system(){
-
+void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::allocate_runge_kutta_system() {
     this->butcher_tableau->set_tableau();
 
     this->butcher_tableau_aii_is_zero.resize(n_rk_stages);
@@ -130,9 +135,18 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
 
     epetra_test_basis = generate_test_basis(epetra_pod_basis, false);
-    epetra_trial_basis = generate_test_basis(epetra_pod_basis, true);
-
-    epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,*epetra_test_basis,*epetra_trial_basis);
+    {
+        std::shared_ptr<Epetra_CrsMatrix> epetra_LeV = generate_test_basis(epetra_pod_basis, true);
+        dealii::TrilinosWrappers::SparseMatrix dealii_LeV;
+        dealii_LeV.reinit(*epetra_LeV);
+        std::cout << dealii_LeV.m() << std::endl;
+        std::cout << dealii_LeV.n() << std::endl;
+        this->dg->calculate_projection_matrix(dealii_LeV);
+    }
+    std::ofstream test_basis_file("test_basis_file.txt");
+    std::ofstream trail_basis_file("trail_basis_file.txt");
+    epetra_test_basis->Print(test_basis_file);
+    epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,*epetra_test_basis,*epetra_test_basis);
 
     // Store weights into DG (FIX FOR MULTICORE LATER)
     dealii::Vector<double> weights_dealii(ECSW_weights.GlobalLength());
@@ -178,7 +192,9 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::generate_test_basis(const Epetra_CrsMatrix &pod_basis,
-                                                                                                                                        const bool trial_basis) {
+                                                                                                                                       const bool trial_basis)
+{
+    if (!trial_basis) return std::make_shared<Epetra_CrsMatrix>(pod_basis);
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     /*
     Epetra_Map column_map = pod_basis.DomainMap();
@@ -259,7 +275,6 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
 
             // Add the contribution of the element to the hyper-reduced Jacobian with scaling from the weights
             double scaling = 1.0;
-            if (trial_basis) scaling = ECSW_weights[cell->active_cell_index()];
             EpetraExt::MatrixMatrix::Add(V_e_m, false, scaling, hyper_reduced_basis, 1.0);
         }
     }

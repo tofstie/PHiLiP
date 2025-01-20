@@ -90,6 +90,8 @@ Epetra_CrsMatrix eig_to_epetra_matrix(Eigen::MatrixXd &A_eig, Epetra_Map ColMap,
 
 MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra){
   // Create an empty Eigen structure
+  std::ofstream outfile("outfilesadface.txt");
+  A_epetra.Print(outfile);
   MatrixXd A(A_epetra.NumGlobalRows(), A_epetra.NumGlobalCols());
   //int rank = A_epetra.Comm().MyPID();
   //std::ofstream sum_file("Input_"+std::to_string(rank)+".txt");
@@ -112,24 +114,29 @@ MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra){
     */
     double *global_row = new double [A_epetra.NumGlobalCols()];
     int *indicies = new int [A_epetra.NumGlobalCols()];
-    int num_entries = 0;
+
+    int local_num_entries = 0;
+    int *global_num_entries = new int[1];
 
     const int *GIDList = &m;
     int *PIDList = new int[1];
     int *LIDList = new int[1];
     
     A_epetra.RowMap().RemoteIDList(1, GIDList, PIDList, LIDList);
-    A_epetra.ExtractGlobalRowCopy(m,A_epetra.NumGlobalCols(),num_entries,global_row,indicies);
-    if(PIDList[0] != 0){
-      //std::cout << "Break here" << std::endl;
-    }
+    A_epetra.ExtractGlobalRowCopy(m,A_epetra.NumGlobalCols(),local_num_entries,global_row,indicies);
+
+    *global_num_entries = local_num_entries;
     A_epetra.Comm().Broadcast(global_row,A_epetra.NumGlobalCols(),PIDList[0]);
     A_epetra.Comm().Broadcast(indicies,A_epetra.NumGlobalCols(),PIDList[0]);
-    for (int n = 0; n < A_epetra.NumGlobalCols(); n++) {
-      A(m,indicies[n]) = global_row[n];
+    A_epetra.Comm().Broadcast(global_num_entries,1,PIDList[0]);
+    if (*global_num_entries != 0) {
+      for (int n = 0; n < A_epetra.NumGlobalCols(); n++) {
+        A(m,indicies[n]) = global_row[n];
+      }
     }
     delete [] global_row;
     delete [] indicies;
+    delete [] global_num_entries;
     delete [] PIDList;
     delete [] LIDList;
   }

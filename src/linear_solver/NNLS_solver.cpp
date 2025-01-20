@@ -336,6 +336,11 @@ bool NNLS_solver::solve(){
       // Check if max. number of iterations is reached
       if (iter_ >= all_parameters->hyper_reduction_param.NNLS_max_iter){
         multi_x_ = allocateVectorToMultipleCores(this->x_);
+        std::cout << "Exited due to Max Iterations" << std::endl;
+        std::cout << "Norm-2 of b" << std::endl;
+        std::cout << normb[0] << std::endl;
+        std::cout << "Norm-2 of the residual (b-A*x)" << std::endl;
+        std::cout << normRes[0] << std::endl;
         return false;
       }
       // Create matrix P_mat with columns from set P

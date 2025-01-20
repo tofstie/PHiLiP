@@ -3489,10 +3489,6 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
     dealii::LinearAlgebra::distributed::Vector<double> temp_val (this->projection_matrix.locally_owned_range_indices(), this->mpi_communicator);
     // Global Volume Entropy
     this->projected_entropy= this->solution;
-    std::cout << "Temp val " << temp_val.size() << "x1" << std::endl;
-    std::cout << "Proj Mat " << this->projection_matrix.m() << "x" << this->projection_matrix.n() << std::endl;
-    std::cout << "Global Ent " << this->global_entropy.size() << "x1" << std::endl;
-
     this->projection_matrix.vmult(temp_val,this->global_entropy);
     V.vmult(this->projected_entropy,temp_val);
     // Global Face Entropy

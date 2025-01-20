@@ -52,11 +52,12 @@ end
 subsection reduced order
     set output_snapshot_every_x_timesteps = 5
     #set singular_value_threshold = 0.999999
+    #set number_modes = 70
     set path_to_search = .
 end
 
 subsection hyperreduction
-    set NNLS_tol = 1e-15
+    set NNLS_tol = 1e-8
     set NNLS_max_iter = 5000
-    set training_data = jacobian
+    set training_data = residual
 end

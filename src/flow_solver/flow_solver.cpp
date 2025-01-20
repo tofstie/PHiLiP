@@ -493,7 +493,8 @@ int FlowSolver<dim,nstate>::run() const
     // Boolean to store solutions in POD object
     const bool unsteady_FOM_POD_bool = all_param.reduced_order_param.output_snapshot_every_x_timesteps != 0 && !(ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_solver ||
        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver ||
-       ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver);
+       ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver ||
+       ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver);
 
     // Index of current desired fixed time to output solution
     unsigned int index_of_current_desired_fixed_time_to_output_solution = 0;

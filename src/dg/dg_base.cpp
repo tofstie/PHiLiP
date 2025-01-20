@@ -1784,7 +1784,19 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
     data_out.add_data_vector(reduced_mesh_weights, "reduced_mesh_weights", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
 
     data_out.add_data_vector(cell_volume, "cell_volume", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
+    // Output Cell Number
 
+    dealii::Vector<float> cell_idx(triangulation->n_active_cells());
+
+    for (const auto &cell : this->dof_handler.active_cell_iterators()) {
+        if (cell->is_locally_owned()) {
+            int cell_num = cell->active_cell_index();
+            cell_idx(cell_num) = (float)cell_num;
+        }
+    }
+
+    cell_idx.add(1.0);
+    data_out.add_data_vector(cell_idx, "cell_number", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
 
     // Let the physics post-processor determine what to output.
     const std::unique_ptr< dealii::DataPostprocessor<dim> > post_processor = Postprocess::PostprocessorFactory<dim>::create_Postprocessor(all_parameters);
@@ -1809,8 +1821,10 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
         if (std::signbit(rhs_value)) rhs_value = -rhs_value;
         if (rhs_value == 0.0) rhs_value = std::numeric_limits<double>::min();
     }
+
     residual.update_ghost_values();
     data_out.add_data_vector (residual, residual_names, dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_dof_data);
+
 
     typename dealii::DataOut<dim,dealii::DoFHandler<dim>>::CurvedCellRegion curved = dealii::DataOut<dim,dealii::DoFHandler<dim>>::CurvedCellRegion::curved_inner_cells;
     //typename dealii::DataOut<dim>::CurvedCellRegion curved = dealii::DataOut<dim>::CurvedCellRegion::curved_boundary;

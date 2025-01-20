@@ -159,7 +159,6 @@ void AssembleECSWBase<dim, nstate>::updateFOMLocations(MatrixXd &snapshot_matrix
         dealii::LinearAlgebra::distributed::Vector<double> fom_solution(this->dg->solution);
         for(int row = 0; row < quad_points; row++) {
             if(fom_solution.in_local_range(row)) fom_solution[row] = snapshot_matrix(row, col);
-            std::cout << fom_solution[row] << std::endl;
         }
         updateSnapshots(fom_solution);
     }

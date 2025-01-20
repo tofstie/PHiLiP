@@ -35,7 +35,7 @@ void AssembleECSWJac<dim,nstate>::build_problem(){
     int n_reduced_dim_POD = epetra_pod_basis.NumGlobalCols(); // Reduced subspace dimension
     int N_FOM_dim = epetra_pod_basis.NumGlobalRows(); // Length of solution vector
     int num_elements_N_e = this->dg->triangulation->n_active_cells(); // Number of elements (equal to N if there is one DOF per cell)
-
+    int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
     // Create empty and temporary C and d structs
     int training_snaps;
     // Check if all or a subset of the snapshots will be used for training
@@ -46,8 +46,9 @@ void AssembleECSWJac<dim,nstate>::build_problem(){
     else{
         training_snaps = num_snaps_POD;
     }
+    training_snaps = 1;
     const int rank = this->Comm_.MyPID();
-    int length = epetra_system_matrix.NumMyRows()/nstate;
+    int length = epetra_system_matrix.NumMyRows()/(nstate*n_quad_pts);
     int *local_elements = new int[length];
     int ctr = 0;
     for (const auto &cell : this->dg->dof_handler.active_cell_iterators())
@@ -79,6 +80,7 @@ void AssembleECSWJac<dim,nstate>::build_problem(){
 
         // Modifiy parameters for snapshot location and create new flow solver
         Parameters::AllParameters params = this->reinitParams(snap_param);
+        params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
         std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&params, this->parameter_handler);
         this->dg = flow_solver->dg;
 
