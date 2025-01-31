@@ -81,7 +81,7 @@ int PODUnsteady<dim,nstate>
 const {
     int number_of_timesteps = 0;
     int iteration = 0;
-    if(all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+    if(all_parameters->reduced_order_param.entropy_variables_in_snapshots){
         std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
         flow_solver->dg->calculate_projection_matrix(*pod_basis);
     }
@@ -126,7 +126,7 @@ const {
     dealii::ParameterHandler dummy_handler;
     FOM_param.ode_solver_param.ode_solver_type = ODESolverEnum::runge_kutta_solver;
     FOM_param.ode_solver_param.ode_output = OutputEnum::quiet;
-    FOM_param.reduced_order_param.entropy_varibles_in_snapshots = false;
+    FOM_param.reduced_order_param.entropy_variables_in_snapshots = false;
     const Parameters::AllParameters FOM_param_const = FOM_param;
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> FOM_flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&FOM_param_const, dummy_handler);
     FOM_flow_solver->dg->allocate_system(true, false, false);
@@ -716,7 +716,7 @@ void PODUnsteady<dim, nstate>
     ROM_integrated_values = integrate_quantities(*flow_solver->dg,euler_physics_double);
     double inner_product_ROM;
     // Assembling ROM vh^T*RHS
-    if(all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+    if(all_parameters->reduced_order_param.entropy_variables_in_snapshots){
          std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = offline_pod->getPODBasis();
         flow_solver->dg->calculate_global_entropy();
         flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis);

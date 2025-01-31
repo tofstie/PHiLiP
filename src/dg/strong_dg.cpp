@@ -1007,7 +1007,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
             soln_basis_projection_oper.matrix_vector_mult_1D(entropy_var_at_q[istate],
                                                              entropy_var_coeff,
                                                              soln_basis_projection_oper.oneD_vol_operator);
-            if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+            if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
                 for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns; i_shape_fns++){
 
                     entropy_var_coeff[i_shape_fns] = this->projected_entropy[cell_dofs_indices[istate*n_shape_fns+i_shape_fns]];
@@ -1570,7 +1570,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
                                                          entropy_var_coeff,
                                                          soln_basis_projection_oper.oneD_vol_operator);
         // Project ROM HERE
-        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+        if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
             for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns; i_shape_fns++){
                 entropy_var_coeff[i_shape_fns] = this->projected_entropy[dof_indices[istate*n_shape_fns+i_shape_fns]];
             }
@@ -2234,7 +2234,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
                                                              entropy_var_coeff_int,
                                                              soln_basis_projection_oper_int.oneD_vol_operator);
         // ROM Projection here
-        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+        if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
             for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns_int; i_shape_fns++){
                 entropy_var_coeff_int[i_shape_fns] = this->projected_entropy[dof_indices_int[istate*n_shape_fns_int+i_shape_fns]];
             }
@@ -2254,7 +2254,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
                                                              entropy_var_coeff_ext,
                                                              soln_basis_projection_oper_ext.oneD_vol_operator);
         // ROM Projection Here
-        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+        if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
             for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns_ext; i_shape_fns++){
                 entropy_var_coeff_ext[i_shape_fns] = this->projected_entropy[dof_indices_ext[istate*n_shape_fns_ext+i_shape_fns]];
             }
@@ -3483,6 +3483,22 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
+void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(Epetra_CrsMatrix &LHS, Epetra_CrsMatrix &LeV)
+{
+    Epetra_MpiComm comm( MPI_COMM_WORLD );
+    Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(LHS);
+    Eigen::MatrixXd LHS_inverse = LHS_eigen.inverse();
+    Epetra_CrsMatrix LHS_inverse_epetra = eig_to_epetra_matrix(LHS_inverse,LHS_eigen.cols(),LHS_eigen.rows(),comm);
+    Epetra_CrsMatrix LHSLeV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
+    Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
+    EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,LeV,true,LHSLeV);
+    EpetraExt::MatrixMatrix::Multiply(LHSLeV,false,this->global_mass_matrix.trilinos_matrix(),false,projection_matrix);
+    this->projection_matrix.reinit(projection_matrix);
+    std::ofstream file4("projection_matrix.txt");
+    this->projection_matrix.print(file4);
+}
+
+template <int dim, int nstate, typename real, typename MeshType>
 void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V)
 {
     
@@ -3501,6 +3517,19 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
     int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
     //this->projected_entropy /= pow(n_proccesses,1); 
     this->projected_entropy.update_ghost_values();
+    /*for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        if (this->reduced_mesh_weights[current_cell->index()] != 0 ) continue;
+        std::vector<dealii::types::global_dof_index> current_dofs_indices;
+        const int i_fele = current_cell->active_fe_index();
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        current_cell->get_dof_indices (current_dofs_indices);
+        for (auto idx : current_dofs_indices) {
+            this->projected_entropy[idx] = this->global_entropy[idx];
+        }
+    }*/
     std::ofstream proj_file("proj"+std::to_string(rank)+".txt");
     this->projected_entropy.print(proj_file);
     dealii::LinearAlgebra::distributed::Vector<double> entropy_diff(this->global_entropy);

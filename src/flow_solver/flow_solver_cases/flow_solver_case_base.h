@@ -70,6 +70,7 @@ public:
     /// Setter for time step
     void set_time_step(const double time_step_input);
 
+
 protected:
     const Parameters::AllParameters all_param; ///< All parameters
     const MPI_Comm mpi_communicator; ///< MPI communicator.

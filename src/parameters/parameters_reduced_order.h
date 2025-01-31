@@ -53,7 +53,7 @@ public:
     int output_snapshot_every_x_timesteps;
 
     /// Whether to include entropy varibles in snapshot
-    bool entropy_varibles_in_snapshots;
+    bool entropy_variables_in_snapshots;
 
     /// Type of linear solver used for first adjoint problem (DWR between FOM and ROM) (direct or gmres)
     LinearSolverEnum FOM_error_linear_solver_type;

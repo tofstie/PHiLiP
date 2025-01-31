@@ -3927,17 +3927,22 @@ void DGWeak<dim,nstate,real,MeshType>::allocate_dual_vector ()
 template <int dim, int nstate, typename real, typename MeshType>
 void DGWeak<dim,nstate,real,MeshType>::calculate_global_entropy()
 {
-    //Do Nothing... For now
+    //Do Nothing
 }
 template <int dim, int nstate, typename real, typename MeshType>
 void DGWeak<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &/*V*/)
 {
-    //Do Nothing... For now
+    //Do Nothing
+}
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim,nstate,real,MeshType>::calculate_projection_matrix(Epetra_CrsMatrix &/*LHS*/, Epetra_CrsMatrix &/*LeV*/)
+{
+    //Do Nothing
 }
 template <int dim, int nstate, typename real, typename MeshType>
 void DGWeak<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &/*V*/)
 {
-    //Do Nothing... For now
+    //Do Nothing
 }
 
 template <int dim, int nstate, typename real, typename MeshType>

@@ -30,6 +30,9 @@ void HyperReductionParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("ROM_error_tol", "0",
                           dealii::Patterns::Double(0, dealii::Patterns::Double::max_double_value),
                           "Minimum Error for ROM sampling point to be included in post-sampling HROM analysis");
+        prm.declare_entry("read_in_weights", "false",
+                        dealii::Patterns::Bool(),
+                        "Boolean to determine whether to read in Hyperreduction weights");
     }
     prm.leave_subsection();
 }
@@ -44,6 +47,7 @@ void HyperReductionParam::parse_parameters (dealii::ParameterHandler &prm)
         num_training_snaps = prm.get_integer("num_training_snaps");
         adapt_sampling_bool = prm.get_bool("adapt_sampling_bool");
         ROM_error_tol = prm.get_double("ROM_error_tol");
+        read_in_weights = prm.get_bool("read_in_weights");
     }
     prm.leave_subsection();
 }

@@ -30,6 +30,9 @@ public:
     /// Minimum Error for ROM sampling point to be included in post-sampling HROM analysis
     double ROM_error_tol;
 
+    /// Boolean to determine whether to read in weight file
+    bool read_in_weights;
+
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
     /// Parses input file and sets the variables.

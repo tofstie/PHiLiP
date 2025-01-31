@@ -45,7 +45,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         this->pcout << "LIMITED NUMBER OF SNAPSHOTS"<< std::endl;
         training_snaps = this->all_parameters->hyper_reduction_param.num_training_snaps;
     }
-    else if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+    else if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
         training_snaps = num_snaps_POD/2;
     }
     else {
@@ -78,11 +78,11 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
     std::vector<dealii::types::global_dof_index> current_dofs_indices(max_dofs_per_cell); 
     int row_num = 0;
     int snap_num = 0;
-    if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
-        dealii::TrilinosWrappers::SparseMatrix pod_basis;
-        pod_basis.reinit(epetra_pod_basis);
-        this->dg->calculate_projection_matrix(pod_basis);
-    }
+    //if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
+    //    dealii::TrilinosWrappers::SparseMatrix pod_basis;
+    //    pod_basis.reinit(epetra_pod_basis);
+    //    this->dg->calculate_projection_matrix(pod_basis);
+    //}
     Epetra_CrsMatrix projection_matrix_basis = this->dg->projection_matrix.trilinos_matrix();
     for(auto snap_param : this->snapshot_parameters.rowwise()){
         this->pcout << "Snapshot Parameter Values" << std::endl;
@@ -91,7 +91,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         // Modifiy parameters for snapshot location and create new flow solver
         Parameters::AllParameters params = this->reinitParams(snap_param);
         params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
-        params.reduced_order_param.entropy_varibles_in_snapshots = false;
+        params.reduced_order_param.entropy_variables_in_snapshots = false;
         std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&params, this->parameter_handler);
         this->dg = flow_solver->dg;
         this->dg->projection_matrix.reinit(projection_matrix_basis);
@@ -99,7 +99,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
         this->dg->solution = this->fom_locations[snap_num];
         const bool compute_dRdW = true;
         auto start_residual = std::chrono::high_resolution_clock::now();
-        if(params.reduced_order_param.entropy_varibles_in_snapshots){
+        if(params.reduced_order_param.entropy_variables_in_snapshots){
             dealii::TrilinosWrappers::SparseMatrix pod_basis;
             pod_basis.reinit(epetra_pod_basis);
             this->dg->calculate_global_entropy();

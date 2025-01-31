@@ -96,60 +96,93 @@ FlowSolver<dim, nstate>::FlowSolver(
     {
         std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod);
-        if(all_param.reduced_order_param.entropy_varibles_in_snapshots){
+        if(all_param.reduced_order_param.entropy_variables_in_snapshots){
             std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = pod->getPODBasis();
             this->dg->calculate_projection_matrix(*pod_basis);
         }
     } else if (ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver &&
-                (oneDoneNstate || oneDthreeNState)){
+                (oneDoneNstate || oneDthreeNState)) {
         std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
-        if(all_param.reduced_order_param.entropy_varibles_in_snapshots){
-            std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = pod->getPODBasis();
-            std::ofstream outfile2("basis_in_flowsolver.txt");
-            pod_basis->print(outfile2);
-            this->dg->calculate_projection_matrix(*pod_basis);
-        }
-        Eigen::MatrixXd snapshot_matrix = pod->getSnapshotMatrix();
-        int num_of_cols = snapshot_matrix.cols();
-        if (all_param.reduced_order_param.entropy_varibles_in_snapshots) num_of_cols /= 2;
-        std::cout << "Construct instance of Assembler..."<< std::endl;
-
-        std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
-        Eigen::MatrixXd snapshot_parameters(num_of_cols,1);
-        Epetra_MpiComm Comm( MPI_COMM_WORLD );
-        if(oneDoneNstate || oneDthreeNState) { // For templates
-            if (all_param.hyper_reduction_param.training_data == "residual")
-                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);
-            else {
-                constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type, Comm);
+        if(!all_param.hyper_reduction_param.read_in_weights) {
+            if(all_param.reduced_order_param.entropy_variables_in_snapshots){
+                std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = pod->getPODBasis();
+                std::ofstream outfile2("basis_in_flowsolver.txt");
+                pod_basis->print(outfile2);
+                this->dg->calculate_projection_matrix(*pod_basis);
             }
-        }
-        std::cout << "Build Problem..."<< std::endl;
-        std::cout << "Proj Mat " << this->dg->projection_matrix.m() << "x" << this->dg->projection_matrix.n() << std::endl;
-        constructer_NNLS_problem->updateFOMLocations(snapshot_matrix);
-        constructer_NNLS_problem->build_problem();
+            Eigen::MatrixXd snapshot_matrix = pod->getSnapshotMatrix();
+            int num_of_cols = snapshot_matrix.cols();
+            if (all_param.reduced_order_param.entropy_variables_in_snapshots) num_of_cols /= 2;
+            std::cout << "Construct instance of Assembler..."<< std::endl;
 
-        // Transfer b vector (RHS of NNLS problem) to Epetra structure
+            std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
+            Eigen::MatrixXd snapshot_parameters(num_of_cols,1);
+            Epetra_MpiComm Comm( MPI_COMM_WORLD );
+            if(oneDoneNstate || oneDthreeNState) { // For templates
+                if (all_param.hyper_reduction_param.training_data == "residual")
+                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);
+                else {
+                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type, Comm);
+                }
+            }
+            std::cout << "Build Problem..."<< std::endl;
+            std::cout << "Proj Mat " << this->dg->projection_matrix.m() << "x" << this->dg->projection_matrix.n() << std::endl;
+            constructer_NNLS_problem->updateFOMLocations(snapshot_matrix);
+            constructer_NNLS_problem->build_problem();
 
-        Epetra_Map bMap = (constructer_NNLS_problem->A_T->trilinos_matrix()).DomainMap();
-        Epetra_Vector b_Epetra (bMap);
-        auto b = constructer_NNLS_problem->b;
-        for(unsigned int i = 0 ; i < b.size() ; i++){
-            b_Epetra[i] = b(i);
+            // Transfer b vector (RHS of NNLS problem) to Epetra structure
+
+            Epetra_Map bMap = (constructer_NNLS_problem->A_T->trilinos_matrix()).DomainMap();
+            Epetra_Vector b_Epetra (bMap);
+            auto b = constructer_NNLS_problem->b;
+            for(unsigned int i = 0 ; i < b.size() ; i++){
+                b_Epetra[i] = b(i);
+            }
+            Epetra_CrsMatrix A = constructer_NNLS_problem->A_T->trilinos_matrix();
+            std::ofstream file_test("Test1.txt");
+            constructer_NNLS_problem->A_T->trilinos_matrix().Print(file_test);
+            // Solve NNLS Problem for ECSW weights
+            std::cout << "Create NNLS problem..."<< std::endl;
+            NNLS_solver NNLS_prob(&all_param, parameter_handler, A, true, Comm, b_Epetra);
+            std::cout << "Solve NNLS problem..."<< std::endl;
+            bool exit_con = NNLS_prob.solve();
+            std::cout << exit_con << std::endl;
+            Epetra_Vector weights = NNLS_prob.getSolution();
+            // ONLY WORKS FOR ONE CORE
+            std::ofstream outfile("Weights_FS.txt");
+            for (int i = 0;i < weights.GlobalLength();i++) {
+                outfile << weights[i] << '\n';
+            }
+            outfile.close();
+            ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
+        } else {
+            // ONLY WORKS FOR ONE CORE
+            Epetra_MpiComm Comm( MPI_COMM_WORLD );
+            std::ifstream infile("Weights_FS.txt");
+            std::string line;
+            int num_elements_N_e = this->dg->triangulation->n_active_cells(); // Number of elements (equal to N if there is one DOF per cell)
+            int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
+            int length = this->dg->system_matrix.trilinos_matrix().NumMyRows()/(nstate*n_quad_pts);
+            int *local_elements = new int[length];
+            int ctr = 0;
+            for (const auto &cell : this->dg->dof_handler.active_cell_iterators())
+            {
+                if (cell->is_locally_owned()){
+                    local_elements[ctr] = cell->active_cell_index();
+                    ctr +=1;
+                }
+            }
+            Epetra_Map ColMap(num_elements_N_e, length, local_elements, 0, Comm);
+            int index = 0;
+            Epetra_Vector weights(ColMap);
+            while(std::getline(infile, line)) {
+                weights[index] = stod(line);
+                index++;
+            }
+            infile.close();
+            ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
         }
-        Epetra_CrsMatrix A = constructer_NNLS_problem->A_T->trilinos_matrix();
-        std::ofstream file_test("Test1.txt");
-        constructer_NNLS_problem->A_T->trilinos_matrix().Print(file_test);
-        // Solve NNLS Problem for ECSW weights
-        std::cout << "Create NNLS problem..."<< std::endl;
-        NNLS_solver NNLS_prob(&all_param, parameter_handler, A, true, Comm, b_Epetra);
-        std::cout << "Solve NNLS problem..."<< std::endl;
-        bool exit_con = NNLS_prob.solve();
-        std::cout << exit_con << std::endl;
-        Epetra_Vector weights = NNLS_prob.getSolution();
-        std::ofstream outfile("Weights_FS.txt");
-        weights.Print(outfile);
-        ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
+
     } else {
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg);
     }

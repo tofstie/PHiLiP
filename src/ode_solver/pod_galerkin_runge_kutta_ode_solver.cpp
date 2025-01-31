@@ -51,7 +51,7 @@ template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_stage_derivative(int istage, real dt)
 {
     this->dg->set_current_time(this->current_time + this->butcher_tableau->get_c(istage)*dt);
-    if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+    if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
         dealii::TrilinosWrappers::SparseMatrix pod_basis;
         pod_basis.reinit(epetra_pod_basis);
         this->dg->calculate_global_entropy();
@@ -197,7 +197,7 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::allocate_run
     for (int istage=0; istage<n_rk_stages; ++istage){
         this->reduced_rk_stage[istage].reinit(reduced_index, this->mpi_communicator); // Add IndexSet
     }
-if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
         dealii::TrilinosWrappers::SparseMatrix pod_basis;
         pod_basis.reinit(epetra_pod_basis);
         int rank = epetra_pod_basis.Comm().MyPID();

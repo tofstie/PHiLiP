@@ -106,8 +106,9 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
     // Changed for loop to update metric_cell.
     for (auto cell = dg.dof_handler.begin_active(); cell!= dg.dof_handler.end(); ++cell, ++metric_cell) {
         if (!cell->is_locally_owned()) continue;
+        if (dg.reduced_mesh_weights[cell->active_cell_index()] == 0) continue;
         cell->get_dof_indices (dofs_indices);
-
+        const dealii::types::global_dof_index cell_index = cell->active_cell_index();
         // We first need to extract the mapping support points (grid nodes) from high_order_grid.
         const dealii::FESystem<dim> &fe_metric = dg.high_order_grid->fe_system;
         const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
@@ -210,7 +211,7 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
                 //Using std::cout because of cell->is_locally_owned check 
                 if (isnan(quadrature_entropy)){  
                     std::cout << "WARNING: NaN entropy detected at a node!"  << std::endl;}
-                integrated_quantity += quadrature_entropy * quad_weights[iquad] * metric_oper.det_Jac_vol[iquad];
+                integrated_quantity += quadrature_entropy * quad_weights[iquad] * metric_oper.det_Jac_vol[iquad] * dg.reduced_mesh_weights[cell_index];
             } else if (quantity == IntegratedQuantityEnum::max_wave_speed) {
                 const double local_wave_speed = this->euler_physics->max_convective_eigenvalue(soln_at_q);
                 if(local_wave_speed > integrated_quantity) integrated_quantity = local_wave_speed;

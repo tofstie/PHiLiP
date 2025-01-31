@@ -42,7 +42,7 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("output_snapshot_every_x_timesteps","0",
                           dealii::Patterns::Integer(0,dealii::Patterns::Integer::max_int_value),
                           "Number of Timesteps before snapshot is added");
-        prm.declare_entry("entropy_varibles_in_snapshots", "false",
+        prm.declare_entry("entropy_variables_in_snapshots", "false",
                            dealii::Patterns::Bool(),
                            "Adds Entropy varibles to snapshots, false by default");
         prm.declare_entry("FOM_error_linear_solver_type", "direct",
@@ -69,7 +69,7 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         number_modes = prm.get_integer("number_modes");
         output_snapshot_every_x_timesteps = prm.get_integer("output_snapshot_every_x_timesteps");
         path_to_search = prm.get("path_to_search");
-        entropy_varibles_in_snapshots = prm.get_bool("entropy_varibles_in_snapshots");
+        entropy_variables_in_snapshots = prm.get_bool("entropy_variables_in_snapshots");
         std::string parameter_names_string = prm.get("parameter_names");
         std::unique_ptr<dealii::Patterns::PatternBase> ListPatternNames(new dealii::Patterns::List(dealii::Patterns::Anything(), 0, 10, ",")); //Note, in a future version of dealii, this may change from a unique_ptr to simply the object. Will need to use std::move(ListPattern) in next line.
         parameter_names = dealii::Patterns::Tools::Convert<decltype(parameter_names)>::to_value(parameter_names_string, ListPatternNames);

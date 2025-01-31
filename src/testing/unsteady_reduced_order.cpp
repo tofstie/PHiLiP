@@ -40,7 +40,7 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     flow_solver_galerkin->run();
 
     // Change Parameters to Entropy-Stable ROM
-    ROM_param.reduced_order_param.entropy_varibles_in_snapshots = true;
+    ROM_param.reduced_order_param.entropy_variables_in_snapshots = true;
     const Parameters::AllParameters Entropy_ROM_param_const = ROM_param;
     // Create ROM and Solve
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_entropy_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&Entropy_ROM_param_const, parameter_handler);

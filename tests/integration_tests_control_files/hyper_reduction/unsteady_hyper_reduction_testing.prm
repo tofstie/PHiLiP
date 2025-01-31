@@ -60,4 +60,5 @@ subsection hyperreduction
     set NNLS_tol = 1e-8
     set NNLS_max_iter = 5000
     set training_data = residual
+    set read_in_weights = true
 end
