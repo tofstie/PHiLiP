@@ -3487,15 +3487,49 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(Epetra_CrsM
 {
     Epetra_MpiComm comm( MPI_COMM_WORLD );
     Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(LHS);
+    std::ofstream eigen_lhs("lhs_eigen.txt");
+
+    std::ofstream lhs_file("lhs.txt");
+    //dealii::LAPACKFullMatrix<double> LHS_LAPACK = eig_to_lapack_matrix(LHS_eigen);
+    //LHS_LAPACK.print_formatted(lhs_file,16,true,0,"0");
     Eigen::MatrixXd LHS_inverse = LHS_eigen.inverse();
+    //eigen_lhs << LHS_inverse;
+    std::ofstream inverse_file("inverse.txt");
+    //dealii::LAPACKFullMatrix<double> LHSINVERSE_LAPACK = eig_to_lapack_matrix(LHS_inverse);
+    //LHSINVERSE_LAPACK.print_formatted(inverse_file,16,true,0,"0");
     Epetra_CrsMatrix LHS_inverse_epetra = eig_to_epetra_matrix(LHS_inverse,LHS_eigen.cols(),LHS_eigen.rows(),comm);
+    std::ofstream LHS_INVERSE_FILE_EPETRA("inverse_epetra.txt");
+    //LHS_inverse_epetra.Print(LHS_INVERSE_FILE_EPETRA);
     Epetra_CrsMatrix LHSLeV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
     Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
     EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,LeV,true,LHSLeV);
     EpetraExt::MatrixMatrix::Multiply(LHSLeV,false,this->global_mass_matrix.trilinos_matrix(),false,projection_matrix);
     this->projection_matrix.reinit(projection_matrix);
     std::ofstream file4("projection_matrix.txt");
-    this->projection_matrix.print(file4);
+    //projection_matrix.Print(file4);
+    std::ofstream mass_epetra_file("mass_epetra.txt");
+    this->global_mass_matrix.trilinos_matrix().Print(mass_epetra_file);
+    /*
+    {
+        Eigen::MatrixXd LeV_eig = epetra_to_eig_matrix(LeV);
+        dealii::LAPACKFullMatrix<double> LeV_lapack = eig_to_lapack_matrix(LeV_eig);
+        std::ofstream LeV_file("LeV_proj.txt");
+        LeV_lapack.print_formatted(LeV_file,16,true,0,"0");
+    }
+    {
+        Eigen::MatrixXd LeV_eig = epetra_to_eig_matrix(projection_matrix);
+        dealii::LAPACKFullMatrix<double> proj_mat_lapack = eig_to_lapack_matrix(LeV_eig);
+        std::ofstream proj_file("proj_matrix.txt");
+        proj_mat_lapack.print_formatted(proj_file,16,true,0,"0");
+    }
+    {
+        Epetra_CrsMatrix mass = this->global_mass_matrix.trilinos_matrix();
+        Eigen::MatrixXd mass_eig = epetra_to_eig_matrix(mass);
+        dealii::LAPACKFullMatrix<double> mass_lapack = eig_to_lapack_matrix(mass_eig);
+        std::ofstream LeV_file("mass_proj.txt");
+        mass_lapack.print_formatted(LeV_file,16,true,0,"0");
+    }
+    */
 }
 
 template <int dim, int nstate, typename real, typename MeshType>

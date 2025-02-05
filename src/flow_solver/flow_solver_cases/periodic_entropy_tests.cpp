@@ -106,7 +106,7 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
     // Changed for loop to update metric_cell.
     for (auto cell = dg.dof_handler.begin_active(); cell!= dg.dof_handler.end(); ++cell, ++metric_cell) {
         if (!cell->is_locally_owned()) continue;
-        if (dg.reduced_mesh_weights[cell->active_cell_index()] == 0) continue;
+        //if (dg.reduced_mesh_weights[cell->active_cell_index()] == 0) continue;
         cell->get_dof_indices (dofs_indices);
         const dealii::types::global_dof_index cell_index = cell->active_cell_index();
         // We first need to extract the mapping support points (grid nodes) from high_order_grid.

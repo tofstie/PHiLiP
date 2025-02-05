@@ -378,6 +378,8 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
     for (auto cell = this->dg->dof_handler.begin_active(); cell!=this->dg->dof_handler.end(); ++cell, ++metric_cell) {
 
         if (!cell->is_locally_owned()) continue;
+        if (ECSW_weights[cell->active_cell_index()] == 0) continue;
+
         this->dg->global_mass_matrix.reinit(this->dg->locally_owned_dofs, this->dg->mass_sparsity_pattern);
         const bool Cartesian_element = (cell->manifold_id() == dealii::numbers::flat_manifold_id);
 

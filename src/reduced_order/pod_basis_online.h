@@ -55,6 +55,11 @@ public:
     /// Compute new POD basis from snapshots
     void computeBasis();
 
+    void CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2error_data_table,
+                   Physics::Euler<dim,dim+2,double> euler_physics_double,
+                   double current_time,
+                   int iteration) override;
+
     /// POD basis
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> basis;
 

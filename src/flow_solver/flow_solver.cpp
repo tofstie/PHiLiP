@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <sstream>
+#include <limits>
 #include "reduced_order/pod_basis_offline.h"
 #include "reduced_order/pod_basis_online.h"
 #include "reduced_order/assemble_ECSW_residual.h"
@@ -529,9 +530,23 @@ int FlowSolver<dim,nstate>::run() const
        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver ||
        ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver);
 
+    // Boolean to store if this run is an unsteady POD.
+    const bool unsteady_POD_bool = (ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver ||
+                                    ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver);
+    // Hard coding for the moment .. Can be changed later. Add physics_Base into POd stuff
+    Physics::Euler<dim,dim+2,double> euler_physics_double
+    = Physics::Euler<dim, dim+2, double>(
+            &all_param,
+            all_param.euler_param.ref_length,
+            all_param.euler_param.gamma_gas,
+            all_param.euler_param.mach_inf,
+            all_param.euler_param.angle_of_attack,
+            all_param.euler_param.side_slip_angle);
+
     // Index of current desired fixed time to output solution
     unsigned int index_of_current_desired_fixed_time_to_output_solution = 0;
-    
+
+    int index_of_snapshot = 0;
     // determine index_of_current_desired_fixed_time_to_output_solution if restarting solution
     if(flow_solver_param.restart_computation_from_file == true) {
         // use current_time to determine if restarting the computation from a non-zero initial time
@@ -589,6 +604,7 @@ int FlowSolver<dim,nstate>::run() const
         // dealii::TableHandler and data at initial time
         //----------------------------------------------------
         std::shared_ptr<dealii::TableHandler> unsteady_data_table = std::make_shared<dealii::TableHandler>();
+        std::shared_ptr<dealii::TableHandler> POD_l2_data_table = std::make_shared<dealii::TableHandler>();
         if(flow_solver_param.restart_computation_from_file == true) {
             pcout << "Initializing data table from corresponding restart file... " << std::flush;
             const std::string restart_filename_without_extension = get_restart_filename_without_extension(flow_solver_param.restart_file_index);
@@ -599,6 +615,7 @@ int FlowSolver<dim,nstate>::run() const
             // no restart:
             pcout << "Writing unsteady data computed at initial time... " << std::endl;
             flow_solver_case->compute_unsteady_data_and_write_to_table(ode_solver, dg, unsteady_data_table);
+            if (unsteady_POD_bool) ode_solver->pod->CalculateL2Error(POD_l2_data_table,euler_physics_double,ode_solver->current_time,index_of_snapshot);
             pcout << "done." << std::endl;
         }
         //----------------------------------------------------
@@ -707,13 +724,17 @@ int FlowSolver<dim,nstate>::run() const
                 const bool is_snapshot_iteration = (ode_solver->current_iteration % all_param.reduced_order_param.output_snapshot_every_x_timesteps == 0);
                 if(is_snapshot_iteration) time_pod->addSnapshot(dg->solution);
             }
+            if(unsteady_POD_bool) {
+                const bool is_snapshot_iteration = (ode_solver->current_iteration % all_param.reduced_order_param.output_snapshot_every_x_timesteps == 0);
+                if (is_snapshot_iteration) ode_solver->pod->CalculateL2Error(POD_l2_data_table,euler_physics_double,ode_solver->current_time,++index_of_snapshot);
+            }
         } // close while
 
         // Print POD Snapshots to file
         if(unsteady_FOM_POD_bool){
             std::ofstream snapshot_file("solution_snapshots_iteration_" + std::to_string(ode_solver->current_iteration) + ".txt"); // Change ode_solver->current_iteration to size of matrix
-            unsigned int precision = 16;
-            time_pod->dealiiSnapshotMatrix.print_formatted(snapshot_file, precision, true, 0, "0");
+            constexpr unsigned int precision = 16;
+            time_pod->dealiiSnapshotMatrix.print_formatted(snapshot_file, precision, true, 0, "0",1.,2*std::numeric_limits<double>::min());
             snapshot_file.close();
         }
 

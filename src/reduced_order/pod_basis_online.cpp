@@ -153,8 +153,15 @@ template <int dim>
 MatrixXd OnlinePOD<dim>::getTestBasis() {
     return snapshotMatrix;
 };
+template <int dim>
 
-
+void OnlinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> /*L2error_data_table*/,
+               Physics::Euler<dim,dim+2,double> /*euler_physics_double*/,
+               double /*current_time*/,
+               int /*iteration*/)
+{
+    return;
+}
 template class OnlinePOD <PHILIP_DIM>;
 
 }

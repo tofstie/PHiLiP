@@ -203,7 +203,7 @@ if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
         int rank = epetra_pod_basis.Comm().MyPID();
         std::ofstream sum_file("Epetra_ODE_"+std::to_string(rank)+".txt");
         epetra_pod_basis.Print(sum_file);
-        this->dg->calculate_projection_matrix(pod_basis);
+        this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_test_basis);
     }
 
 }

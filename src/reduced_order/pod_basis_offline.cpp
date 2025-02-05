@@ -986,8 +986,199 @@ void OfflinePOD<dim>::matchQuadratureLocation(){ // Currently only works for 2D,
     }
 
 }
-    template <int dim>
-    void OfflinePOD<dim>::PrintMapInfo(const Epetra_Map &map) {
+template <int dim>
+void OfflinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2error_data_table,
+                   Physics::Euler<dim,dim+2,double> euler_physics_double,
+                   double current_time,
+                   int iteration) {
+    const std::string file_name = dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots ?
+                                                                                    "esrom_l2_error.txt" :
+                                                                                      "rom_l2_error.dat" ;
+    dealii::LinearAlgebra::distributed::Vector<double> FOM_solution(this->dg->solution);
+    dealii::LinearAlgebra::distributed::Vector<double> ROM_solution(this->dg->solution);
+    for(int m = 0; m < snapshotMatrix.rows();m++){
+        if(FOM_solution.in_local_range(m)){
+            FOM_solution(m) = snapshotMatrix(m,iteration);
+        }
+    }
+    ROM_solution = this->dg->solution;
+    this->dg->solution = FOM_solution;
+
+    std::array<std::vector<double>,4> FOM_quantities;
+    FOM_quantities = compute_quantities(*this->dg,euler_physics_double);
+    this->dg->solution = ROM_solution;
+    std::array<std::vector<double>,4> ROM_quantities;
+    ROM_quantities = compute_quantities(*this->dg,euler_physics_double);
+    std::array<double,4> L2_error {{0,0,0,0}};
+    std::array<double,4> FOM_sum {{0,0,0,0}};
+
+    for(unsigned int iquad = 0; iquad < FOM_quantities[0].size(); iquad++ ){
+        for(int i = 0; i < 4; i++){
+            L2_error[i] += std::pow((FOM_quantities[i][iquad]-ROM_quantities[i][iquad]),2);
+            FOM_sum[i] += std::pow(FOM_quantities[i][iquad],2);
+        }
+    }
+    for (int i = 0; i < 4; i++){
+        L2_error[i] /= FOM_sum[i];
+        L2_error[i] = std::sqrt(L2_error[i]);
+    }
+    std::array<std::string,4> L2_labels {{"density_l2","pressure_l2","tke_l2","entropy_l2"}};
+    if(this->mpi_rank==0) {
+        L2error_data_table->add_value("iteration",iteration);
+        L2error_data_table->set_precision("iteration", 16);
+        L2error_data_table->set_scientific("iteration", false);
+
+        L2error_data_table->add_value("time",current_time);
+        L2error_data_table->set_precision("time", 16);
+        L2error_data_table->set_scientific("time", true);
+        for(int i = 0; i < 4; i++){
+            L2error_data_table->add_value(L2_labels[i],L2_error[i]);
+            L2error_data_table->set_precision(L2_labels[i], 16);
+            L2error_data_table->set_scientific(L2_labels[i], true);
+        }
+
+        std::ofstream l2_error_table_file(file_name);
+        L2error_data_table->write_text(l2_error_table_file);
+    }
+}
+
+template <int dim>
+std::array<std::vector<double>,4> OfflinePOD<dim>
+::compute_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const {
+
+    // Code here a block to compute soln at q for the snapshot and dg solution
+    std::array<std::vector<double>,4> l2_values;
+    //std::fill(l2_values.begin(), l2_values.end(), 0.0);
+    // Overintegrate the error to make sure there is not integration error in the error estimate
+    int overintegrate = 0;
+    // Set the quadrature of size dim and 1D for sum-factorization.
+    dealii::QGauss<dim> quad_extra(dg.max_degree+1+overintegrate);
+    dealii::QGauss<1> quad_extra_1D(dg.max_degree+1+overintegrate);
+    constexpr int nstate = dim+2; // Hard coded euler
+    const unsigned int n_quad_pts = quad_extra.size();
+    const unsigned int grid_degree = dg.high_order_grid->fe_system.tensor_degree();
+    const unsigned int poly_degree = dg.max_degree;
+
+    OPERATOR::basis_functions<dim,2*dim,double> soln_basis(1, poly_degree, grid_degree);
+    OPERATOR::mapping_shape_functions<dim,2*dim,double> mapping_basis(1, poly_degree, grid_degree);
+
+    soln_basis.build_1D_volume_operator(dg.oneD_fe_collection_1state[poly_degree], quad_extra_1D);
+    soln_basis.build_1D_gradient_operator(dg.oneD_fe_collection_1state[poly_degree], quad_extra_1D);
+    mapping_basis.build_1D_shape_functions_at_grid_nodes(dg.high_order_grid->oneD_fe_system, dg.high_order_grid->oneD_grid_nodes);
+    mapping_basis.build_1D_shape_functions_at_flux_nodes(dg.high_order_grid->oneD_fe_system, quad_extra_1D, dg.oneD_face_quadrature);
+
+    const bool store_vol_flux_nodes = false;//currently doesn't need the volume physical nodal position
+    const bool store_surf_flux_nodes = false;//currently doesn't need the surface physical nodal position
+
+    const unsigned int n_dofs = dg.fe_collection[poly_degree].n_dofs_per_cell();
+    const unsigned int n_shape_fns = n_dofs / nstate;
+    std::vector<dealii::types::global_dof_index> dofs_indices (n_dofs);
+    auto metric_cell = dg.high_order_grid->dof_handler_grid.begin_active();
+    for (auto cell = dg.dof_handler.begin_active(); cell!= dg.dof_handler.end(); ++cell, ++metric_cell) {
+        if (!cell->is_locally_owned()) continue;
+        cell->get_dof_indices (dofs_indices);
+
+        // We first need to extract the mapping support points (grid nodes) from high_order_grid.
+        const dealii::FESystem<dim> &fe_metric = dg.high_order_grid->fe_system;
+        const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
+        const unsigned int n_grid_nodes  = n_metric_dofs / dim;
+        std::vector<dealii::types::global_dof_index> metric_dof_indices(n_metric_dofs);
+        metric_cell->get_dof_indices (metric_dof_indices);
+        std::array<std::vector<double>,dim> mapping_support_points;
+        for(int idim=0; idim<dim; idim++){
+            mapping_support_points[idim].resize(n_grid_nodes);
+        }
+        // Get the mapping support points (physical grid nodes) from high_order_grid.
+        // Store it in such a way we can use sum-factorization on it with the mapping basis functions.
+        const std::vector<unsigned int > &index_renumbering = dealii::FETools::hierarchic_to_lexicographic_numbering<dim>(grid_degree);
+        for (unsigned int idof = 0; idof< n_metric_dofs; ++idof) {
+            const double val = (dg.high_order_grid->volume_nodes[metric_dof_indices[idof]]);
+            const unsigned int istate = fe_metric.system_to_component_index(idof).first;
+            const unsigned int ishape = fe_metric.system_to_component_index(idof).second;
+            const unsigned int igrid_node = index_renumbering[ishape];
+            mapping_support_points[istate][igrid_node] = val;
+        }
+        // Construct the metric operators.
+        OPERATOR::metric_operators<double, dim, 2*dim> metric_oper(nstate, poly_degree, grid_degree, store_vol_flux_nodes, store_surf_flux_nodes);
+        // Build the metric terms to compute the gradient and volume node positions.
+        // This functions will compute the determinant of the metric Jacobian and metric cofactor matrix.
+        // If flags store_vol_flux_nodes and store_surf_flux_nodes set as true it will also compute the physical quadrature positions.
+        metric_oper.build_volume_metric_operators(
+            n_quad_pts, n_grid_nodes,
+            mapping_support_points,
+            mapping_basis,
+            dg.all_parameters->use_invariant_curl_form);
+
+        // Fetch the modal soln coefficients
+        // We immediately separate them by state as to be able to use sum-factorization
+        // in the interpolation operator. If we left it by n_dofs_cell, then the matrix-vector
+        // mult would sum the states at the quadrature point.
+        // That is why the basis functions are based off the 1state oneD fe_collection.
+        std::array<std::vector<double>,nstate> soln_coeff;
+        for (unsigned int idof = 0; idof < n_dofs; ++idof) {
+            const unsigned int istate = dg.fe_collection[poly_degree].system_to_component_index(idof).first;
+            const unsigned int ishape = dg.fe_collection[poly_degree].system_to_component_index(idof).second;
+            if(ishape == 0){
+                soln_coeff[istate].resize(n_shape_fns);
+            }
+
+            soln_coeff[istate][ishape] = dg.solution(dofs_indices[idof]);
+        }
+        // Interpolate each state to the quadrature points using sum-factorization
+        // with the basis functions in each reference direction.
+        std::array<std::vector<double>,nstate> soln_at_q_vect;
+        std::array<dealii::Tensor<1,dim,std::vector<double>>,nstate> soln_grad_at_q_vect;
+        for(int istate=0; istate<nstate; istate++){
+            soln_at_q_vect[istate].resize(n_quad_pts);
+            // Interpolate soln coeff to volume cubature nodes.
+            soln_basis.matrix_vector_mult_1D(soln_coeff[istate], soln_at_q_vect[istate],
+                                             soln_basis.oneD_vol_operator);
+            // We need to first compute the reference gradient of the solution, then transform that to a physical gradient.
+            dealii::Tensor<1,dim,std::vector<double>> ref_gradient_basis_fns_times_soln;
+            for(int idim=0; idim<dim; idim++){
+                ref_gradient_basis_fns_times_soln[idim].resize(n_quad_pts);
+                soln_grad_at_q_vect[istate][idim].resize(n_quad_pts);
+            }
+            // Apply gradient of reference basis functions on the solution at volume cubature nodes.}
+            soln_basis.gradient_matrix_vector_mult_1D(soln_coeff[istate], ref_gradient_basis_fns_times_soln,
+                                                      soln_basis.oneD_vol_operator,
+                                                      soln_basis.oneD_grad_operator);
+            // Transform the reference gradient into a physical gradient operator.
+            for(int idim=0; idim<dim; idim++){
+                for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+                    for(int jdim=0; jdim<dim; jdim++){
+                        //transform into the physical gradient
+                        soln_grad_at_q_vect[istate][idim][iquad] += metric_oper.metric_cofactor_vol[idim][jdim][iquad]
+                                                                  * ref_gradient_basis_fns_times_soln[jdim][iquad]
+                                                                  / metric_oper.det_Jac_vol[iquad];
+                    }
+                }
+            }
+        }
+
+        // Loop over quadrature nodes, compute quantities to be integrated, and integrate them.
+        for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad) {
+            std::array<double,nstate> soln_at_q;
+            // Extract solution and gradient in a way that the physics ca n use them.
+            for(int istate=0; istate<nstate; istate++){
+                soln_at_q[istate] = soln_at_q_vect[istate][iquad];
+            }
+
+            double const pressure = euler_physics.compute_pressure(soln_at_q);
+            double entropy = euler_physics.compute_entropy_measure(soln_at_q);
+            double KE = euler_physics.compute_kinetic_energy_from_conservative_solution(soln_at_q);
+            l2_values[0].push_back(soln_at_q[0]);
+            l2_values[1].push_back(pressure);
+            l2_values[2].push_back(KE);
+            l2_values[3].push_back(entropy);
+
+        }
+    }
+    return l2_values;
+}
+
+template <int dim>
+void OfflinePOD<dim>::PrintMapInfo(const Epetra_Map &map) {
     std::cout << "Map Information:" << std::endl;
     std::cout << "  Number of Global Elements: " << map.NumGlobalElements() << std::endl;
     std::cout << "  Number of Local Elements: " << map.NumMyElements() << std::endl;

@@ -50,6 +50,10 @@ public:
     /// POD basis
     void calculatePODBasis(MatrixXd snapshots, std::string reference_type);
 
+    void CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2error_data_table,
+                   Physics::Euler<dim,dim+2,double> euler_physics_double,
+                   double current_time,
+                   int iteration) override;
 
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> basis;
 
@@ -92,7 +96,7 @@ public:
 
     void debugMatrix(dealii::FullMatrix<double> M);
 
-
+    std::array<std::vector<double>,4> compute_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const;
     void PrintMapInfo(const Epetra_Map &map);
 
     /*
