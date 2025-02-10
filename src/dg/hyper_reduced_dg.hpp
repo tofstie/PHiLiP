@@ -259,6 +259,8 @@ protected:
         const dealii::FEValues<dim,dim> &fe_values_lagrange);
 
     void assemble_hyper_reduced_derivative();
+
+    using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
 };
 }
 #endif //__HYPERREDUCED_DISCONTINUOUSGALERKIN_H__

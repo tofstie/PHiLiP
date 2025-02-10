@@ -7,7 +7,7 @@ set(DG_SOURCE
     strong_dg.cpp
     artificial_dissipation.cpp
     artificial_dissipation_factory.cpp
-    # hyper_reduced_dg.cpp
+    hyper_reduced_dg.cpp
 )
 
 foreach(dim RANGE 1 3)
