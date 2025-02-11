@@ -204,6 +204,7 @@ if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
         std::ofstream sum_file("Epetra_ODE_"+std::to_string(rank)+".txt");
         epetra_pod_basis.Print(sum_file);
         this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_test_basis);
+        this->dg->set_galerkin_basis(epetra_test_basis);
     }
 
 }

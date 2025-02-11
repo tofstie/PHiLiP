@@ -100,10 +100,13 @@ void FlowSolverCaseBase<dim,nstate>::display_flow_solver_setup(std::shared_ptr<D
     pcout << "- Number of active cells: " << dg->triangulation->n_global_active_cells() << std::endl;
     
     const bool use_weak_form = this->all_param.use_weak_form;
-    
+    const bool hyperreduction_dg = Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver == this->all_param.ode_solver_param.hyper_reduced_galerkin_runge_kutta_solver;
     if (use_weak_form == false){
-        this->pcout << "- Using strong DG" << std::endl;
-
+        if (hyperreduction_dg) {
+            this->pcout << "- Using hyper DG" << std::endl;
+        } else {
+            this->pcout << "- Using strong DG" << std::endl;
+        }
         // only print c param for strong DG as FR is implemented only for strong
         std::string c_parameter_string;
         using FREnum = Parameters::AllParameters::Flux_Reconstruction;

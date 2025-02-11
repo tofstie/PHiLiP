@@ -1,4 +1,6 @@
 #include "dg_factory.hpp"
+
+#include "hyper_reduced_dg.hpp"
 #include "weak_dg.hpp"
 #include "strong_dg.hpp"
 
@@ -16,6 +18,8 @@ DGFactory<dim,real,MeshType>
 {
     using PDE_enum   = Parameters::AllParameters::PartialDifferentialEquation;
     const PDE_enum pde_type = parameters_input->pde_type;
+    using ODE_enum = Parameters::ODESolverParam::ODESolverEnum;
+    const ODE_enum ode_type = parameters_input->ode_solver_param.ode_solver_type;
     using Model_enum = Parameters::AllParameters::ModelType;
     const Model_enum model_type = parameters_input->model_type;
     using RANSModel_enum = Parameters::PhysicsModelParam::ReynoldsAveragedNavierStokesModel;
@@ -48,7 +52,16 @@ DGFactory<dim,real,MeshType>
             return std::make_shared< DGWeak<dim,dim+2,real,MeshType> >(parameters_input, degree, max_degree_input, grid_degree_input, triangulation_input);
         }
 #endif
-    } else {
+    }
+    else if (ode_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver){
+        if (pde_type == PDE_enum::euler) {
+            return std::make_shared<DGHyper<dim,dim+2,real,MeshType> >(parameters_input, degree, max_degree_input, grid_degree_input, triangulation_input);
+        } else {
+            std::cout << "Invalid type for now";
+            return nullptr;
+        }
+    }
+    else {
         if (pde_type == PDE_enum::advection) {
             return std::make_shared< DGStrong<dim,1,real,MeshType> >(parameters_input, degree, max_degree_input, grid_degree_input, triangulation_input);
         } else if (pde_type == PDE_enum::advection_vector) {

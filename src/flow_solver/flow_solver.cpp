@@ -119,11 +119,15 @@ FlowSolver<dim, nstate>::FlowSolver(
             std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
             Eigen::MatrixXd snapshot_parameters(num_of_cols,1);
             Epetra_MpiComm Comm( MPI_COMM_WORLD );
+            PHiLiP::Parameters::AllParameters strong_params = all_param;
+            strong_params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
+            strong_params.reduced_order_param.entropy_variables_in_snapshots = false;
+            std::shared_ptr<DGBase<dim, double>> dg_strong_obj = DGFactory<dim,double>::create_discontinuous_galerkin(&strong_params, poly_degree, flow_solver_param.max_poly_degree_for_adaptation, grid_degree, flow_solver_case->generate_grid());
             if(oneDoneNstate || oneDthreeNState) { // For templates
                 if (all_param.hyper_reduction_param.training_data == "residual")
-                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);
+                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&strong_params, parameter_handler, dg_strong_obj, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);
                 else {
-                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&all_param, parameter_handler, dg, pod,  snapshot_parameters, ode_param.ode_solver_type, Comm);
+                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&strong_params, parameter_handler, dg_strong_obj, pod,  snapshot_parameters, ode_param.ode_solver_type, Comm);
                 }
             }
             std::cout << "Build Problem..."<< std::endl;
@@ -181,6 +185,7 @@ FlowSolver<dim, nstate>::FlowSolver(
                 index++;
             }
             infile.close();
+            pcout << "Read Weights in" << std::endl;
             ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
         }
 

@@ -953,12 +953,16 @@ public:
 
     /// Calculates the Quadrature Solution
     virtual void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x, dealii::LinearAlgebra::distributed::Vector<double> &location_y) = 0;
+    /// Sets the galerkin basis
+    void set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis);
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;
     /// Global Face Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_face_entropy;
     /// Projection Matrix
     dealii::TrilinosWrappers::SparseMatrix projection_matrix;
+    /// Galerkin Basis
+    std::shared_ptr<Epetra_CrsMatrix> galerkin_basis;
     /// ROM Projected Entropy
     dealii::LinearAlgebra::distributed::Vector<double> projected_entropy;
     /// ROM Projected Face Entropy

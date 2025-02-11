@@ -37,10 +37,9 @@ int UnsteadyHyperReduction<dim, nstate>::run_test() const {
 
     // Create HROM Parameters
     Parameters::AllParameters HROM_param = *(TestsBase::all_parameters);
-    HROM_param.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::ODESolverEnum::pod_galerkin_runge_kutta_solver;
+    HROM_param.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver;
     HROM_param.ode_solver_param.allocate_matrix_dRdW = true;
     HROM_param.reduced_order_param.entropy_variables_in_snapshots = true;
-    //HROM_param.reduced_order_param.entropy_variables_in_snapshots = true;
     HROM_param.flow_solver_param.unsteady_data_table_filename = "HROM_" + HROM_param.flow_solver_param.unsteady_data_table_filename;
     const Parameters::AllParameters HROM_param_const = HROM_param;
 

@@ -1231,15 +1231,33 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
         }
         flux_basis.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D, 
                                                           Hadamard_rows_sparsity, Hadamard_columns_sparsity,
-                                                          flux_basis_stiffness.oneD_skew_symm_vol_oper, 
+                                                          flux_basis_stiffness.oneD_vol_operator,
                                                           oneD_vol_quad_weights,
                                                           flux_basis_stiffness_skew_symm_oper_sparse);
     }
-    /*
-    char zero = '0';
-    std::cout << current_cell_index << std::endl;
-    flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout,3,true,0,&zero);
-    */
+    const int global_size = this->solution.size();
+    Epetra_MpiComm comm(MPI_COMM_WORLD);
+    Epetra_Map global_map(global_size,0,comm);
+    Epetra_CrsMatrix global_Q(Epetra_DataAccess::Copy,global_map,n_dofs_cell);
+    dealii::FullMatrix<double> local_Q(n_dofs_cell);
+    for(unsigned int istate_counter = 0; istate_counter < (unsigned int) nstate; ++istate_counter ) {
+        unsigned int id_counter = 0;
+        for (unsigned int row = 0; row < n_quad_pts; ++row) {
+            for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
+                double val = flux_basis_stiffness_skew_symm_oper_sparse[0](row,col);
+                int indices = col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter;
+                global_Q.InsertGlobalValues(row+n_quad_pts*istate_counter,1.,&val,&indices);
+                local_Q(row+n_quad_pts*istate_counter,col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter) = flux_basis_stiffness_skew_symm_oper_sparse[0](row,col);
+            }
+            if(row == n_quad_pts_1D-1) id_counter++;
+        }
+    }
+    std::ofstream local_Q_file("local_Q.txt");
+    global_Q.FillComplete(global_map,global_map);
+    global_Q.Print(local_Q_file);
+
+
+
     //For each state we:
     //  1. Compute reference divergence.
     //  2. Then compute and write the rhs for the given state.
@@ -3574,6 +3592,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
     temp_val.print(temp_file);
     entropy_diff /= 1;
 }
+
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;
 // Otherwise: dealii::parallel::distributed::Triangulation<dim>;

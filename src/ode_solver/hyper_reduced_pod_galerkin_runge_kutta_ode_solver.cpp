@@ -146,6 +146,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,*epetra_test_basis,*epetra_test_basis);
     if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
         this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_trial_basis);
+        this->dg->set_galerkin_basis(epetra_test_basis);
     }
     std::ofstream lhs_file("lhs_file.txt");
     epetra_reduced_lhs->Print(lhs_file);

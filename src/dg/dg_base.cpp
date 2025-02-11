@@ -99,6 +99,7 @@ DGBase<dim,real,MeshType>::DGBase(
     , pcout(std::cout, dealii::Utilities::MPI::this_mpi_process(mpi_communicator)==0)
     , freeze_artificial_dissipation(false)
     , max_artificial_dissipation_coeff(0.0)
+    , galerkin_basis(nullptr)
 {
 
     dof_handler.initialize(*triangulation, fe_collection);
@@ -2054,7 +2055,6 @@ void DGBase<dim,real,MeshType>::reinit_operators_for_mass_matrix(
 
     // Note the fe_collection passed for metric mapping operators has to be COLLOCATED ON GRID NODES
     mapping_basis.build_1D_shape_functions_at_volume_flux_nodes(high_order_grid->oneD_fe_system, oneD_quadrature_collection[poly_degree]);
-
     if(Cartesian_element || this->all_parameters->use_weight_adjusted_mass){//then we can factor out det of Jac and rapidly simplify
         reference_mass_matrix.build_1D_volume_operator(oneD_fe_collection_1state[poly_degree], oneD_quadrature_collection[poly_degree]);
     }
@@ -3030,9 +3030,13 @@ real2 DGBase<dim,real,MeshType>::discontinuity_sensor(
 }
 
 template <int dim, typename real, typename MeshType>
-void DGBase<dim,real,MeshType>::set_current_time(const real current_time_input)
-{
+void DGBase<dim,real,MeshType>::set_current_time(const real current_time_input) {
     this->current_time = current_time_input;
+}
+
+template<int dim, typename real, typename MeshType>
+void DGBase<dim, real, MeshType>::set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis) {
+    this->galerkin_basis = basis;
 }
 
 #if PHILIP_DIM!=1

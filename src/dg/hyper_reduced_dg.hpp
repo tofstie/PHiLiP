@@ -27,6 +27,10 @@ public:
         const unsigned int grid_degree_input,
         const std::shared_ptr<Triangulation> triangulation_input);
 
+    void assemble_auxiliary_residual ();
+
+    /// Allocate the dual vector for optimization.
+    void allocate_dual_vector ();
 protected:
     /// Builds the necessary operators and assembles volume residual for either primary or auxiliary.
     void assemble_volume_term_and_build_operators(
@@ -115,6 +119,94 @@ protected:
         std::array<dealii::LinearAlgebra::distributed::Vector<double>,dim> &rhs_aux,
         const bool                                             compute_auxiliary_right_hand_side,
         const bool compute_dRdW, const bool compute_dRdX, const bool compute_d2R);
+
+    /// Builds the necessary operators and assembles subface residual.
+    /** Not verified
+    */
+    void assemble_subface_term_and_build_operators(
+        typename dealii::DoFHandler<dim>::active_cell_iterator cell,
+        typename dealii::DoFHandler<dim>::active_cell_iterator neighbor_cell,
+        const dealii::types::global_dof_index                  current_cell_index,
+        const dealii::types::global_dof_index                  neighbor_cell_index,
+        const unsigned int                                     iface,
+        const unsigned int                                     neighbor_iface,
+        const unsigned int                                     /*neighbor_i_subface*/,
+        const real                                             penalty,
+        const std::vector<dealii::types::global_dof_index>     &current_dofs_indices,
+        const std::vector<dealii::types::global_dof_index>     &neighbor_dofs_indices,
+        const std::vector<dealii::types::global_dof_index>     &current_metric_dofs_indices,
+        const std::vector<dealii::types::global_dof_index>     &neighbor_metric_dofs_indices,
+        const unsigned int                                     poly_degree_int,
+        const unsigned int                                     poly_degree_ext,
+        const unsigned int                                     grid_degree_int,
+        const unsigned int                                     grid_degree_ext,
+        OPERATOR::basis_functions<dim,2*dim,real>              &soln_basis_int,
+        OPERATOR::basis_functions<dim,2*dim,real>              &soln_basis_ext,
+        OPERATOR::basis_functions<dim,2*dim,real>              &flux_basis_int,
+        OPERATOR::basis_functions<dim,2*dim,real>              &flux_basis_ext,
+        OPERATOR::local_basis_stiffness<dim,2*dim,real>        &flux_basis_stiffness,
+        OPERATOR::vol_projection_operator<dim,2*dim,real>      &soln_basis_projection_oper_int,
+        OPERATOR::vol_projection_operator<dim,2*dim,real>      &soln_basis_projection_oper_ext,
+        OPERATOR::metric_operators<real,dim,2*dim>             &metric_oper_int,
+        OPERATOR::metric_operators<real,dim,2*dim>             &metric_oper_ext,
+        OPERATOR::mapping_shape_functions<dim,2*dim,real>      &mapping_basis,
+        std::array<std::vector<real>,dim>                      &mapping_support_points,
+        dealii::hp::FEFaceValues<dim,dim>                      &fe_values_collection_face_int,
+        dealii::hp::FESubfaceValues<dim,dim>                   &/*fe_values_collection_subface*/,
+        dealii::Vector<real>                                   &current_cell_rhs,
+        dealii::Vector<real>                                   &neighbor_cell_rhs,
+        std::vector<dealii::Tensor<1,dim,real>>                &current_cell_rhs_aux,
+        dealii::LinearAlgebra::distributed::Vector<double>     &rhs,
+        std::array<dealii::LinearAlgebra::distributed::Vector<double>,dim> &rhs_aux,
+        const bool                                             compute_auxiliary_right_hand_side,
+        const bool compute_dRdW, const bool compute_dRdX, const bool compute_d2R);
+    public:
+    ///Evaluate the volume RHS for the auxiliary equation.
+    /** \f[
+    * \int_{\mathbf{\Omega}_r} \chi_i(\mathbf{\xi}^r) \left( \nabla^r(u) \right)\mathbf{C}_m(\mathbf{\xi}^r) d\mathbf{\Omega}_r,\:\forall i=1,\dots,N_p.
+    * \f]
+    */
+    void assemble_volume_term_auxiliary_equation(
+        const std::vector<dealii::types::global_dof_index> &current_dofs_indices,
+        const unsigned int                                 poly_degree,
+        OPERATOR::basis_functions<dim,2*dim,real>          &soln_basis,
+        OPERATOR::basis_functions<dim,2*dim,real>          &flux_basis,
+        OPERATOR::metric_operators<real,dim,2*dim>         &metric_oper,
+        std::vector<dealii::Tensor<1,dim,real>>            &local_auxiliary_RHS);
+
+protected:
+    /// Evaluate the boundary RHS for the auxiliary equation.
+    void assemble_boundary_term_auxiliary_equation(
+        const unsigned int                                 iface,
+        const dealii::types::global_dof_index              current_cell_index,
+        const unsigned int                                 poly_degree,
+        const unsigned int                                 boundary_id,
+        const std::vector<dealii::types::global_dof_index> &dofs_indices,
+        OPERATOR::basis_functions<dim,2*dim,real>          &soln_basis,
+        OPERATOR::metric_operators<real,dim,2*dim>         &metric_oper,
+        std::vector<dealii::Tensor<1,dim,real>>            &local_auxiliary_RHS);
+
+public:
+    /// Evaluate the facet RHS for the auxiliary equation.
+    /** \f[
+    * \int_{\mathbf{\Gamma}_r} \chi_i \left( \hat{\mathbf{n}}^r\mathbf{C}_m(\mathbf{\xi}^r)^T\right) \cdot \left[ u^*
+    * - u\right]d\mathbf{\Gamma}_r,\:\forall i=1,\dots,N_p.
+    * \f]
+    */
+    void assemble_face_term_auxiliary_equation(
+        const unsigned int                                 iface,
+        const unsigned int                                 neighbor_iface,
+        const dealii::types::global_dof_index              current_cell_index,
+        const dealii::types::global_dof_index              neighbor_cell_index,
+        const unsigned int                                 poly_degree_int,
+        const unsigned int                                 poly_degree_ext,
+        const std::vector<dealii::types::global_dof_index> &dof_indices_int,
+        const std::vector<dealii::types::global_dof_index> &dof_indices_ext,
+        OPERATOR::basis_functions<dim,2*dim,real>          &soln_basis_int,
+        OPERATOR::basis_functions<dim,2*dim,real>          &soln_basis_ext,
+        OPERATOR::metric_operators<real,dim,2*dim>         &metric_oper_int,
+        std::vector<dealii::Tensor<1,dim,real>>            &local_auxiliary_RHS_int,
+        std::vector<dealii::Tensor<1,dim,real>>            &local_auxiliary_RHS_ext);
 protected:
     /// Strong form primary equation's volume right-hand-side.
     /**  We refer to Cicchino, Alexander, et al. "Provably stable flux reconstruction high-order methods on curvilinear elements." Journal of Computational Physics 463 (2022): 111259.
@@ -259,7 +351,13 @@ protected:
         const dealii::FEValues<dim,dim> &fe_values_lagrange);
 
     void assemble_hyper_reduced_derivative();
-
+    void calculate_global_entropy() override;
+    void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) override;
+    void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V) override;
+    void calculate_projection_matrix(Epetra_CrsMatrix &LHS, Epetra_CrsMatrix &LeV) override;
+    Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q);
+    void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
+    dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
 };
 }

@@ -790,7 +790,6 @@ bool OfflinePOD<dim>::enrichPOD(){
     OPERATOR::local_basis_stiffness<dim,2*dim,double> flux_basis_stiffness(1, dg->max_degree, init_grid_degree, true);
     OPERATOR::basis_functions<dim,2*dim,double> flux_basis_int(1, dg->max_degree, init_grid_degree);
     OPERATOR::basis_functions<dim,2*dim,double> flux_basis_ext(1, dg->max_degree, init_grid_degree);
-
     // 📢 Define Flux Basis 📢
     std::vector<std::array<unsigned int,dim>> Hadamard_rows_sparsity_volume(n_quad_pts * n_quad_pts_1D);//size n^{d+1}
     std::vector<std::array<unsigned int,dim>> Hadamard_columns_sparsity_volume(n_quad_pts * n_quad_pts_1D);
@@ -820,7 +819,7 @@ bool OfflinePOD<dim>::enrichPOD(){
         dofs_indices.resize(n_dofs_cell);
         cell->get_dof_indices (dofs_indices);
         //const bool Cartesian_element = (cell->manifold_id() == dealii::numbers::flat_manifold_id);
-
+        char zero = '0';
         //char zero = '0';
         // Compute Q
         dealii::FullMatrix<double> local_Q(n_dofs_cell);
@@ -833,21 +832,32 @@ bool OfflinePOD<dim>::enrichPOD(){
         // 📢 Define flux_basis_stiffness 📢
         flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
                                                             Hadamard_rows_sparsity_volume, Hadamard_columns_sparsity_volume,
-                                                            flux_basis_stiffness.oneD_skew_symm_vol_oper,
+                                                            flux_basis_stiffness.oneD_vol_operator,
                                                             oneD_vol_quad_weights,
                                                             flux_basis_stiffness_skew_symm_oper_sparse);
-        for(int istate = 0; istate < nstate; ++istate){
-            local_Q.add(flux_basis_stiffness_skew_symm_oper_sparse[0],1.,istate*n_quad_pts,istate*n_quad_pts,0,0);
+        flux_basis_stiffness.oneD_vol_operator.print_formatted(std::cout,3,true,0,&zero);
+        flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout,3,true,0,&zero);
+
+        for(unsigned int istate_counter = 0; istate_counter < (unsigned int) nstate; ++istate_counter ) {
+            unsigned int id_counter = 0;
+            for (unsigned int row = 0; row < n_quad_pts; ++row) {
+                for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
+                    local_Q(row+n_quad_pts*istate_counter,col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter) = flux_basis_stiffness_skew_symm_oper_sparse[0](row,col);
+                }
+                if(row == n_quad_pts_1D-1) id_counter++;
+            }
         }
-        //local_Q.print_formatted(std::cout,3,true,0,&zero);
-        /*
+
+        local_Q.print_formatted(std::cout,3,true,0,&zero);
+
 
         // Both Off diagonal terms - Strong DG line 1641
-
+        const unsigned int n_face_quad_pts = this->dg->face_quadrature_collection[poly_degree].size();
         dealii::FullMatrix<double> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);
-        for (unsigned int iface=0; iface < Nfaces; ++iface) {
+        for (unsigned int iface=0; iface < dealii::GeometryInfo<dim>::faces_per_cell; ++iface) {
             const int iface_1D = iface % 2;//the reference face number
             const int dim_not_zero = iface / 2;//reference direction of face integer division
+            const std::vector<double> &oneD_quad_weights_vol_int = this->dg->oneD_quadrature_collection[poly_degree].get_weights();
             const dealii::Tensor<1,dim,double> unit_ref_normal_int = dealii::GeometryInfo<dim>::unit_normal_vector[iface];
             std::vector<unsigned int> Hadamard_rows_sparsity_off(n_face_quad_pts * n_quad_pts_1D);//size n^{d+1}
             std::vector<unsigned int> Hadamard_columns_sparsity_off(n_face_quad_pts * n_quad_pts_1D);
@@ -856,7 +866,7 @@ bool OfflinePOD<dim>::enrichPOD(){
             flux_basis_int.sum_factorized_Hadamard_surface_basis_assembly(n_face_quad_pts, n_quad_pts_1D,
                                                                         Hadamard_rows_sparsity_off, Hadamard_columns_sparsity_off,
                                                                         flux_basis_int.oneD_surf_operator[iface_1D],
-                                                                        oneD_quad_weights_vol,
+                                                                        oneD_quad_weights_vol_int,
                                                                         surf_oper_sparse,
                                                                         dim_not_zero);
 
@@ -871,7 +881,7 @@ bool OfflinePOD<dim>::enrichPOD(){
             //surf_oper_sparse_trans.copy_transposed(surf_oper_sparse);
             //local_Q.add(surf_oper_sparse_trans,1.,0,n_quad_pts+n_face_quad_pts*iface,0,0);
         }
-        */
+
 
         std::ofstream local_Q_file("local_Q_file.txt");
         local_Q.print(local_Q_file);
