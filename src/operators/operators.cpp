@@ -810,6 +810,77 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
     }
 }
 
+template <int dim, int n_faces, typename real>
+void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
+    const Epetra_CrsMatrix &input_mat1,
+    const Epetra_CrsMatrix &input_mat2,
+    Epetra_CrsMatrix &output_mat)
+{
+
+    // Check Distribution
+    const Epetra_Map row_map = input_mat1.RowMap();
+    const Epetra_Map domain_map = input_mat1.DomainMap();
+
+    assert(row_map.SameAs(input_mat2.RowMap()));
+    assert(domain_map.SameAs(input_mat2.DomainMap()));
+
+    // Pointers for data extraction
+    double *values1 = new double [row_map.MaxElementSize()];
+    int *indices1 = new int [row_map.MaxElementSize()];
+
+    double *values2= new double [row_map.MaxElementSize()];
+    int *indices2= new int [row_map.MaxElementSize()];
+
+    int NumEntries1;
+    int NumEntries2;
+
+    for (int local_row_idx = 0; local_row_idx < row_map.NumMyElements(); local_row_idx++) {
+        // Extracts row from Matrix
+        input_mat1.ExtractMyRowView(local_row_idx,NumEntries1,values1,indices1);
+        input_mat2.ExtractMyRowView(local_row_idx,NumEntries2,values2,indices2);
+        // Create a map (python dict) to get the indices that appear twice
+        int new_Size = 0;
+        std::map<int,int> shared_index_map;
+        std::map<int,int> index_map1;
+        std::map<int,int> index_map2;
+        // Add all of indicies from input_mat1
+        for(int i=0;i<NumEntries1;i++) {
+            shared_index_map.insert({indices1[i],1});
+            index_map1.insert({indices1[i],i});
+        }
+        // Add all of indices from input_mat2, if they already exist, the value will take 2
+        for(int i=0;i<NumEntries2;i++) {
+            shared_index_map.try_emplace(indices2[i],0);
+            shared_index_map[indices2[i]]++;
+            index_map2.insert({indices2[i],i});
+            if (shared_index_map[indices2[i]] == 2) new_Size++;
+        }
+        // Create new pointers to insert into output_mat
+        double *new_values = new double [new_Size];
+        int *new_indices = new int [new_Size];
+        int new_values_counter = 0;
+        // Go through the map, if the value is 2 at the index, then add the multiplication to the pointers
+        for(auto it = shared_index_map.begin(); it != shared_index_map.end(); it++) {
+            if (it->second == 2) {
+                new_values[new_values_counter] = values1[index_map1[it->first]]*values2[index_map2[it->first]];
+                new_indices[new_values_counter] = it->first;
+                new_values_counter++;
+            }
+        }
+        output_mat.InsertMyValues(local_row_idx,new_Size,new_values,new_indices);
+        delete [] new_values;
+        delete [] new_indices;
+
+    }
+    // Delete raw pointers
+    delete[] values1;
+    delete[] indices1;
+    delete[] values2;
+    delete[] indices2;
+    output_mat.FillComplete(domain_map,row_map);
+
+}
+
 template <int dim, int n_faces, typename real>  
 void SumFactorizedOperators<dim,n_faces,real>::sum_factorized_Hadamard_sparsity_pattern(
     const unsigned int rows_size,

@@ -504,7 +504,8 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
                 << "Test: " << std::to_string(test_basis.NumGlobalRows()) << std::endl;
             }
         }
-    }//end of cell loop
+    }
+    //end of cell loop
     lhs_matrix.FillComplete(test_basis.DomainMap(),test_basis.DomainMap());
     std::ofstream lhs_file("lhs_matrix.txt");
     lhs_matrix.Print(lhs_file);

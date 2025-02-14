@@ -358,6 +358,8 @@ protected:
     Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q);
     void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
     dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
+    void calculate_convective_flux_matrix(Epetra_CrsMatrix &Fx,Epetra_CrsMatrix &Fy,Epetra_CrsMatrix &Fz);
+    Epetra_CrsMatrix construct_global_Q();
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
 };
 }

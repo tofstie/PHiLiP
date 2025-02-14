@@ -64,6 +64,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
             ctr +=1;
         }
     }
+    std::cout << epetra_system_matrix.NumMyRows() << std::endl;
     Epetra_Map RowMap((n_reduced_dim_POD*training_snaps), (n_reduced_dim_POD*training_snaps), 0, this->Comm_); // Number of rows in residual based training matrix = n * (number of training snapshots)
     Epetra_Map ColMap(num_elements_N_e, length, local_elements, 0, this->Comm_);
     Epetra_Map dMap((n_reduced_dim_POD*training_snaps), (rank == 0) ?  (n_reduced_dim_POD*training_snaps) : 0,  0, this->Comm_);

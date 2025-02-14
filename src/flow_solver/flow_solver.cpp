@@ -121,8 +121,9 @@ FlowSolver<dim, nstate>::FlowSolver(
             Epetra_MpiComm Comm( MPI_COMM_WORLD );
             PHiLiP::Parameters::AllParameters strong_params = all_param;
             strong_params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
-            strong_params.reduced_order_param.entropy_variables_in_snapshots = false;
+            strong_params.reduced_order_param.entropy_variables_in_snapshots = true;
             std::shared_ptr<DGBase<dim, double>> dg_strong_obj = DGFactory<dim,double>::create_discontinuous_galerkin(&strong_params, poly_degree, flow_solver_param.max_poly_degree_for_adaptation, grid_degree, flow_solver_case->generate_grid());
+            dg_strong_obj->allocate_system(true,false,false);
             if(oneDoneNstate || oneDthreeNState) { // For templates
                 if (all_param.hyper_reduction_param.training_data == "residual")
                     constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&strong_params, parameter_handler, dg_strong_obj, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);

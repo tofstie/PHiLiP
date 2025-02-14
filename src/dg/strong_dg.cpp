@@ -1009,17 +1009,12 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
                                                              soln_basis_projection_oper.oneD_vol_operator);
             if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
                 for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns; i_shape_fns++){
-
                     entropy_var_coeff[i_shape_fns] = this->projected_entropy[cell_dofs_indices[istate*n_shape_fns+i_shape_fns]];
                 }
             }
-
             soln_basis.matrix_vector_mult_1D(entropy_var_coeff,
                                              projected_entropy_var_at_q[istate],
                                              soln_basis.oneD_vol_operator);
-            if (isnan(projected_entropy_var_at_q[0][0])){
-                std::cout << "Nan" << std::endl;
-            }
         }
     }
 
@@ -1231,33 +1226,10 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
         }
         flux_basis.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D, 
                                                           Hadamard_rows_sparsity, Hadamard_columns_sparsity,
-                                                          flux_basis_stiffness.oneD_vol_operator,
+                                                          flux_basis_stiffness.oneD_skew_symm_vol_oper,
                                                           oneD_vol_quad_weights,
                                                           flux_basis_stiffness_skew_symm_oper_sparse);
     }
-    const int global_size = this->solution.size();
-    Epetra_MpiComm comm(MPI_COMM_WORLD);
-    Epetra_Map global_map(global_size,0,comm);
-    Epetra_CrsMatrix global_Q(Epetra_DataAccess::Copy,global_map,n_dofs_cell);
-    dealii::FullMatrix<double> local_Q(n_dofs_cell);
-    for(unsigned int istate_counter = 0; istate_counter < (unsigned int) nstate; ++istate_counter ) {
-        unsigned int id_counter = 0;
-        for (unsigned int row = 0; row < n_quad_pts; ++row) {
-            for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
-                double val = flux_basis_stiffness_skew_symm_oper_sparse[0](row,col);
-                int indices = col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter;
-                global_Q.InsertGlobalValues(row+n_quad_pts*istate_counter,1.,&val,&indices);
-                local_Q(row+n_quad_pts*istate_counter,col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter) = flux_basis_stiffness_skew_symm_oper_sparse[0](row,col);
-            }
-            if(row == n_quad_pts_1D-1) id_counter++;
-        }
-    }
-    std::ofstream local_Q_file("local_Q.txt");
-    global_Q.FillComplete(global_map,global_map);
-    global_Q.Print(local_Q_file);
-
-
-
     //For each state we:
     //  1. Compute reference divergence.
     //  2. Then compute and write the rhs for the given state.

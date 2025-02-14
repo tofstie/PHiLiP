@@ -25,6 +25,7 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_vector.h>
 
+#include <Epetra_CrsMatrix.h>
 #include <Epetra_RowMatrixTransposer.h>
 #include <AztecOO.h>
 
@@ -349,6 +350,10 @@ public:
         const dealii::FullMatrix<real> &input_mat2,
         dealii::FullMatrix<real> &output_mat);
 
+    void Hadamard_product(
+        const Epetra_CrsMatrix &input_mat1,
+        const Epetra_CrsMatrix &input_mat2,
+        Epetra_CrsMatrix &output_mat);
 //protected:
 public:
     ///Stores the one dimensional volume operator.

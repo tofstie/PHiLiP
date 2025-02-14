@@ -394,7 +394,7 @@ bool NNLS_solver::solve(){
       if(rank == 0){ // Will only proceed on the root as the other cores do no have access to this information
         for(int k = 0; k < numInactive_; k++){
           int idx = index_set[k];
-          if (temp[k] < 0){
+          if (temp[k] < 0.){
             // t should always be in [0,1]
             double t = -x_[idx]/(temp[k] - x_[idx]);
             if (alpha > t){
@@ -458,11 +458,13 @@ Epetra_CrsMatrix NNLS_solver::allocateMatrixToSingleCore(const Epetra_CrsMatrix 
       for (int n = 0; n < A_cols; n++) {
           A_trans.InsertGlobalValues(n, 1, &row[n], &i);
       }
+      //delete[] row;
     }
     A_trans.FillComplete(single_core_row_A, single_core_col_A);
     std::ofstream file("A_trans.txt");
     A_trans.Print(file);
     A_ptr = std::make_shared<Epetra_CrsMatrix>(A_trans);
+
   }
   else{
     A_ptr = std::make_shared<Epetra_CrsMatrix>(A_temp);
