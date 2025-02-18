@@ -1,0 +1,65 @@
+# Listing of Parameters
+# ---------------------
+# Number of dimensions
+
+set dimension = 2
+set run_type = flow_simulation
+set pde_type = euler
+#set test_type = unsteady_reduced_order
+
+# DG formulation
+set use_weak_form = false
+set use_split_form = true
+set flux_nodes_type = GLL
+set non_physical_behavior = print_warning
+
+set flux_reconstruction = cPlus
+set use_inverse_mass_on_the_fly = false
+
+# Note: this was added to turn off check_same_coords() -- has no other function when dim!=1
+set use_periodic_bc = true
+
+# numerical fluxes
+set conv_num_flux = two_point_flux_with_roe_dissipation
+set two_point_num_flux_type = Ra
+
+# ODE solver
+subsection ODE solver
+  set ode_output = verbose
+  set ode_solver_type = runge_kutta
+  set runge_kutta_method = ssprk3_ex
+  set initial_time_step = 0.001
+  set output_solution_every_x_steps = 1
+end
+
+subsection linear solver
+  set linear_solver_output = quiet
+end
+
+subsection flow_solver
+  set flow_case_type = riemann_problem
+  set poly_degree = 3
+  set final_time = 0.25
+  set courant_friedrichs_lewy_number = 0.025
+  set unsteady_data_table_filename = riemann_problem_time_table
+  subsection grid
+    set grid_left_bound = -1
+    set grid_right_bound = 1
+    set number_of_grid_elements_per_dimension = 32
+  end
+  set apply_initial_condition_method = interpolate_initial_condition_function
+end
+
+#subsection reduced order
+#    set output_snapshot_every_x_timesteps = 1
+    #set singular_value_threshold = 0.999999
+#    set number_modes = 75
+#    set path_to_search = .
+#end
+
+#subsection hyperreduction
+#    set NNLS_tol = 1e-6
+#    set NNLS_max_iter = 500
+#    set training_data = residual
+#    set read_in_weights = false
+#end

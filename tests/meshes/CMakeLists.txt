@@ -1,4 +1,3 @@
-configure_file(2d_cylinder.msh 2d_cylinder.msh COPYONLY)
 configure_file(naca0012_hopw_ref0.msh naca0012_hopw_ref0.msh COPYONLY)
 configure_file(naca0012_hopw_ref1.msh naca0012_hopw_ref1.msh COPYONLY)
 configure_file(naca0012_hopw_ref2.msh naca0012_hopw_ref2.msh COPYONLY)

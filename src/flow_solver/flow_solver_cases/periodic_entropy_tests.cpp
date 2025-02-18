@@ -34,7 +34,7 @@ double PeriodicEntropyTests<dim,nstate>::get_constant_time_step(std::shared_ptr<
         // Using dt = CFL * delta_x/U_infinity, consistent with Ranocha's choice (Relaxation Runge Kutta methods... 2020)
         // U_infinity is initialized as M_infinity
         constant_time_step = CFL * approximate_grid_spacing / this->all_param.euler_param.mach_inf;
-    } else if (flow_case == FlowCaseEnum::kelvin_helmholtz_instability){
+    } else if (flow_case == FlowCaseEnum::kelvin_helmholtz_instability) {
         /*
         const double max_wave_speed = this->compute_integrated_quantities(*dg, IntegratedQuantityEnum::max_wave_speed);
         constant_time_step = CFL * approximate_grid_spacing / max_wave_speed;
@@ -42,6 +42,8 @@ double PeriodicEntropyTests<dim,nstate>::get_constant_time_step(std::shared_ptr<
         // TEMP using same as is defined in periodic turbulence for consistency with some existing results
         const double constant_time_step = this->all_param.flow_solver_param.courant_friedrichs_lewy_number * approximate_grid_spacing;
         return constant_time_step;
+    } else if (flow_case == FlowCaseEnum::riemann_problem) {
+        constant_time_step = CFL * approximate_grid_spacing;
     } else{
         this->pcout << "Timestep size has not been defined in periodic_entropy_tests for this flow_case_type. Aborting..." << std::endl;
         std::abort();

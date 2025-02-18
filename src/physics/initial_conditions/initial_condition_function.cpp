@@ -684,6 +684,75 @@ real InitialConditionFunction_ReflectedShock<dim, nstate, real>
     }
     return value;
 }
+
+// EULER 2D Riemann
+// SEE CHAN, ENTROPY STABLE REDUCED ORDER ... , PG 22
+// ========================================================
+template <int dim, int nstate, typename real>
+InitialConditionFunction_RiemannProblem<dim, nstate, real>
+::InitialConditionFunction_RiemannProblem(
+    Parameters::AllParameters const* const param)
+    : InitialConditionFunction_EulerBase<dim, nstate, real>(param)
+    , gamma_gas(param->euler_param.gamma_gas)
+{}
+
+template <int dim, int nstate, typename real>
+real InitialConditionFunction_RiemannProblem<dim, nstate, real>
+::primitive_value(const dealii::Point<dim, real>& point, const unsigned int istate) const
+{
+    real value = 0.0;
+    if constexpr (dim == 2 && nstate == (dim + 2)) {
+        const real x = point[0];
+        const real y = point[1];
+        if (istate == 0) {
+            // density
+            if(x >= 0 && y >= 0){
+                value = 0.5313;
+            } else if (x >= 0 && y <= 0) {
+                value = 1.;
+            } else if (x <= 0 && y >=0) {
+                value = 1.;
+            } else if (x <= 0 && y <=0 ){
+                value = 0.8;
+            }
+        } else if (istate == 1) {
+            // x-velocity
+            if(x >= 0 && y >= 0){
+                value = 0.;
+            } else if (x >= 0 && y <= 0) {
+                value = 0.;
+            } else if (x <= 0 && y >=0) {
+                value = 0.7276;
+            } else if (x <= 0 && y <=0 ){
+                value = 0.;
+            }
+        } else if (istate == 2){
+            // y-velocity
+            if(x >= 0 && y >= 0){
+                value = 0.;
+            } else if (x >= 0 && y <= 0) {
+                value = 0.7276;
+            } else if (x <= 0 && y >=0) {
+                value = 0.;
+            } else if (x <= 0 && y <=0 ){
+                value = 0.;
+            }
+        } else if (istate == 3) {
+            // pressure
+            if(x >= 0 && y >= 0){
+                value = 0.4;
+            } else if (x >= 0 && y <= 0) {
+                value = 1.;
+            } else if (x <= 0 && y >=0) {
+                value = 1.;
+            } else if (x <= 0 && y <=0 ){
+                value = 1.;
+            }
+        }
+
+    }
+    return value;
+}
 // ========================================================
 // ZERO INITIAL CONDITION
 // ========================================================
@@ -771,6 +840,8 @@ InitialConditionFactory<dim,nstate, real>::create_InitialConditionFunction(
         if constexpr (dim == 1 && nstate == dim + 2)  return std::make_shared<InitialConditionFunction_ShuOsherProblem<dim, nstate, real> >(param);
     } else if (flow_type == FlowCaseEnum::reflective_shock_tube) {
         if constexpr (dim == 1 && nstate == dim + 2) return std::make_shared<InitialConditionFunction_ReflectedShock<dim, nstate, real> > (param);
+    } else if (flow_type == FlowCaseEnum::riemann_problem) {
+        if constexpr (dim == 2 && nstate == dim + 2) return std::make_shared<InitialConditionFunction_RiemannProblem<dim, nstate, real> >(param);
     } else if (flow_type == FlowCaseEnum::advection_limiter) {
         if constexpr (dim < 3 && nstate == 1)  return std::make_shared<InitialConditionFunction_Advection<dim, nstate, real> >();
     } else if (flow_type == FlowCaseEnum::burgers_limiter) {
@@ -815,6 +886,7 @@ template class InitialConditionFunction_IsentropicVortex <PHILIP_DIM, PHILIP_DIM
 template class InitialConditionFunction_KHI <PHILIP_DIM, PHILIP_DIM+2, double>;
 template class InitialConditionFunction_EulerBase <PHILIP_DIM, PHILIP_DIM + 2, double>;
 template class InitialConditionFunction_LowDensity2D <PHILIP_DIM, PHILIP_DIM+2, double>;
+template class InitialConditionFunction_RiemannProblem <PHILIP_DIM, PHILIP_DIM+2, double>;
 #endif
 // functions instantiated for all dim
 template class InitialConditionFunction_Zero <PHILIP_DIM,1, double>;
