@@ -349,7 +349,7 @@ protected:
         const unsigned int grid_degree,
         dealii::Vector<real> &current_cell_rhs,
         const dealii::FEValues<dim,dim> &fe_values_lagrange);
-
+public:
     void assemble_hyper_reduced_derivative();
     void calculate_global_entropy() override;
     void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) override;

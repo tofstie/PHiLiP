@@ -215,7 +215,8 @@ public:
         low_density,
         vortex_shedding,
         pod_unsteady,
-        halton_sampling_run
+        halton_sampling_run,
+        hyper_reduction_dg
     };
     /// Store selected TestType from the input file.
     TestType test_type;

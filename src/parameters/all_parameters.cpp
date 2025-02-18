@@ -203,7 +203,8 @@ void AllParameters::declare_parameters (dealii::ParameterHandler &prm)
                       " khi_robustness | "
                       " low_density  | "
                       " vortex_shedding | "
-                      " pod_unsteady"),
+                      " pod_unsteady | "
+                      " hyper_reduction_dg"),
                       "The type of test we want to solve. "
                       "Choices are " 
                       " <run_control | " 
@@ -257,7 +258,8 @@ void AllParameters::declare_parameters (dealii::ParameterHandler &prm)
                       "  khi_robustness | "
                       "  low_density |"
                       "  vortex_shedding |"
-                      "  pod_unsteady >.");
+                      "  pod_unsteady |"
+                      "  hyper_reduction_dg>.");
 
     prm.declare_entry("pde_type", "advection",
                       dealii::Patterns::Selection(
@@ -452,6 +454,7 @@ const std::string test_string = prm.get("test_type");
     else if (test_string == "naca0012_unsteady_check_quick")            { test_type = naca0012_unsteady_check_quick; }
     else if (test_string == "vortex_shedding")                          { test_type = vortex_shedding; }
     else if (test_string == "pod_unsteady")                             { test_type = pod_unsteady; }
+    else if (test_string == "hyper_reduction_dg")                       { test_type = hyper_reduction_dg; }
     overintegration = prm.get_integer("overintegration");
 
     use_weak_form = prm.get_bool("use_weak_form");

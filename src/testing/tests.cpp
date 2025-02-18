@@ -54,9 +54,11 @@
 #include "HROM_error_post_sampling.h"
 #include "hyper_adaptive_sampling_new_error.h"
 #include "halton_sampling_run.h"
+#include "hyper_reduction_dg.h"
 #include "unsteady_hyper_reduction.h"
 #include "vortex_shedding.h"
 #include "pod_unsteady.h"
+#include "hyper_reduction_dg.h"
 
 namespace PHiLiP {
 namespace Tests {
@@ -243,9 +245,9 @@ std::unique_ptr< TestsBase > TestsFactory<dim,nstate,MeshType>
        (test_type != Test_enum::taylor_green_vortex_energy_check) && 
        (test_type != Test_enum::taylor_green_vortex_restart_check)) {
         (void) parameter_handler_input;
-    } else if (!((dim==3 && nstate==dim+2) || (dim==1 && nstate==1))) {
-        (void) parameter_handler_input;
-    }
+       } else if (!((dim==3 && nstate==dim+2) || (dim==1 && nstate==1))) {
+           (void) parameter_handler_input;
+       }
 
     if(test_type == Test_enum::run_control) { // TO DO: rename to grid_study
         return std::make_unique<GridStudy<dim,nstate>>(parameters_input);
@@ -263,8 +265,8 @@ std::unique_ptr< TestsBase > TestsFactory<dim,nstate,MeshType>
         if constexpr (dim==2 && nstate==dim+2) return std::make_unique<EulerGaussianBump<dim,nstate>>(parameters_input,parameter_handler_input);
     } else if(test_type == Test_enum::euler_gaussian_bump_enthalpy) {
         if constexpr (dim==2 && nstate==dim+2) return std::make_unique<EulerGaussianBumpEnthalpyCheck<dim,nstate>>(parameters_input, parameter_handler_input);
-    //} else if(test_type == Test_enum::euler_gaussian_bump_adjoint){
-    //   if constexpr (dim==2 && nstate==dim+2) return std::make_unique<EulerGaussianBumpAdjoint<dim,nstate>>(parameters_input);
+        //} else if(test_type == Test_enum::euler_gaussian_bump_adjoint){
+        //   if constexpr (dim==2 && nstate==dim+2) return std::make_unique<EulerGaussianBumpAdjoint<dim,nstate>>(parameters_input);
     } else if(test_type == Test_enum::euler_cylinder) {
         if constexpr (dim==2 && nstate==dim+2) return std::make_unique<EulerCylinder<dim,nstate>>(parameters_input);
     } else if(test_type == Test_enum::euler_cylinder_adjoint) {
@@ -347,6 +349,8 @@ std::unique_ptr< TestsBase > TestsFactory<dim,nstate,MeshType>
         if constexpr (dim==2 && nstate==dim+2) return std::make_unique<VortexShedding<dim, nstate>>(parameters_input, parameter_handler_input);
     } else if(test_type== Test_enum::pod_unsteady) {
         if constexpr (nstate==dim+2) return std::make_unique<PODUnsteady<dim, nstate>>(parameters_input, parameter_handler_input);
+    } else if(test_type == Test_enum::hyper_reduction_dg) {
+        if constexpr (nstate==dim+2) return std::make_unique<HyperReductionDG<dim, nstate>>(parameters_input, parameter_handler_input);
     } else {
         std::cout << "Invalid test. You probably forgot to add it to the list of tests in tests.cpp" << std::endl;
         std::abort();

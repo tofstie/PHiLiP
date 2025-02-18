@@ -3811,6 +3811,8 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::construct_global_Q() {
                 if(row == n_quad_pts_1D-1) id_counter++;
             }
         }
+        std::ofstream testfile("test.txt");
+        global_Q.Print(testfile);
     }
     global_Q.FillComplete(global_map,global_map);
     return global_Q;

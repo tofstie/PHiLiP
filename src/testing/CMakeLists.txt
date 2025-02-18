@@ -49,6 +49,7 @@ set(TESTS_SOURCE
     vortex_shedding.cpp
     pod_unsteady.cpp
     unsteady_hyper_reduction.cpp
+    hyper_reduction_dg.cpp
 )
 
 foreach(dim RANGE 1 3)
