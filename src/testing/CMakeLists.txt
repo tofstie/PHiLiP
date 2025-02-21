@@ -50,6 +50,7 @@ set(TESTS_SOURCE
     pod_unsteady.cpp
     unsteady_hyper_reduction.cpp
     hyper_reduction_dg.cpp
+    h_refinement_reduced_order.cpp
 )
 
 foreach(dim RANGE 1 3)

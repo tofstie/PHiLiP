@@ -250,8 +250,8 @@ bool NNLS_solver::solve(){
   // Pre-mult by A^T
   Epetra_CrsMatrix AtA(Epetra_DataAccess::Copy, A_.ColMap(), A_.NumMyCols());
   EpetraExt::MatrixMatrix::Multiply(A_, true, A_, false, AtA);
-  std::ofstream fs("test.txt");
-  A_.Print(fs);
+  //std::ofstream fs("test.txt");
+  //A_.Print(fs);
   Epetra_Vector Atb (A_.ColMap());
   A_.Multiply(true, b_, Atb);
   Epetra_Vector AtAx (A_.ColMap());
@@ -429,8 +429,8 @@ bool NNLS_solver::solve(){
 
 Epetra_CrsMatrix NNLS_solver::allocateMatrixToSingleCore(const Epetra_CrsMatrix &A, bool trans_A = false){
   // Gather Matrix Information
-  std::ofstream A_file("A_allocateMatrixToSingleCore.txt");
-  A.Print(A_file);
+  //std::ofstream A_file("A_allocateMatrixToSingleCore.txt");
+  //A.Print(A_file);
   const int A_rows = A.NumGlobalRows();
   const int A_cols = A.NumGlobalCols();
   const int rank = Comm_.MyPID();
@@ -442,13 +442,13 @@ Epetra_CrsMatrix NNLS_solver::allocateMatrixToSingleCore(const Epetra_CrsMatrix 
   // Create Epetra_importer object
   Epetra_Import A_importer(single_core_row_A,old_row_map_A);
   // Create new A matrix
-  std::ofstream A_temp_file("A_temp_allocateMatrixToSingleCore.txt");
+  //std::ofstream A_temp_file("A_temp_allocateMatrixToSingleCore.txt");
 
   Epetra_CrsMatrix A_temp (Epetra_DataAccess::Copy, single_core_row_A, A_cols);
   // Load the data from matrix A (Multi core) into A_temp (Single core)
   A_temp.Import(A, A_importer, Epetra_CombineMode::Insert);
   A_temp.FillComplete(single_core_col_A,single_core_row_A);
-  A_temp.Print(A_temp_file);
+  //A_temp.Print(A_temp_file);
   // Why
   std::shared_ptr<Epetra_CrsMatrix> A_ptr;
   if (trans_A) {
@@ -461,8 +461,8 @@ Epetra_CrsMatrix NNLS_solver::allocateMatrixToSingleCore(const Epetra_CrsMatrix 
       //delete[] row;
     }
     A_trans.FillComplete(single_core_row_A, single_core_col_A);
-    std::ofstream file("A_trans.txt");
-    A_trans.Print(file);
+   // std::ofstream file("A_trans.txt");
+   // A_trans.Print(file);
     A_ptr = std::make_shared<Epetra_CrsMatrix>(A_trans);
 
   }

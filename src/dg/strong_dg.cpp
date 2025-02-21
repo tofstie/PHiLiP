@@ -3432,13 +3432,13 @@ template <int dim, int nstate, typename real, typename MeshType>
 void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V)
 {
     Eigen::MatrixXd V_eigen = epetra_to_eig_matrix(V.trilinos_matrix());
-    const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
-    std::ofstream file("POD_Basis_"+std::to_string(rank)+".txt");
-    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
-    if (file.is_open()){
-        file << V_eigen.format(CSVFormat);
-    }
-    file.close();
+    //const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
+   // std::ofstream file("POD_Basis_"+std::to_string(rank)+".txt");
+    //const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    //if (file.is_open()){
+    //    file << V_eigen.format(CSVFormat);
+    //}
+    //file.close();
 
     //Eigen::MatrixXd pinvV = V_eigen.completeOrthogonalDecomposition().pseudoInverse();
     //Eigen::PartialPivLU<Eigen::MatrixXd> lu = Eigen::PartialPivLU<Eigen::MatrixXd>(VTV);
@@ -3459,17 +3459,17 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     Epetra_Map Col_Map = V.trilinos_matrix().RowMap();
     Epetra_Map Row_Map = V.trilinos_matrix().DomainMap();
     Epetra_CrsMatrix pinvV = eig_to_epetra_matrix(PsuedoInv,Col_Map, Row_Map);
-    std::ofstream file2("pInv" + std::to_string(epetra_comm.MyPID()) + ".txt");
-    if (file2.is_open()){
-        file2 << PsuedoInv.format(CSVFormat);
-    }
-    file2.close();
+    //std::ofstream file2("pInv" + std::to_string(epetra_comm.MyPID()) + ".txt");
+    //if (file2.is_open()){
+    //    file2 << PsuedoInv.format(CSVFormat);
+    //}
+    //file2.close();
     // Storing
     std::ofstream file3("pInv_Epetra"+ std::to_string(epetra_comm.MyPID()) + ".txt");
-    pinvV.Print(file3);
+    //pinvV.Print(file3);
     this->projection_matrix.reinit(pinvV);
     std::ofstream file4("projection_matrix.txt");
-    this->projection_matrix.print(file4);
+    //this->projection_matrix.print(file4);
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
@@ -3498,7 +3498,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(Epetra_CrsM
     std::ofstream file4("projection_matrix.txt");
     //projection_matrix.Print(file4);
     std::ofstream mass_epetra_file("mass_epetra.txt");
-    this->global_mass_matrix.trilinos_matrix().Print(mass_epetra_file);
+    //this->global_mass_matrix.trilinos_matrix().Print(mass_epetra_file);
     /*
     {
         Eigen::MatrixXd LeV_eig = epetra_to_eig_matrix(LeV);
@@ -3538,7 +3538,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
     */
     // This is for comparing entropy difference
     //int n_proccesses = dealii::Utilities::MPI::n_mpi_processes(this->mpi_communicator);
-    int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
+    //int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
     //this->projected_entropy /= pow(n_proccesses,1); 
     this->projected_entropy.update_ghost_values();
     /*for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
@@ -3554,14 +3554,14 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
             this->projected_entropy[idx] = this->global_entropy[idx];
         }
     }*/
-    std::ofstream proj_file("proj"+std::to_string(rank)+".txt");
-    this->projected_entropy.print(proj_file);
+    //std::ofstream proj_file("proj"+std::to_string(rank)+".txt");
+    //this->projected_entropy.print(proj_file);
     dealii::LinearAlgebra::distributed::Vector<double> entropy_diff(this->global_entropy);
     entropy_diff -= this->projected_entropy;
-    std::ofstream file("entropy_diff.txt");
-    entropy_diff.print(file);
-    std::ofstream temp_file("temp_file_"+std::to_string(rank)+".txt");
-    temp_val.print(temp_file);
+    //std::ofstream file("entropy_diff.txt");
+    //entropy_diff.print(file);
+    //std::ofstream temp_file("temp_file_"+std::to_string(rank)+".txt");
+    //temp_val.print(temp_file);
     entropy_diff /= 1;
 }
 

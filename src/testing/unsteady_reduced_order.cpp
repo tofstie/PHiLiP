@@ -38,7 +38,11 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     // Create ROM and Solve
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&ROM_param_const, parameter_handler);
     const int modes = flow_solver_galerkin->ode_solver->pod->getPODBasis()->n();
-    flow_solver_galerkin->run();
+    try {
+        static_cast<void>(flow_solver_galerkin->run());
+    } catch (double end) {
+        this->pcout << "ROM Failed at t = " << end << std::endl;
+    }
 
     // Change Parameters to Entropy-Stable ROM
     ROM_param.reduced_order_param.entropy_variables_in_snapshots = true;
@@ -48,8 +52,11 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_entropy_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&Entropy_ROM_param_const, parameter_handler);
     dealii::LinearAlgebra::distributed::Vector<double> entropy_intial_solution(flow_solver_entropy_galerkin->dg->solution);
     const double initial_entropy = flow_solver_case->compute_entropy(flow_solver_entropy_galerkin->dg);
-    flow_solver_entropy_galerkin->run();
-
+    try {
+        static_cast<void>(flow_solver_entropy_galerkin->run());
+    } catch (double end) {
+        this->pcout << "ESROM Failed at t = " << end << std::endl;
+    }
     dealii::LinearAlgebra::distributed::Vector<double> full_order_solution(flow_solver_full_order->dg->solution);
     dealii::LinearAlgebra::distributed::Vector<double> galerkin_solution(flow_solver_galerkin->dg->solution);
     dealii::LinearAlgebra::distributed::Vector<double> entropy_galerkin_solution(flow_solver_entropy_galerkin->dg->solution);

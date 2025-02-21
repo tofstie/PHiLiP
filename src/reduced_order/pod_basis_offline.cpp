@@ -208,7 +208,16 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
 
     MatrixXd snapshotMatrixCentered = snapshots.colwise() - reference_state;
     Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(snapshotMatrixCentered);
+    // Print Singular Values
+    std::string file_name = dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots ? "esrom_singular_values.txt" : "rom_singular_values.txt";
+    std::ofstream singular_values_file(file_name);
+    VectorXd singular_values = svd_one.singularValues();
+    singular_values_file << singular_values << std::endl;
+    singular_values_file.close();
+
     MatrixXd pod_basis = svd_one.matrixU();
+
+
     /// This commented sections adds a col of 1 to the LSV and preforms another SVD.
     /*
     VectorXd ones = VectorXd::Ones(pod_basis_one.rows());
@@ -222,9 +231,8 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     */
     // Reduce POD Size using either number of modes or a singular value threshold
     if(dg->all_parameters->reduced_order_param.number_modes > 0){
-        const int num_modes = dg->all_parameters->reduced_order_param.number_modes;
-        Assert(num_modes < pod_basis.cols(),
-        dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
+        int num_modes = dg->all_parameters->reduced_order_param.number_modes;
+        if(num_modes > pod_basis.cols()) num_modes = pod_basis.cols();
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,num_modes));
         pod_basis = pod_basis_n_modes;
     }
@@ -283,12 +291,12 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     }
     int rank = epetra_comm.MyPID();
     std::ofstream before_file("before_fill_"+std::to_string(rank)+".txt");
-    epetra_basis.Print(before_file);
+    //epetra_basis.Print(before_file);
     PrintMapInfo(domain_map);
     epetra_comm.Barrier();
     epetra_basis.FillComplete(domain_map, system_matrix_map);
     std::ofstream file("AH" + std::to_string(epetra_comm.MyPID())+".txt");
-    epetra_basis.Print(file);
+    //epetra_basis.Print(file);
     //PrintMapInfo(epetra_basis.DomainMap());
     basis->reinit(epetra_basis);
 
@@ -1011,8 +1019,33 @@ void OfflinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2
             FOM_solution(m) = snapshotMatrix(m,iteration);
         }
     }
+    double inner_product_ROM;
+    // Assembling ROM vh^T*RHS
+    if(dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
+        std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = this->getPODBasis();
+        dg->calculate_global_entropy();
+        dg->calculate_ROM_projected_entropy(*pod_basis);
+        dg->assemble_residual();
+        dealii::LinearAlgebra::distributed::Vector<double> inner_product_vector_ROM;
+        inner_product_vector_ROM.reinit(dg->projected_entropy);
+        inner_product_ROM = inner_product_vector_ROM.add_and_dot(1.0,dg->projected_entropy,dg->right_hand_side);
+    } else {
+        std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = this->getPODBasis();
+        dg->calculate_global_entropy();
+        //flow_solver->dg->calculate_ROM_projected_entropy(*pod_basis);
+        dg->assemble_residual();
+        dealii::LinearAlgebra::distributed::Vector<double> inner_product_vector_ROM;
+        inner_product_vector_ROM.reinit(dg->global_entropy);
+        inner_product_ROM = inner_product_vector_ROM.add_and_dot(1.0,dg->global_entropy,dg->right_hand_side);
+    }
     ROM_solution = this->dg->solution;
     this->dg->solution = FOM_solution;
+    // Assembling FOM vh^T*RHS
+    dg->calculate_global_entropy();
+    dg->assemble_residual();
+    dealii::LinearAlgebra::distributed::Vector<double> inner_product_vector_FOM;
+    inner_product_vector_FOM.reinit(dg->global_entropy);
+    double inner_product_FOM = inner_product_vector_FOM.add_and_dot(1.0,dg->global_entropy,dg->right_hand_side);
 
     std::array<std::vector<double>,4> FOM_quantities;
     FOM_quantities = compute_quantities(*this->dg,euler_physics_double);
@@ -1046,6 +1079,12 @@ void OfflinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2
             L2error_data_table->set_precision(L2_labels[i], 16);
             L2error_data_table->set_scientific(L2_labels[i], true);
         }
+        L2error_data_table->add_value("vh^T*RHS_FOM",inner_product_FOM);
+        L2error_data_table->set_precision("vh^T*RHS_FOM", 16);
+        L2error_data_table->set_scientific("vh^T*RHS_FOM", true);
+        L2error_data_table->add_value("vh^T*RHS_ROM",inner_product_ROM);
+        L2error_data_table->set_precision("vh^T*RHS_ROM", 16);
+        L2error_data_table->set_scientific("vh^T*RHS_ROM", true);
 
         std::ofstream l2_error_table_file(file_name);
         L2error_data_table->write_text(l2_error_table_file);

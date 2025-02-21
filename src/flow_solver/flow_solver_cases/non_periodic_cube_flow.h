@@ -25,6 +25,10 @@ class NonPeriodicCubeFlow : public CubeFlow_UniformGrid<dim, nstate>
      void display_additional_flow_case_specific_parameters() const override;
 
  protected:
+
+    /// Enum of integrated quantities to calculate
+    enum IntegratedQuantityEnum { kinetic_energy, max_wave_speed, numerical_entropy};
+
     /// Function to compute the adaptive time step
     using CubeFlow_UniformGrid<dim, nstate>::get_adaptive_time_step;
 
@@ -47,14 +51,35 @@ class NonPeriodicCubeFlow : public CubeFlow_UniformGrid<dim, nstate>
         const double current_time,
         const std::shared_ptr <DGBase<dim, double>> dg,
         const std::shared_ptr<dealii::TableHandler> unsteady_data_table) override;
- 
+
+    /// Calculate numerical entropy
+    /// Calls compute_integrated_quantities
+    double compute_entropy(const std::shared_ptr <DGBase<dim, double>> dg) const;
+
+    double compute_integrated_quantities(DGBase<dim, double> &dg,
+        IntegratedQuantityEnum quantity,
+        const int overintegrate=10 // Overintegrate for KE, don't for num. entropy
+        ) const;
+
  private:
+
+    /// Storing entropy at first step
+    double initial_entropy;
+
+    /// Store previous entropy
+    double previous_numerical_entropy;
+
+    /// Last time (for calculating relaxation factor)
+    double previous_time=0;
+
     /// Maximum local wave speed (i.e. convective eigenvalue)
     double maximum_local_wave_speed;
 
     /// Pointer to Physics object for computing things on the fly
     std::shared_ptr< Physics::PhysicsBase<dim,nstate,double> > pde_physics;
 
+    // euler physics pointer for computing physical quantities.
+   Physics::Euler<dim, dim+2, double > euler_physics;
 };
 
 } // FlowSolver namespace
