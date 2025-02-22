@@ -373,7 +373,7 @@ const {
         pcout << "Simulation did not reach the end time. Crashed at t = " << end <<std::endl;
     }
     return 0;
-};
+}
 
 template <int dim, int nstate>
 void PODUnsteady<dim,nstate>
@@ -383,7 +383,7 @@ void PODUnsteady<dim,nstate>
     unsigned int precision = 16;
     current_pod->dealiiSnapshotMatrix.print_formatted(solution_out_file, precision, true,0,"0"); // Added fix to 0?
     solution_out_file.close();
-};
+}
 
 
 // 📢 Stick to naming convention
