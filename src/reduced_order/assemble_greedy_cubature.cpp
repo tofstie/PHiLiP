@@ -45,12 +45,12 @@ AssembleGreedyCubature<dim,nstate>::AssembleGreedyCubature(const PHiLiP::Paramet
 template<int dim, int nstate>
 dealii::LinearAlgebra::distributed::Vector<double> AssembleGreedyCubature<dim,nstate>::get_weights(){
     return final_weights;
-};
+}
 
 template<int dim, int nstate>
 std::vector<int> AssembleGreedyCubature<dim,nstate>::get_indices(){
     return z_vector;
-};
+}
 
 template<int dim, int nstate>
 void AssembleGreedyCubature<dim,nstate>::build_problem(){
