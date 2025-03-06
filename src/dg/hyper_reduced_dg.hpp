@@ -31,6 +31,8 @@ public:
 
     /// Allocate the dual vector for optimization.
     void allocate_dual_vector ();
+
+    void assemble_hyper_reduced_residual (const bool compute_dRdW=false, const bool compute_dRdX=false, const bool compute_d2R=false, const double CFL_mass = 0.0) override;
 protected:
     /// Builds the necessary operators and assembles volume residual for either primary or auxiliary.
     void assemble_volume_term_and_build_operators(
@@ -359,7 +361,7 @@ public:
     void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
     dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
     void calculate_convective_flux_matrix(Epetra_CrsMatrix &Fx,Epetra_CrsMatrix &Fy,Epetra_CrsMatrix &Fz);
-    Epetra_CrsMatrix construct_global_Q();
+    void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz);
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
 };
 }

@@ -823,7 +823,8 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
 
     assert(row_map.SameAs(input_mat2.RowMap()));
     assert(domain_map.SameAs(input_mat2.DomainMap()));
-
+    assert(row_map.SameAs(output_mat.RowMap()));
+    //output_mat.ColMap().Print(std::cout);
     // Pointers for data extraction
     double *values1 = new double [row_map.MaxElementSize()];
     int *indices1 = new int [row_map.MaxElementSize()];
@@ -833,7 +834,7 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
 
     int NumEntries1;
     int NumEntries2;
-
+    int error = 0;
     for (int local_row_idx = 0; local_row_idx < row_map.NumMyElements(); local_row_idx++) {
         // Extracts row from Matrix
         input_mat1.ExtractMyRowView(local_row_idx,NumEntries1,values1,indices1);
@@ -844,12 +845,16 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
         std::map<int,int> index_map1;
         std::map<int,int> index_map2;
         // Add all of indicies from input_mat1
+        //std::cout << "1nd Index: " << std::endl;
         for(int i=0;i<NumEntries1;i++) {
+            //std::cout << "Index: " << indices1[i] << " Value: " << values1[i] << std::endl;
             shared_index_map.insert({indices1[i],1});
             index_map1.insert({indices1[i],i});
         }
         // Add all of indices from input_mat2, if they already exist, the value will take 2
+        //std::cout << "2nd Index: " << std::endl;
         for(int i=0;i<NumEntries2;i++) {
+            //std::cout << "Index: " << indices2[i] << " Value: " << values2[i] << std::endl;
             shared_index_map.try_emplace(indices2[i],0);
             shared_index_map[indices2[i]]++;
             index_map2.insert({indices2[i],i});
@@ -859,24 +864,28 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
         double *new_values = new double [new_Size];
         int *new_indices = new int [new_Size];
         int new_values_counter = 0;
+
         // Go through the map, if the value is 2 at the index, then add the multiplication to the pointers
         for(auto it = shared_index_map.begin(); it != shared_index_map.end(); it++) {
             if (it->second == 2) {
                 new_values[new_values_counter] = values1[index_map1[it->first]]*values2[index_map2[it->first]];
                 new_indices[new_values_counter] = it->first;
+                //std::cout << "Index: " << new_indices[new_values_counter] << " Value: " << new_values[new_values_counter] << std::endl;
                 new_values_counter++;
             }
         }
-        output_mat.InsertMyValues(local_row_idx,new_Size,new_values,new_indices);
-        delete [] new_values;
-        delete [] new_indices;
+        error += output_mat.InsertGlobalValues(local_row_idx,new_Size,new_values,new_indices);
+
+        //std::cout << error << std::endl;
+        //delete [] new_values;
+        //delete [] new_indices;
 
     }
     // Delete raw pointers
-    delete[] values1;
-    delete[] indices1;
-    delete[] values2;
-    delete[] indices2;
+    // delete[] values1;
+    // delete[] indices1;
+    // delete[] values2;
+    // delete[] indices2;
     output_mat.FillComplete(domain_map,row_map);
 
 }

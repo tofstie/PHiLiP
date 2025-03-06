@@ -10,6 +10,9 @@ class HyperReductionParam
 {
 public:
 
+    /// Type of Hyper Reduction to be preformed
+    std::string hyper_reduction_type;
+
     /// Tolerance for NNLS Solver
     /* Equivalant to epsilon in Equation (18) of
     https://onlinelibrary.wiley.com/doi/10.1002/nme.6603 */

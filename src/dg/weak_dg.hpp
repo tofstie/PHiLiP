@@ -28,6 +28,7 @@ public:
         const unsigned int grid_degree_input,
         const std::shared_ptr<Triangulation> triangulation_input);
 
+    void assemble_hyper_reduced_residual (const bool compute_dRdW=false, const bool compute_dRdX=false, const bool compute_d2R=false, const double CFL_mass = 0.0);
 private:
 
     /// Builds the necessary fe values and assembles volume residual.

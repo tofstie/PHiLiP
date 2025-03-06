@@ -31,7 +31,7 @@ int UnsteadyHyperReduction<dim, nstate>::run_test() const {
     // Creating FOM and Solve
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_full_order = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(all_parameters, parameter_handler);
     const double initial_FOM_entropy = flow_solver_case->compute_entropy(flow_solver_full_order->dg);
-    //flow_solver_full_order->run();
+    flow_solver_full_order->run();
     const double final_FOM_entropy = flow_solver_case->compute_entropy(flow_solver_full_order->dg);
     const double FOM_entropy_diff = final_FOM_entropy - initial_FOM_entropy;
 

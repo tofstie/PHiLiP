@@ -10,7 +10,10 @@
 #include "reduced_order/pod_basis_online.h"
 #include "reduced_order/assemble_ECSW_residual.h"
 #include "reduced_order/assemble_ECSW_jacobian.h"
+#include "reduced_order/assemble_greedy_residual.h"
+#include "reduced_order/assemble_greedy_cubature.h"
 #include "linear_solver/NNLS_solver.h"
+#include "linear_solver/helper_functions.h"
 #include "physics/initial_conditions/set_initial_condition.h"
 #include "mesh/mesh_adaptation/mesh_adaptation.h"
 #include <deal.II/base/timer.h>
@@ -111,56 +114,68 @@ FlowSolver<dim, nstate>::FlowSolver(
                 pod_basis->print(outfile2);
                 this->dg->calculate_projection_matrix(*pod_basis);
             }
-            Eigen::MatrixXd snapshot_matrix = pod->getSnapshotMatrix();
-            int num_of_cols = snapshot_matrix.cols();
-            if (all_param.reduced_order_param.entropy_variables_in_snapshots) num_of_cols /= 2;
-            std::cout << "Construct instance of Assembler..."<< std::endl;
+            if(all_param.hyper_reduction_param.hyper_reduction_type == "ECSW") {
+                Eigen::MatrixXd snapshot_matrix = pod->getSnapshotMatrix();
+                int num_of_cols = snapshot_matrix.cols();
+                if (all_param.reduced_order_param.entropy_variables_in_snapshots) num_of_cols /= 2;
+                std::cout << "Construct instance of Assembler..."<< std::endl;
 
-            std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
-            Eigen::MatrixXd snapshot_parameters(num_of_cols,1);
-            Epetra_MpiComm Comm( MPI_COMM_WORLD );
-            PHiLiP::Parameters::AllParameters strong_params = all_param;
-            strong_params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
-            strong_params.reduced_order_param.entropy_variables_in_snapshots = true;
-            std::shared_ptr<DGBase<dim, double>> dg_strong_obj = DGFactory<dim,double>::create_discontinuous_galerkin(&strong_params, poly_degree, flow_solver_param.max_poly_degree_for_adaptation, grid_degree, flow_solver_case->generate_grid());
-            dg_strong_obj->allocate_system(true,false,false);
-            if(oneDoneNstate || oneDthreeNState) { // For templates
-                if (all_param.hyper_reduction_param.training_data == "residual")
-                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&strong_params, parameter_handler, dg_strong_obj, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);
-                else {
-                    constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&strong_params, parameter_handler, dg_strong_obj, pod,  snapshot_parameters, ode_param.ode_solver_type, Comm);
+                std::shared_ptr<HyperReduction::AssembleECSWBase<dim,nstate>> constructer_NNLS_problem;
+                Eigen::MatrixXd snapshot_parameters(num_of_cols,1);
+                Epetra_MpiComm Comm( MPI_COMM_WORLD );
+                PHiLiP::Parameters::AllParameters strong_params = all_param;
+                strong_params.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::runge_kutta_solver;
+                strong_params.reduced_order_param.entropy_variables_in_snapshots = true;
+                std::shared_ptr<DGBase<dim, double>> dg_strong_obj = DGFactory<dim,double>::create_discontinuous_galerkin(&strong_params, poly_degree, flow_solver_param.max_poly_degree_for_adaptation, grid_degree, flow_solver_case->generate_grid());
+                dg_strong_obj->allocate_system(true,false,false);
+                if(oneDoneNstate || oneDthreeNState) { // For templates
+                    if (all_param.hyper_reduction_param.training_data == "residual")
+                        constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWRes<dim,nstate>>(&strong_params, parameter_handler, dg_strong_obj, pod,  snapshot_parameters, ode_param.ode_solver_type,Comm);
+                    else {
+                        constructer_NNLS_problem = std::make_shared<HyperReduction::AssembleECSWJac<dim,nstate>>(&strong_params, parameter_handler, dg_strong_obj, pod,  snapshot_parameters, ode_param.ode_solver_type, Comm);
+                    }
                 }
-            }
-            std::cout << "Build Problem..."<< std::endl;
-            std::cout << "Proj Mat " << this->dg->projection_matrix.m() << "x" << this->dg->projection_matrix.n() << std::endl;
-            constructer_NNLS_problem->updateFOMLocations(snapshot_matrix);
-            constructer_NNLS_problem->build_problem();
+                std::cout << "Build Problem..."<< std::endl;
+                std::cout << "Proj Mat " << this->dg->projection_matrix.m() << "x" << this->dg->projection_matrix.n() << std::endl;
+                constructer_NNLS_problem->updateFOMLocations(snapshot_matrix);
+                constructer_NNLS_problem->build_problem();
 
-            // Transfer b vector (RHS of NNLS problem) to Epetra structure
+                // Transfer b vector (RHS of NNLS problem) to Epetra structure
 
-            Epetra_Map bMap = (constructer_NNLS_problem->A_T->trilinos_matrix()).DomainMap();
-            Epetra_Vector b_Epetra (bMap);
-            auto b = constructer_NNLS_problem->b;
-            for(unsigned int i = 0 ; i < b.size() ; i++){
-                b_Epetra[i] = b(i);
+                Epetra_Map bMap = (constructer_NNLS_problem->A_T->trilinos_matrix()).DomainMap();
+                Epetra_Vector b_Epetra (bMap);
+                auto b = constructer_NNLS_problem->b;
+                for(unsigned int i = 0 ; i < b.size() ; i++){
+                    b_Epetra[i] = b(i);
+                }
+                Epetra_CrsMatrix A = constructer_NNLS_problem->A_T->trilinos_matrix();
+                std::ofstream file_test("Test1.txt");
+                constructer_NNLS_problem->A_T->trilinos_matrix().Print(file_test);
+                // Solve NNLS Problem for ECSW weights
+                std::cout << "Create NNLS problem..."<< std::endl;
+                NNLS_solver NNLS_prob(&all_param, parameter_handler, A, true, Comm, b_Epetra);
+                std::cout << "Solve NNLS problem..."<< std::endl;
+                bool exit_con = NNLS_prob.solve();
+                std::cout << exit_con << std::endl;
+                Epetra_Vector weights = NNLS_prob.getSolution();
+                // ONLY WORKS FOR ONE CORE
+                std::ofstream outfile("Weights_FS.txt");
+                for (int i = 0;i < weights.GlobalLength();i++) {
+                    outfile << weights[i] << '\n';
+                }
+                outfile.close();
+                ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
+            } else if (all_param.hyper_reduction_param.hyper_reduction_type == "Cubature") {
+                auto ode_solver_type = ode_param.ode_solver_type;
+                HyperReduction::AssembleGreedyRes<dim,nstate> hyper_reduction(&all_param, parameter_handler, this->dg, pod, ode_solver_type);
+                hyper_reduction.build_weights();
+                std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = pod->getPODBasis();
+                Eigen::MatrixXd basis = epetra_to_eig_matrix(pod_basis->trilinos_matrix());
+                hyper_reduction.build_chan_target(basis);
+                hyper_reduction.build_problem();
+
             }
-            Epetra_CrsMatrix A = constructer_NNLS_problem->A_T->trilinos_matrix();
-            std::ofstream file_test("Test1.txt");
-            constructer_NNLS_problem->A_T->trilinos_matrix().Print(file_test);
-            // Solve NNLS Problem for ECSW weights
-            std::cout << "Create NNLS problem..."<< std::endl;
-            NNLS_solver NNLS_prob(&all_param, parameter_handler, A, true, Comm, b_Epetra);
-            std::cout << "Solve NNLS problem..."<< std::endl;
-            bool exit_con = NNLS_prob.solve();
-            std::cout << exit_con << std::endl;
-            Epetra_Vector weights = NNLS_prob.getSolution();
-            // ONLY WORKS FOR ONE CORE
-            std::ofstream outfile("Weights_FS.txt");
-            for (int i = 0;i < weights.GlobalLength();i++) {
-                outfile << weights[i] << '\n';
-            }
-            outfile.close();
-            ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
+
         } else {
             // ONLY WORKS FOR ONE CORE
             Epetra_MpiComm Comm( MPI_COMM_WORLD );
@@ -536,6 +551,8 @@ int FlowSolver<dim,nstate>::run() const
        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver ||
        ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver);
 
+    bool snapshot_added_this_timestep = false;
+
     // Boolean to store if this run is an unsteady POD.
     const bool unsteady_POD_bool = (ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver ||
                                     ode_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver);
@@ -635,7 +652,7 @@ int FlowSolver<dim,nstate>::run() const
         while(ode_solver->current_time < final_time)
         {
             time_step = next_time_step; // update time step
-
+            snapshot_added_this_timestep = false;
             // check if we need to decrease the time step
             if((ode_solver->current_time+time_step) > final_time && flow_solver_param.end_exactly_at_final_time) {
                 // decrease time step to finish exactly at specified final time
@@ -728,6 +745,7 @@ int FlowSolver<dim,nstate>::run() const
             // Add snapshots to snapshot matrix
             if(unsteady_FOM_POD_bool){
                 const bool is_snapshot_iteration = (ode_solver->current_iteration % all_param.reduced_order_param.output_snapshot_every_x_timesteps == 0);
+                snapshot_added_this_timestep = true;
                 if(is_snapshot_iteration) time_pod->addSnapshot(dg->solution);
             }
             if(unsteady_POD_bool) {
@@ -738,6 +756,7 @@ int FlowSolver<dim,nstate>::run() const
 
         // Print POD Snapshots to file
         if(unsteady_FOM_POD_bool){
+            if(!snapshot_added_this_timestep) time_pod->addSnapshot(dg->solution);
             std::ofstream snapshot_file("solution_snapshots_iteration_" + std::to_string(ode_solver->current_iteration) + ".txt"); // Change ode_solver->current_iteration to size of matrix
             constexpr unsigned int precision = 16;
             time_pod->dealiiSnapshotMatrix.print_formatted(snapshot_file, precision, true, 0, "0",1.,2*std::numeric_limits<double>::min());

@@ -63,7 +63,7 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operat
     const bool,
     const bool)
 {
-    // Check if the current cell's poly degree etc is different then previous cell's.
+ // Check if the current cell's poly degree etc is different then previous cell's.
     // If the current cell's poly degree is different, then we recompute the 1D
     // polynomial basis functions. Otherwise, we use the previous values in reference space.
     if(poly_degree != soln_basis.current_degree){
@@ -77,6 +77,7 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operat
                                                       soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
                                                       mapping_basis);
     }
+
     const dealii::FESystem<dim> &fe_metric = this->high_order_grid->fe_system;
     const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
     const unsigned int n_grid_nodes  = n_metric_dofs / dim;
@@ -102,19 +103,97 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operat
         mapping_basis,
         this->all_parameters->use_invariant_curl_form);
 
-    assemble_volume_term_strong(
-            cell,
-            current_cell_index,
-            cell_dofs_indices,
-            poly_degree,
-            soln_basis,
-            flux_basis,
-            flux_basis_stiffness,
-            soln_basis_projection_oper_int,
-            metric_oper,
-            local_rhs_int_cell);
-}
 
+
+    assemble_volume_term_strong(
+        cell,
+        current_cell_index,
+        cell_dofs_indices,
+        poly_degree,
+        soln_basis,
+        flux_basis,
+        flux_basis_stiffness,
+        soln_basis_projection_oper_int,
+        metric_oper,
+        local_rhs_int_cell);
+
+}
+template <int dim, int nstate, typename real, typename MeshType>
+void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
+    const bool /*compute_dRdW=false*/,
+    const bool /*compute_dRdX=false*/,
+    const bool /*compute_d2R=false*/,
+    const double /*CFL_mass = 0.0*/) {
+
+    const int global_size = this->solution.size();
+    Epetra_MpiComm comm(MPI_COMM_WORLD);
+    Epetra_Map global_map(global_size,0,comm);
+    Epetra_Map domain_map = this->global_mass_matrix.trilinos_matrix().DomainMap();
+    const int grid_degree = this->all_parameters->flow_solver_param.grid_degree;
+    // Construct Q
+    Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
+    Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
+    Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
+    this->construct_global_Q(Qx,Qy,Qz);
+    // Construct Qt
+    Epetra_CrsMatrix Qtx = this->calculate_hyper_reduced_Q(Qx);
+    Epetra_CrsMatrix Qty = this->calculate_hyper_reduced_Q(Qy);
+    Epetra_CrsMatrix Qtz = this->calculate_hyper_reduced_Q(Qz);
+    // Construct F
+    Epetra_CrsMatrix Fx(Epetra_DataAccess::Copy,Qx.RowMap(),global_size);
+#if PHILIP_DIM==1
+    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qy.RowMap(),0);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qz.RowMap(),0);
+#elif PHILIP_DIM==2
+    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qy.RowMap(),global_size);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qz.RowMap(),0);
+#elif PHILIP_DIM==3
+    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qy.RowMap(),global_size);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qz.RowMap(),global_size);
+#endif
+    this->calculate_convective_flux_matrix(Fx,Fy,Fz);
+    Fx.FillComplete(Qx.DomainMap(),Qx.RowMap());
+    Fy.FillComplete(Qy.DomainMap(),Qy.RowMap());
+    Fz.FillComplete(Qz.DomainMap(),Qz.RowMap());
+
+
+    const int max_poly = this->all_parameters->flow_solver_param.max_poly_degree_for_adaptation;
+    Epetra_CrsMatrix QtxF(Epetra_DataAccess::Copy,Qtx.RowMap(),Qtx.ColMap(),Qtx.NumGlobalCols());
+    Epetra_CrsMatrix QtyF(Epetra_DataAccess::Copy,Qty.RowMap(),Qty.ColMap(),Qty.NumGlobalCols());
+    Epetra_CrsMatrix QtzF(Epetra_DataAccess::Copy,Qtz.RowMap(),Qtz.ColMap(),Qtz.NumGlobalCols());
+
+    OPERATOR::SumFactorizedOperators<dim,2*dim,double> op(nstate,max_poly,grid_degree);
+    op.Hadamard_product(Qtx,Fx,QtxF);
+    op.Hadamard_product(Qty,Fy,QtyF);
+    op.Hadamard_product(Qtz,Fz,QtzF);
+
+    dealii::LinearAlgebra::distributed::Vector<double> ones(this->solution);
+    //dealii::LinearAlgebra::distributed::Vector<double> resultx(this->solution);
+    //dealii::LinearAlgebra::distributed::Vector<double> resulty(this->solution);
+    //dealii::LinearAlgebra::distributed::Vector<double> resultz(this->solution);
+
+    // resultx = 0;
+    // resulty = 0;
+    // resultz = 0;
+    this->right_hand_side = 0;
+    ones = 1.;
+    dealii::TrilinosWrappers::SparseMatrix QtxF_deall;
+    dealii::TrilinosWrappers::SparseMatrix QtyF_deall;
+    dealii::TrilinosWrappers::SparseMatrix QtzF_deall;
+    std::ofstream QtxF_file("QtxF.txt");
+    QtxF.Print(QtxF_file);
+    QtxF_deall.reinit(QtxF);
+    QtyF_deall.reinit(QtyF);
+    QtzF_deall.reinit(QtzF);
+
+    QtxF_deall.vmult_add(this->right_hand_side,ones);
+    QtyF_deall.vmult_add(this->right_hand_side,ones);
+    QtzF_deall.vmult_add(this->right_hand_side,ones);
+
+
+    this->right_hand_side.compress(dealii::VectorOperation::add);
+    this->right_hand_side.update_ghost_values();
+}
 template<int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim, nstate, real, MeshType>::assemble_boundary_term_and_build_operators(
     typename dealii::DoFHandler<dim>::active_cell_iterator /*cell*/,
@@ -3299,7 +3378,7 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_global_entropy()
     std::ofstream file("global_entropy_"+ std::to_string(rank) +".txt");
     for(unsigned int i = 0 ; i < this->global_entropy.size(); i++){
         if (this->global_entropy.in_local_range(i)){
-            file << this->global_entropy[i] << '\n';
+            file << this->solution[i] << '\n';
         }
         MPI_Barrier(MPI_COMM_WORLD);
     }
@@ -3526,7 +3605,6 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
     Epetra_CrsMatrix proj_epetra = this->projection_matrix.trilinos_matrix();
     Epetra_Map first_temp_row_map = galerkin_basis_matrix.ColMap();
     Epetra_Map third_temp_row_map = proj_epetra.ColMap();
-
     Epetra_CrsMatrix first_temp(Epetra_DataAccess::Copy,first_temp_row_map,Global_Q.NumGlobalCols());
     EpetraExt::MatrixMatrix::Multiply(galerkin_basis_matrix,true,Global_Q,false,first_temp);
 
@@ -3588,6 +3666,10 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
         soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
         mapping_basis);
 
+    const bool store_vol_flux_nodes = this->all_parameters->manufactured_convergence_study_param.manufactured_solution_param.use_manufactured_source_term;
+    //for boundary conditions not periodic we need surface flux nodes
+    //should change this flag to something like if have face on boundary not periodic in the future
+    const bool store_surf_flux_nodes = (this->all_parameters->use_periodic_bc) ? false : true;
     //solution.update_ghost_values();
     auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
@@ -3618,10 +3700,32 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
         //const unsigned int n_quad_pts_1D  = this->oneD_quadrature_collection[poly_degree].size();
         const dealii::FESystem<dim> &fe_metric = this->high_order_grid->fe_system;
         const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
-        //const unsigned int n_grid_nodes  = n_metric_dofs / dim;
+        const unsigned int n_grid_nodes  = n_metric_dofs / dim;
+        std::vector<dealii::types::global_dof_index> metric_dofs_indices(n_metric_dofs);
+        metric_cell->get_dof_indices (metric_dofs_indices);
         OPERATOR::metric_operators<real,dim,2*dim> metric_oper(nstate, poly_degree, init_grid_degree,
-                                                              true,
-                                                              false);
+                                                              store_vol_flux_nodes,
+                                                              store_surf_flux_nodes);
+        for(int idim=0; idim<dim; idim++){
+            mapping_support_points[idim].resize(n_grid_nodes);
+        }
+        const std::vector<unsigned int > &index_renumbering = dealii::FETools::hierarchic_to_lexicographic_numbering<dim>(init_grid_degree);
+        for (unsigned int idof = 0; idof< n_metric_dofs; ++idof) {
+            const real val = (this->high_order_grid->volume_nodes[metric_dofs_indices[idof]]);
+            const unsigned int istate = fe_metric.system_to_component_index(idof).first;
+            const unsigned int ishape = fe_metric.system_to_component_index(idof).second;
+            const unsigned int igrid_node = index_renumbering[ishape];
+            mapping_support_points[istate][igrid_node] = val;
+        }
+
+        //build the volume metric cofactor matrix and the determinant of the volume metric Jacobian
+        //Also, computes the physical volume flux nodes if needed from flag passed to constructor in dg.cpp
+        metric_oper.build_volume_metric_operators(
+            this->volume_quadrature_collection[poly_degree].size(), n_grid_nodes,
+            mapping_support_points,
+            mapping_basis,
+            this->all_parameters->use_invariant_curl_form);
+
         // Obtain the mapping from local dof indices to global dof indices
         current_dofs_indices.resize(n_dofs_curr_cell);
         current_cell->get_dof_indices (current_dofs_indices);
@@ -3653,15 +3757,37 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                     std::array<real,nstate> soln_state;
                     soln_state = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var);
                     auto flux_metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
+                    std::array<std::vector<real>,dim> flux_mapping_support_points;
                     for (auto flux_current_cell = this->dof_handler.begin_active(); flux_current_cell != this->dof_handler.end(); ++flux_current_cell, ++flux_metric_cell) {
                         if (!flux_current_cell->is_locally_owned()) continue; // This approach will not work in MPI
                         if (this->reduced_mesh_weights[flux_current_cell->active_cell_index()] == 0) continue;
                         std::vector<dealii::types::global_dof_index> flux_dofs_indices;
                         flux_dofs_indices.resize(n_dofs_curr_cell);
-                        current_cell->get_dof_indices (flux_dofs_indices);
+                        flux_current_cell->get_dof_indices (flux_dofs_indices);
+                        std::vector<dealii::types::global_dof_index> flux_metric_dofs_indices(n_metric_dofs);
+                        flux_metric_cell->get_dof_indices (flux_metric_dofs_indices);
                         OPERATOR::metric_operators<real,dim,2*dim> flux_metric_oper(nstate, poly_degree, init_grid_degree,
-                                                              true,
-                                                              false);
+                                                                                    store_vol_flux_nodes,
+                                                                                    store_surf_flux_nodes);
+                        for(int idim=0; idim<dim; idim++){
+                            flux_mapping_support_points[idim].resize(n_grid_nodes);
+                        }
+                        const std::vector<unsigned int > &index_renumbering = dealii::FETools::hierarchic_to_lexicographic_numbering<dim>(init_grid_degree);
+                        for (unsigned int idof = 0; idof< n_metric_dofs; ++idof) {
+                            const real val = (this->high_order_grid->volume_nodes[metric_dofs_indices[idof]]);
+                            const unsigned int istate = fe_metric.system_to_component_index(idof).first;
+                            const unsigned int ishape = fe_metric.system_to_component_index(idof).second;
+                            const unsigned int igrid_node = index_renumbering[ishape];
+                            flux_mapping_support_points[istate][igrid_node] = val;
+                        }
+
+                        //build the volume metric cofactor matrix and the determinant of the volume metric Jacobian
+                        //Also, computes the physical volume flux nodes if needed from flag passed to constructor in dg.cpp
+                        flux_metric_oper.build_volume_metric_operators(
+                            this->volume_quadrature_collection[poly_degree].size(), n_grid_nodes,
+                            flux_mapping_support_points,
+                            mapping_basis, //Will have to remake these later
+                            this->all_parameters->use_invariant_curl_form);
                         for(unsigned int flux_quad=0; flux_quad<n_quad_pts; ++flux_quad){
                             for (int ref_dim =0;ref_dim<dim;ref_dim++){
 
@@ -3706,14 +3832,12 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
 }
 
 template<int dim, int nstate, typename real, typename MeshType>
-Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::construct_global_Q() {
+void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz) {
 
     const int global_size = this->solution.size();
     Epetra_MpiComm comm(MPI_COMM_WORLD);
     Epetra_Map global_map(global_size,0,comm);
-    const unsigned int n_dofs_cell_estimate = this->fe_collection[this->all_parameters->flow_solver_param.poly_degree].dofs_per_cell;
-    Epetra_CrsMatrix global_Q(Epetra_DataAccess::Copy,global_map,n_dofs_cell_estimate);
-
+   // const unsigned int n_dofs_cell_estimate = this->fe_collection[this->all_parameters->flow_solver_param.poly_degree].dofs_per_cell;
     const auto mapping = (*(this->high_order_grid->mapping_fe_field));
     dealii::hp::MappingCollection<dim> mapping_collection(mapping);
 
@@ -3796,26 +3920,33 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::construct_global_Q() {
                                                           flux_basis_stiffness.oneD_skew_symm_vol_oper,
                                                           oneD_vol_quad_weights,
                                                           flux_basis_stiffness_skew_symm_oper_sparse);
+
+        // unsigned int precision = 16;
+        // char zero = 48;
+        // flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout, precision, true, 0,&zero);
         const int global_size = this->solution.size();
         Epetra_MpiComm comm(MPI_COMM_WORLD);
         Epetra_Map global_map(global_size,0,comm);
         dealii::FullMatrix<double> local_Q(n_dofs_cell);
-        for(unsigned int istate_counter = 0; istate_counter < (unsigned int) nstate; ++istate_counter ) {
-            unsigned int id_counter = 0;
-            for (unsigned int row = 0; row < n_quad_pts; ++row) {
-                for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
-                    double val = flux_basis_stiffness_skew_symm_oper_sparse[0](row,col);
-                    int indices = current_dofs_indices[col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter];
-                    global_Q.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1.,&val,&indices);
+        for(int idim = 0; idim < dim; idim++){
+            for(unsigned int istate_counter = 0; istate_counter < (unsigned int) nstate; ++istate_counter ) {
+                unsigned int id_counter = 0;
+                for (unsigned int row = 0; row < n_quad_pts; ++row) {
+                    for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
+                        double val = flux_basis_stiffness_skew_symm_oper_sparse[idim](row,col);
+                        int indices = current_dofs_indices[col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter];
+                        if(idim == 0) Qx.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1,&val,&indices);
+                        else if (idim == 1) Qy.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1,&val,&indices);
+                        else if (idim == 2) Qz.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1,&val,&indices);
+                    }
+                    if(row == n_quad_pts_1D-1) id_counter++;
                 }
-                if(row == n_quad_pts_1D-1) id_counter++;
             }
         }
-        std::ofstream testfile("test.txt");
-        global_Q.Print(testfile);
     }
-    global_Q.FillComplete(global_map,global_map);
-    return global_Q;
+    Qx.FillComplete(global_map,global_map);
+    Qy.FillComplete(global_map,global_map);
+    Qz.FillComplete(global_map,global_map);
 }
 
 // using default MeshType = Triangulation

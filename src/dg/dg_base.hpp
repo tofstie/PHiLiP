@@ -570,6 +570,8 @@ public:
      *  perform the work on all the faces.
      *  All the active cells must be traversed to ensure that the right hand side is correct.
      */
+
+    void virtual assemble_hyper_reduced_residual (const bool compute_dRdW=false, const bool compute_dRdX=false, const bool compute_d2R=false, const double CFL_mass = 0.0) = 0;
     template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
     void assemble_cell_residual (
         const DoFCellAccessorType1 &current_cell,

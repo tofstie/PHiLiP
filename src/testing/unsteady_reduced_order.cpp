@@ -36,8 +36,9 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     const Parameters::AllParameters ROM_param_const = ROM_param;
 
     // Create ROM and Solve
-    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&ROM_param_const, parameter_handler);
+    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&ROM_param, parameter_handler);
     const int modes = flow_solver_galerkin->ode_solver->pod->getPODBasis()->n();
+
     try {
         static_cast<void>(flow_solver_galerkin->run());
     } catch (double end) {

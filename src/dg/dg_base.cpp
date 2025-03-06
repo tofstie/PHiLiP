@@ -1753,7 +1753,8 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
 #if PHILIP_DIM>1
     if(this->all_parameters->output_face_results_vtk) output_face_results_vtk (cycle, current_time);
 #endif
-
+    const bool ES_ROM_bool = this->all_parameters->reduced_order_param.entropy_variables_in_snapshots;
+    const bool ROM_bool = (this->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver) ? true : false;
     const bool enable_higher_order_vtk_output = this->all_parameters->enable_higher_order_vtk_output;
     dealii::DataOut<dim, dealii::DoFHandler<dim>> data_out;
 
@@ -1842,6 +1843,8 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
 
     const int iproc = dealii::Utilities::MPI::this_mpi_process(mpi_communicator);
     std::string filename = this->all_parameters->solution_vtk_files_directory_name + "/" + "solution-" + dealii::Utilities::int_to_string(dim, 1) +"D_maxpoly"+dealii::Utilities::int_to_string(max_degree, 2)+"-";
+    if (ES_ROM_bool) filename += "ES";
+    if (ROM_bool) filename += "ROM-";
     filename += dealii::Utilities::int_to_string(cycle, 4) + ".";
     filename += dealii::Utilities::int_to_string(iproc, 4);
     filename += ".vtu";
@@ -1853,12 +1856,16 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
         std::vector<std::string> filenames;
         for (unsigned int iproc = 0; iproc < dealii::Utilities::MPI::n_mpi_processes(mpi_communicator); ++iproc) {
             std::string fn = "solution-" + dealii::Utilities::int_to_string(dim, 1) +"D_maxpoly"+dealii::Utilities::int_to_string(max_degree, 2)+"-";
+            if (ES_ROM_bool) fn += "ES";
+            if (ROM_bool) fn += "ROM-";
             fn += dealii::Utilities::int_to_string(cycle, 4) + ".";
             fn += dealii::Utilities::int_to_string(iproc, 4);
             fn += ".vtu";
             filenames.push_back(fn);
         }
         std::string master_fn = this->all_parameters->solution_vtk_files_directory_name + "/" + "solution-" + dealii::Utilities::int_to_string(dim, 1) +"D_maxpoly"+dealii::Utilities::int_to_string(max_degree, 2)+"-";
+        if (ES_ROM_bool) master_fn += "ES";
+        if (ROM_bool) master_fn += "ROM-";
         master_fn += dealii::Utilities::int_to_string(cycle, 4) + ".pvtu";
         std::ofstream master_output(master_fn);
         data_out.write_pvtu_record(master_output, filenames);

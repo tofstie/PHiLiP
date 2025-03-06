@@ -54,7 +54,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->dg->calculate_global_entropy();
         this->dg->calculate_ROM_projected_entropy(pod_basis);
     }
-    this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
+    this->dg->assemble_hyper_reduced_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
     Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin());
     std::ofstream epetra_right_hand_side_file("epetra_right_hand_side"+std::to_string(istage)+".txt");
     epetra_right_hand_side.Print(epetra_right_hand_side_file);

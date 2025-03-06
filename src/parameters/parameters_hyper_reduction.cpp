@@ -6,6 +6,18 @@ void HyperReductionParam::declare_parameters (dealii::ParameterHandler &prm)
 {
     prm.enter_subsection("hyperreduction");
     {
+        prm.declare_entry("type", "none",
+                            dealii::Patterns::Selection(
+                            " none | "
+                            " ECSW | "
+                            " Cubature "
+                            ),
+                            "Type of Hyper Reduction to use"
+                            "Choices are "
+                            " <none | "
+                            " ECSW | "
+                            " Cubature>.");
+
         prm.declare_entry("NNLS_tol", "1E-6",
                           dealii::Patterns::Double(0, dealii::Patterns::Double::max_double_value),
                           "Tolerance for the NNLS solver");
@@ -41,6 +53,7 @@ void HyperReductionParam::parse_parameters (dealii::ParameterHandler &prm)
 {
     prm.enter_subsection("hyperreduction");
     {
+        hyper_reduction_type = prm.get("hyper_reduction_type");
         NNLS_tol = prm.get_double("NNLS_tol");
         NNLS_max_iter = prm.get_integer("NNLS_max_iter");
         training_data = prm.get("training_data");

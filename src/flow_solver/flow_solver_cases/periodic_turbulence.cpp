@@ -740,7 +740,7 @@ void PeriodicTurbulence<dim, nstate>::compute_unsteady_data_and_write_to_table(
     if(std::isnan(integrated_kinetic_energy)) {
         this->pcout << " ERROR: Kinetic energy at time " << current_time << " is nan." << std::endl;
         this->pcout << "        Consider decreasing the time step / CFL number." << std::endl;
-        std::abort();
+        throw current_time;
     }
 
     // Output velocity field for spectra obtaining kinetic energy spectra

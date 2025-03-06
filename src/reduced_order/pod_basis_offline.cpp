@@ -1062,7 +1062,6 @@ void OfflinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2
         }
     }
     for (int i = 0; i < 4; i++){
-        L2_error[i] /= FOM_sum[i];
         L2_error[i] = std::sqrt(L2_error[i]);
     }
     std::array<std::string,4> L2_labels {{"density_l2","pressure_l2","tke_l2","entropy_l2"}};
@@ -1119,6 +1118,9 @@ std::array<std::vector<double>,4> OfflinePOD<dim>
     const bool store_vol_flux_nodes = false;//currently doesn't need the volume physical nodal position
     const bool store_surf_flux_nodes = false;//currently doesn't need the surface physical nodal position
 
+    dealii::FEValues<dim,dim> fe_values_extra(*(dg.high_order_grid->mapping_fe_field), dg.fe_collection[dg.max_degree], quad_extra,
+                                                 dealii::update_values | dealii::update_gradients | dealii::update_JxW_values | dealii::update_quadrature_points);
+
     const unsigned int n_dofs = dg.fe_collection[poly_degree].n_dofs_per_cell();
     const unsigned int n_shape_fns = n_dofs / nstate;
     std::vector<dealii::types::global_dof_index> dofs_indices (n_dofs);
@@ -1126,7 +1128,7 @@ std::array<std::vector<double>,4> OfflinePOD<dim>
     for (auto cell = dg.dof_handler.begin_active(); cell!= dg.dof_handler.end(); ++cell, ++metric_cell) {
         if (!cell->is_locally_owned()) continue;
         cell->get_dof_indices (dofs_indices);
-
+        fe_values_extra.reinit(cell);
         // We first need to extract the mapping support points (grid nodes) from high_order_grid.
         const dealii::FESystem<dim> &fe_metric = dg.high_order_grid->fe_system;
         const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
@@ -1216,10 +1218,10 @@ std::array<std::vector<double>,4> OfflinePOD<dim>
             double const pressure = euler_physics.compute_pressure(soln_at_q);
             double entropy = euler_physics.compute_entropy_measure(soln_at_q);
             double KE = euler_physics.compute_kinetic_energy_from_conservative_solution(soln_at_q);
-            l2_values[0].push_back(soln_at_q[0]);
-            l2_values[1].push_back(pressure);
-            l2_values[2].push_back(KE);
-            l2_values[3].push_back(entropy);
+            l2_values[0].push_back(soln_at_q[0]* fe_values_extra.JxW(iquad));
+            l2_values[1].push_back(pressure* fe_values_extra.JxW(iquad));
+            l2_values[2].push_back(KE* fe_values_extra.JxW(iquad));
+            l2_values[3].push_back(entropy* fe_values_extra.JxW(iquad));
 
         }
     }

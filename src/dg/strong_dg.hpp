@@ -38,6 +38,7 @@ public:
     /// Allocate the dual vector for optimization.
     void allocate_dual_vector ();
 
+    void assemble_hyper_reduced_residual (const bool compute_dRdW=false, const bool compute_dRdX=false, const bool compute_d2R=false, const double CFL_mass = 0.0) override;
 private:
     /// Assembles the auxiliary equations' cell residuals.
     template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>

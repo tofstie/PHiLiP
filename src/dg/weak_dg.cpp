@@ -455,7 +455,14 @@ DGWeak<dim,nstate,real,MeshType>::DGWeak(
     const std::shared_ptr<Triangulation> triangulation_input)
     : DGBaseState<dim,nstate,real,MeshType>::DGBaseState(parameters_input, degree, max_degree_input, grid_degree_input, triangulation_input)
 { }
-
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
+    const bool /*compute_dRdW=false*/,
+    const bool /*compute_dRdX=false*/,
+    const bool /*compute_d2R=false*/,
+    const double /*CFL_mass = 0.0*/) {
+    // Do nothing
+}
 template <int dim, int nstate, typename real, typename MeshType>
 void DGWeak<dim,nstate,real,MeshType>::assemble_volume_term_explicit(
     typename dealii::DoFHandler<dim>::active_cell_iterator cell,
