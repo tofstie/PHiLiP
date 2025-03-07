@@ -53,8 +53,11 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         pod_basis.reinit(*epetra_test_basis);
         this->dg->calculate_global_entropy();
         this->dg->calculate_ROM_projected_entropy(pod_basis);
+        this->dg->assemble_hyper_reduced_residual(*Qtx,*Qty,*Qtz);
+    } else {
+        this->dg->assemble_residual();
     }
-    this->dg->assemble_hyper_reduced_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
+     //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
     Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin());
     std::ofstream epetra_right_hand_side_file("epetra_right_hand_side"+std::to_string(istage)+".txt");
     epetra_right_hand_side.Print(epetra_right_hand_side_file);
@@ -114,6 +117,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType>::allocate_runge_kutta_system() {
+    // Setting up butcher tableau
     this->butcher_tableau->set_tableau();
 
     this->butcher_tableau_aii_is_zero.resize(n_rk_stages);
@@ -124,10 +128,10 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         if (this->butcher_tableau->get_a(istage,istage)==0.0)     this->butcher_tableau_aii_is_zero[istage] = true;
 
     }
+    // Initialize solution update
     this->solution_update.reinit(this->dg->right_hand_side);
-    // Not syncing maps for now
-    Epetra_Vector epetra_reduced_solution(epetra_pod_basis.DomainMap());
 
+    // Create distributions
     const Epetra_Map reduced_map = epetra_pod_basis.DomainMap();
     reduced_index = dealii::IndexSet(reduced_map);
     solution_index = this->dg->solution.locally_owned_elements();
@@ -135,15 +139,18 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     for (int istage=0; istage<n_rk_stages; ++istage){
         this->reduced_rk_stage[istage].reinit(reduced_index, this->mpi_communicator); // Add IndexSet
     }
+    // Initialize the Mass Matrix
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
-
+    // Generate the Test and Trail Basis
     epetra_test_basis = generate_test_basis(epetra_pod_basis, false);
     epetra_trial_basis = generate_test_basis(epetra_pod_basis, true);
     std::ofstream test_basis_file("test_basis_file.txt");
     std::ofstream trail_basis_file("trail_basis_file.txt");
     epetra_test_basis->Print(test_basis_file);
     epetra_trial_basis->Print(trail_basis_file);
+    // Generate the LHS
     epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,*epetra_test_basis,*epetra_test_basis);
+    // If using ESROM, create projection operator
     if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
         this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_trial_basis);
         this->dg->set_galerkin_basis(epetra_test_basis);
@@ -156,6 +163,21 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         weights_dealii[i] = ECSW_weights[i];
     }
     this->dg->reduced_mesh_weights = weights_dealii;
+
+    // Creation of Qtx,Qty,Qtz
+    const int global_size = this->dg->solution.size();
+    Epetra_MpiComm comm(MPI_COMM_WORLD);
+    Epetra_Map global_map(global_size,0,comm);
+    Epetra_Map domain_map = this->dg->global_mass_matrix.trilinos_matrix().DomainMap();
+    // Construct Q
+    Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
+    Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
+    Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
+    this->dg->construct_global_Q(Qx,Qy,Qz);
+    // Construct Qt
+    Qtx = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qx));
+    Qty = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qy));
+    Qtz = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qz));
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>

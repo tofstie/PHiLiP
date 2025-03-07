@@ -120,41 +120,27 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operat
 }
 template <int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
-    const bool /*compute_dRdW=false*/,
-    const bool /*compute_dRdX=false*/,
-    const bool /*compute_d2R=false*/,
-    const double /*CFL_mass = 0.0*/) {
+    Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) {
 
     const int global_size = this->solution.size();
-    Epetra_MpiComm comm(MPI_COMM_WORLD);
-    Epetra_Map global_map(global_size,0,comm);
-    Epetra_Map domain_map = this->global_mass_matrix.trilinos_matrix().DomainMap();
     const int grid_degree = this->all_parameters->flow_solver_param.grid_degree;
-    // Construct Q
-    Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
-    Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
-    Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
-    this->construct_global_Q(Qx,Qy,Qz);
-    // Construct Qt
-    Epetra_CrsMatrix Qtx = this->calculate_hyper_reduced_Q(Qx);
-    Epetra_CrsMatrix Qty = this->calculate_hyper_reduced_Q(Qy);
-    Epetra_CrsMatrix Qtz = this->calculate_hyper_reduced_Q(Qz);
+
     // Construct F
-    Epetra_CrsMatrix Fx(Epetra_DataAccess::Copy,Qx.RowMap(),global_size);
+    Epetra_CrsMatrix Fx(Epetra_DataAccess::Copy,Qtx.RowMap(),global_size);
 #if PHILIP_DIM==1
-    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qy.RowMap(),0);
-    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qz.RowMap(),0);
+    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qty.RowMap(),0);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtz.RowMap(),0);
 #elif PHILIP_DIM==2
-    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qy.RowMap(),global_size);
-    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qz.RowMap(),0);
+    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qty.RowMap(),global_size);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtz.RowMap(),0);
 #elif PHILIP_DIM==3
-    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qy.RowMap(),global_size);
-    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qz.RowMap(),global_size);
+    Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qty.RowMap(),global_size);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtz.RowMap(),global_size);
 #endif
     this->calculate_convective_flux_matrix(Fx,Fy,Fz);
-    Fx.FillComplete(Qx.DomainMap(),Qx.RowMap());
-    Fy.FillComplete(Qy.DomainMap(),Qy.RowMap());
-    Fz.FillComplete(Qz.DomainMap(),Qz.RowMap());
+    Fx.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
+    Fy.FillComplete(Qty.DomainMap(),Qty.RowMap());
+    Fz.FillComplete(Qtz.DomainMap(),Qtz.RowMap());
 
 
     const int max_poly = this->all_parameters->flow_solver_param.max_poly_degree_for_adaptation;

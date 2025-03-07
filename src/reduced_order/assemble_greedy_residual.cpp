@@ -294,8 +294,19 @@ void AssembleGreedyRes<dim,nstate>::epetra_to_dealii(Epetra_Vector &epetra_vecto
     dealii_vector.compress(dealii::VectorOperation::insert);
 
 }
+#if PHILIP_DIM==1
+template class AssembleGreedyRes <PHILIP_DIM,PHILIP_DIM>;
+template class AssembleGreedyRes <PHILIP_DIM,PHILIP_DIM+2>;
+#endif
 
-template class AssembleGreedyRes<PHILIP_DIM,PHILIP_DIM+2>;
+#if PHILIP_DIM!=1
+template class AssembleGreedyRes <PHILIP_DIM,1>;
+template class AssembleGreedyRes <PHILIP_DIM,2>;
+template class AssembleGreedyRes <PHILIP_DIM,3>;
+template class AssembleGreedyRes <PHILIP_DIM,4>;
+template class AssembleGreedyRes <PHILIP_DIM,5>;
+template class AssembleGreedyRes <PHILIP_DIM,6>;
+#endif
 
 } /// HyperReduction Namespace
 } /// PHiLiP Namespace

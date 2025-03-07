@@ -59,6 +59,13 @@ private:
     /// Pointer to Epetra Matrix for LHS
     std::shared_ptr<Epetra_CrsMatrix> epetra_reduced_lhs;
 
+    /// Pointer to Qtx
+    std::shared_ptr<Epetra_CrsMatrix> Qtx;
+    /// Pointer to Qty
+    std::shared_ptr<Epetra_CrsMatrix> Qty;
+    /// Pointer to Qtz
+    std::shared_ptr<Epetra_CrsMatrix> Qtz;
+
     /// dealII indexset for FO solution
     dealii::IndexSet solution_index;
 

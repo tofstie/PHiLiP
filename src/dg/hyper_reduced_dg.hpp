@@ -32,7 +32,7 @@ public:
     /// Allocate the dual vector for optimization.
     void allocate_dual_vector ();
 
-    void assemble_hyper_reduced_residual (const bool compute_dRdW=false, const bool compute_dRdX=false, const bool compute_d2R=false, const double CFL_mass = 0.0) override;
+    void assemble_hyper_reduced_residual (Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) override;
 protected:
     /// Builds the necessary operators and assembles volume residual for either primary or auxiliary.
     void assemble_volume_term_and_build_operators(
@@ -357,11 +357,12 @@ public:
     void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) override;
     void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V) override;
     void calculate_projection_matrix(Epetra_CrsMatrix &LHS, Epetra_CrsMatrix &LeV) override;
-    Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q);
+
     void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
     dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
     void calculate_convective_flux_matrix(Epetra_CrsMatrix &Fx,Epetra_CrsMatrix &Fy,Epetra_CrsMatrix &Fz);
-    void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz);
+    void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz) override;
+    Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) override;
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
 };
 }

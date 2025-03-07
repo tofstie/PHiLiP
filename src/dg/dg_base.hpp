@@ -571,7 +571,7 @@ public:
      *  All the active cells must be traversed to ensure that the right hand side is correct.
      */
 
-    void virtual assemble_hyper_reduced_residual (const bool compute_dRdW=false, const bool compute_dRdX=false, const bool compute_d2R=false, const double CFL_mass = 0.0) = 0;
+    void virtual assemble_hyper_reduced_residual (Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) = 0;
     template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
     void assemble_cell_residual (
         const DoFCellAccessorType1 &current_cell,
@@ -957,6 +957,10 @@ public:
     virtual void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x, dealii::LinearAlgebra::distributed::Vector<double> &location_y) = 0;
     /// Sets the galerkin basis
     void set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis);
+
+    virtual void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz) = 0 ;
+    virtual Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) = 0;
+
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;
     /// Global Face Entropy

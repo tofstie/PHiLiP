@@ -457,10 +457,7 @@ DGWeak<dim,nstate,real,MeshType>::DGWeak(
 { }
 template <int dim, int nstate, typename real, typename MeshType>
 void DGWeak<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
-    const bool /*compute_dRdW=false*/,
-    const bool /*compute_dRdX=false*/,
-    const bool /*compute_d2R=false*/,
-    const double /*CFL_mass = 0.0*/) {
+    Epetra_CrsMatrix &/*Qtx*/,Epetra_CrsMatrix &/*Qty*/,Epetra_CrsMatrix &/*Qtz*/) {
     // Do nothing
 }
 template <int dim, int nstate, typename real, typename MeshType>
@@ -3957,6 +3954,15 @@ void DGWeak<dim, nstate, real, MeshType>::location2D(dealii::LinearAlgebra::dist
 dealii::LinearAlgebra::distributed::Vector<double> &/*quadrature_solution*/)
 {
     // Do nothing
+}
+
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim,nstate,real,MeshType>::construct_global_Q(Epetra_CrsMatrix &/*Qx*/,Epetra_CrsMatrix &/*Qy*/,Epetra_CrsMatrix &/*&Qz*/) {
+    // Do nothing
+}
+template <int dim, int nstate, typename real, typename MeshType>
+Epetra_CrsMatrix DGWeak<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) {
+    return Global_Q;
 }
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;
