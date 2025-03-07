@@ -1783,8 +1783,6 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
 
     data_out.add_data_vector(max_dt_cell, "max_dt_cell", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
 
-    data_out.add_data_vector(reduced_mesh_weights, "reduced_mesh_weights", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
-
     data_out.add_data_vector(cell_volume, "cell_volume", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
     // Output Cell Number
 
@@ -1827,6 +1825,13 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
     residual.update_ghost_values();
     data_out.add_data_vector (residual, residual_names, dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_dof_data);
 
+    // Output Reduced Mesh Weights
+    std::vector<std::string> weight_names;
+    for(int s=0; s<nstate; ++s) {
+        std::string varname = "weight" + dealii::Utilities::int_to_string(s,1);
+        weight_names.push_back(varname);
+    }
+    data_out.add_data_vector(reduced_mesh_weights, weight_names, dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_dof_data);
 
     typename dealii::DataOut<dim,dealii::DoFHandler<dim>>::CurvedCellRegion curved = dealii::DataOut<dim,dealii::DoFHandler<dim>>::CurvedCellRegion::curved_inner_cells;
     //typename dealii::DataOut<dim>::CurvedCellRegion curved = dealii::DataOut<dim>::CurvedCellRegion::curved_boundary;

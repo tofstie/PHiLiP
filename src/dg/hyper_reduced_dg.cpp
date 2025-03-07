@@ -3660,8 +3660,6 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
     auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
         if (!current_cell->is_locally_owned()) continue;
-        if (this->reduced_mesh_weights[current_cell->active_cell_index()] == 0) continue;
-
         std::vector<dealii::types::global_dof_index> current_dofs_indices;
         // Current reference element related to this physical cell
         const int i_fele = current_cell->active_fe_index();
@@ -3722,7 +3720,6 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
             // Copy Metric Cofactor in a way can use for transforming Tensor Blocks to reference space
             // The way it is stored in metric_operators is to use sum-factorization in each direction,
             // but here it is cleaner to apply a reference transformation in each Tensor block returned by physics.
-
             for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad) {
                 dealii::Tensor<2,dim,real> metric_cofactor;
                 for(int idim=0; idim<dim; idim++){

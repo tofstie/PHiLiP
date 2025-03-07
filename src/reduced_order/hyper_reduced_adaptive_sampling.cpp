@@ -81,7 +81,21 @@ int HyperreducedAdaptiveSampling<dim, nstate>::run_sampling() const
     bool exit_con = NNLS_prob->solve();
     this->pcout << exit_con << std::endl;
 
-    ptr_weights = std::make_shared<Epetra_Vector>(NNLS_prob->getSolution());
+    Epetra_Vector cell_weights = NNLS_prob->getSolution();
+    Epetra_Map global_map = flow_solver->dg->global_mass_matrix.trilinos_matrix().RowMap();
+    Epetra_Vector weights(global_map);
+    std::vector<dealii::types::global_dof_index> dofs_indices;
+    for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell!=flow_solver->dg->dof_handler.end(); ++cell) {
+        if (!cell->is_locally_owned()) continue;
+        const unsigned int fe_index_curr_cell = cell->active_fe_index();
+        const unsigned int n_dofs_cell = flow_solver->dg->fe_collection[fe_index_curr_cell].n_dofs_per_cell();
+        dofs_indices.resize(n_dofs_cell);
+        cell->get_dof_indices (dofs_indices);
+        for (unsigned int i = 0 ; i < dofs_indices.size() ; i++) {
+            weights(dofs_indices[i]) = cell_weights(fe_index_curr_cell);
+        }
+    }
+    ptr_weights = std::make_shared<Epetra_Vector>(weights);
 
     MatrixXd rom_points = this->nearest_neighbors->kPairwiseNearestNeighborsMidpoint();
     this->pcout << "ROM Points"<< std::endl;
@@ -169,7 +183,21 @@ int HyperreducedAdaptiveSampling<dim, nstate>::run_sampling() const
         bool exit_con = NNLS_prob->solve();
         this->pcout << exit_con << std::endl;
         
-        ptr_weights = std::make_shared<Epetra_Vector>(NNLS_prob->getSolution());
+        Epetra_Vector cell_weights = NNLS_prob->getSolution();
+        Epetra_Map global_map = flow_solver->dg->global_mass_matrix.trilinos_matrix().RowMap();
+        Epetra_Vector weights(global_map);
+        std::vector<dealii::types::global_dof_index> dofs_indices;
+        for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell!=flow_solver->dg->dof_handler.end(); ++cell) {
+            if (!cell->is_locally_owned()) continue;
+            const unsigned int fe_index_curr_cell = cell->active_fe_index();
+            const unsigned int n_dofs_cell = flow_solver->dg->fe_collection[fe_index_curr_cell].n_dofs_per_cell();
+            dofs_indices.resize(n_dofs_cell);
+            cell->get_dof_indices (dofs_indices);
+            for (unsigned int i = 0 ; i < dofs_indices.size() ; i++) {
+                weights(dofs_indices[i]) = cell_weights(fe_index_curr_cell);
+            }
+        }
+        ptr_weights = std::make_shared<Epetra_Vector>(weights);
 
         // Update previous ROM errors with updated current_pod
         for(auto it = this->rom_locations.begin(); it != this->rom_locations.end(); ++it){

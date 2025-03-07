@@ -157,7 +157,20 @@ FlowSolver<dim, nstate>::FlowSolver(
                 std::cout << "Solve NNLS problem..."<< std::endl;
                 bool exit_con = NNLS_prob.solve();
                 std::cout << exit_con << std::endl;
-                Epetra_Vector weights = NNLS_prob.getSolution();
+                Epetra_Vector cell_weights = NNLS_prob.getSolution();
+                Epetra_Map global_map = this->dg->global_mass_matrix.trilinos_matrix().RowMap();
+                Epetra_Vector weights(global_map);
+                std::vector<dealii::types::global_dof_index> dofs_indices;
+                for (auto cell = dg->dof_handler.begin_active(); cell!=dg->dof_handler.end(); ++cell) {
+                    if (!cell->is_locally_owned()) continue;
+                    const unsigned int fe_index_curr_cell = cell->active_fe_index();
+                    const unsigned int n_dofs_cell = dg->fe_collection[fe_index_curr_cell].n_dofs_per_cell();
+                    dofs_indices.resize(n_dofs_cell);
+                    cell->get_dof_indices (dofs_indices);
+                    for (unsigned int i = 0 ; i < dofs_indices.size() ; i++) {
+                        weights(dofs_indices[i]) = cell_weights(fe_index_curr_cell);
+                    }
+                }
                 // ONLY WORKS FOR ONE CORE
                 std::ofstream outfile("Weights_FS.txt");
                 for (int i = 0;i < weights.GlobalLength();i++) {

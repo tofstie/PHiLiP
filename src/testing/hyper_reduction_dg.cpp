@@ -41,12 +41,26 @@ int HyperReductionDG<dim,nstate>::run_test() const {
     std::shared_ptr<DGBase<dim,double>> dg_base = flow_solver_full_order->dg;
     std::vector<double> reduced_weights = {2.,1.,4.,3.,4.,0.5};
     std::vector<unsigned int> reduced_indices = {1,4,6,8,10,14};
-    dealii::Vector<double> reduced_mesh_weights(pow(all_parameters->flow_solver_param.number_of_grid_elements_per_dimension,dim));
     dg->allocate_system(true,false,false);
     dg->evaluate_mass_matrices(false);
     dg->solution = dg_base->solution;
     dg->solution.update_ghost_values();
-    reduced_mesh_weights.add(reduced_indices,reduced_weights);
+    dealii::Vector<double> reduced_mesh_weights(dg->solution.size());
+    std::vector<dealii::types::global_dof_index> dofs_indices;
+    for (auto cell = dg->dof_handler.begin_active(); cell!=dg->dof_handler.end(); ++cell) {
+        if (!cell->is_locally_owned()) continue;
+        const unsigned int fe_index_curr_cell = cell->active_fe_index();
+        const unsigned int n_dofs_cell = dg->fe_collection[fe_index_curr_cell].n_dofs_per_cell();
+        dofs_indices.resize(n_dofs_cell);
+        cell->get_dof_indices (dofs_indices);
+        for (unsigned int j = 0; j < reduced_indices.size(); ++j) {
+            if (reduced_indices[j] == fe_index_curr_cell) {
+                for (unsigned int i = 0 ; i < dofs_indices.size() ; i++) {
+                    reduced_mesh_weights(dofs_indices[i]) = reduced_weights[j];
+                }
+            }
+        }
+    }
     dg->reduced_mesh_weights = reduced_mesh_weights;
     // Make Reduced Weights
     flow_solver_full_order->run();

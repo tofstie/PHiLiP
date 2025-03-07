@@ -57,6 +57,7 @@ subsection reduced order
 end
 
 subsection hyperreduction
+    set type = ECSW
     set NNLS_tol = 1e-5
     set NNLS_max_iter = 500
     set training_data = residual
