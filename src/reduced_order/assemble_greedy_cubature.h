@@ -62,6 +62,8 @@ class AssembleGreedyCubature{
     /// Indices in set z
     std::vector<int> z_vector;
 
+    /// Number of quad points
+    const int n_quad_pts;
     dealii::LinearAlgebra::distributed::Vector<double> get_weights();
     std::vector<int> get_indices();
     

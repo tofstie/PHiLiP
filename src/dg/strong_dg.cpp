@@ -3570,11 +3570,11 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
     entropy_diff /= 1;
 }
 template <int dim, int nstate, typename real, typename MeshType>
-void DGStrong<dim,nstate,real,MeshType>::construct_global_Q(Epetra_CrsMatrix &/*Qx*/,Epetra_CrsMatrix &/*Qy*/,Epetra_CrsMatrix &/*&Qz*/) {
+void DGStrong<dim,nstate,real,MeshType>::construct_global_Q(Epetra_CrsMatrix &/*Qx*/,Epetra_CrsMatrix &/*Qy*/,Epetra_CrsMatrix &/*&Qz*/, bool /*skew_symmetric*/) {
     // Do nothing
 }
 template <int dim, int nstate, typename real, typename MeshType>
-Epetra_CrsMatrix DGStrong<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) {
+Epetra_CrsMatrix DGStrong<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, const int /*idim*/) {
     return Global_Q;
 }
 // using default MeshType = Triangulation

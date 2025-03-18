@@ -131,8 +131,6 @@ dealii::FullMatrix<double> OperatorsBase<dim,n_faces,real>::tensor_product_state
                                                 ( (dim == 2) ? columns_1state_x * columns_1state_y * nstate : 
                                                     columns_1state_x * columns_1state_y * columns_1state_z * nstate);
     dealii::FullMatrix<double> tens_prod(rows_all_states, columns_all_states);
-
-
     for(int istate=0; istate<nstate; istate++){
         dealii::FullMatrix<double> basis_x_1state(rows_1state_x, columns_1state_x);
         dealii::FullMatrix<double> basis_y_1state(rows_1state_y, columns_1state_y);
@@ -163,6 +161,47 @@ dealii::FullMatrix<double> OperatorsBase<dim,n_faces,real>::tensor_product_state
         for(unsigned int r=0; r<r1state; r++){
             for(unsigned int c=0; c<c1state; c++){
                 tens_prod[istate*r1state + r][istate*c1state + c] = tens_prod_1state[r][c];
+            }
+        }
+    }
+    return tens_prod;
+}
+
+template <int dim, int n_faces, typename real>
+dealii::FullMatrix<double> OperatorsBase<dim,n_faces,real>::tensor_product_nstate(
+    const int nstate,
+    const dealii::FullMatrix<double> &basis_x,
+    const dealii::FullMatrix<double> &basis_y,
+    const dealii::FullMatrix<double> &basis_z) {
+    //assert that each basis matrix is of size (rows x columns)
+    const unsigned int rows_x    = basis_x.m();
+    const unsigned int columns_x = basis_x.n();
+    const unsigned int rows_y    = basis_y.m();
+    const unsigned int columns_y = basis_y.n();
+    const unsigned int rows_z    = basis_z.m();
+    const unsigned int columns_z = basis_z.n();
+
+    const unsigned int rows_all_states    = (dim == 1) ? rows_x * nstate :
+                                                ( (dim == 2) ? rows_x * rows_y * nstate :
+                                                    rows_x * rows_y * rows_z * nstate);
+    const unsigned int columns_all_states = (dim == 1) ? columns_x * nstate :
+                                                ( (dim == 2) ? columns_x * columns_y * nstate :
+                                                    columns_x * columns_y * columns_z * nstate);
+
+
+    const unsigned int rows_one_state = rows_all_states / nstate;
+    const unsigned int columns_one_state = columns_all_states / nstate;
+
+    dealii::FullMatrix<double> tens_prod_1state(rows_one_state, columns_one_state);
+    dealii::FullMatrix<double> tens_prod(rows_all_states, columns_all_states);
+    tens_prod_1state = tensor_product_state(1, basis_x, basis_y, basis_z);
+    for(int istate = 0; istate<nstate; istate++) {
+        for(unsigned int r=0; r<rows_one_state; r++) {
+            const unsigned int test_index = istate * rows_one_state + r;
+            for (unsigned int c=0; c<columns_one_state; c++) {
+                const unsigned int trial_index = istate * columns_one_state + c;
+                tens_prod.set(test_index,trial_index,tens_prod_1state[r][c]);
+                tens_prod.set(trial_index,test_index,tens_prod_1state[r][c]);
             }
         }
     }
@@ -1280,6 +1319,28 @@ void vol_integral_basis<dim,n_faces,real>::build_1D_volume_operator(
             const int istate = finite_element.system_to_component_index(idof).first;
             //Basis function idof of poly degree idegree evaluated at cubature node qpoint multiplied by quad weight.
             this->oneD_vol_operator[iquad][idof] = quad_weights[iquad] * finite_element.shape_value_component(idof,qpoint,istate);
+        }
+    }
+}
+
+template <int dim, int n_faces, typename real>
+void vol_integral_basis<dim,n_faces,real>::build_1D_weighted_volume_operator(
+    const dealii::FESystem<1,1> &finite_element,
+    const dealii::Quadrature<1> &quadrature,
+    const std::vector<double> &weight)
+{
+    const unsigned int n_quad_pts = quadrature.size();
+    const unsigned int n_dofs     = finite_element.dofs_per_cell;
+    //allocate
+    this->oneD_vol_operator.reinit(n_quad_pts, n_dofs);
+    //loop and store
+    const std::vector<double> &quad_weights = quadrature.get_weights ();
+    for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+        const dealii::Point<1> qpoint  = quadrature.point(iquad);
+        for(unsigned int idof=0; idof<n_dofs; idof++){
+            const int istate = finite_element.system_to_component_index(idof).first;
+            //Basis function idof of poly degree idegree evaluated at cubature node qpoint multiplied by quad weight.
+            this->oneD_vol_operator[iquad][idof] = weight[iquad] * quad_weights[iquad] * finite_element.shape_value_component(idof,qpoint,istate);
         }
     }
 }

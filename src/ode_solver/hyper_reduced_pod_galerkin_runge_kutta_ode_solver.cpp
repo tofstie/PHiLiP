@@ -141,6 +141,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     }
     // Initialize the Mass Matrix
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
+    this->dg->evaluate_mass_matrices(true);
     // Generate the Test and Trail Basis
     epetra_test_basis = generate_test_basis(epetra_pod_basis, false);
     epetra_trial_basis = generate_test_basis(epetra_pod_basis, true);
@@ -153,7 +154,10 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     // If using ESROM, create projection operator
     if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
         this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_trial_basis);
-        this->dg->set_galerkin_basis(epetra_test_basis);
+        this->dg->set_galerkin_basis(epetra_test_basis,false);
+        std::cout << "Setting Vt" << std::endl;
+        this->dg->set_galerkin_basis(epetra_test_basis,true);
+
     }
     std::ofstream lhs_file("lhs_file.txt");
     epetra_reduced_lhs->Print(lhs_file);
@@ -173,11 +177,20 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
     Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
     Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
-    this->dg->construct_global_Q(Qx,Qy,Qz);
+    this->dg->construct_global_Q(Qx,Qy,Qz,true);
+    // Construct Pi_t
+    std::cout << "Constructing Pi_t" << std::endl;
+    this->dg->test_projection_matrix.resize(dim);
+    for(int idim = 0; idim < dim; ++idim) {
+        std::shared_ptr<Epetra_CrsMatrix> hyper_reduced_vt = generate_test_basis(*this->dg->galerkin_test_basis[idim],true);
+        std::shared_ptr<Epetra_CrsMatrix> test_lhs = generate_reduced_lhs(epetra_mass_matrix,*hyper_reduced_vt,*hyper_reduced_vt);
+        this->dg->set_test_projection_matrix(test_lhs,idim);
+    }
+    std::cout << "Construction Qt" << std::endl;
     // Construct Qt
-    Qtx = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qx));
-    Qty = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qy));
-    Qtz = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qz));
+    Qtx = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qx,0));
+    Qty = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qy,1));
+    Qtz = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qz,2));
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>

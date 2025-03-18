@@ -6,7 +6,7 @@ void HyperReductionParam::declare_parameters (dealii::ParameterHandler &prm)
 {
     prm.enter_subsection("hyperreduction");
     {
-        prm.declare_entry("type", "none",
+        prm.declare_entry("hyper_reduction_type", "none",
                             dealii::Patterns::Selection(
                             " none | "
                             " ECSW | "

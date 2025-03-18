@@ -95,6 +95,12 @@ public:
                                     const dealii::FullMatrix<double> &basis_y,
                                     const dealii::FullMatrix<double> &basis_z);
 
+    /// Returns the tensor product of matrices passed, assembled in a sparse matrix based on the number of states.
+    dealii::FullMatrix<double> tensor_product_nstate(
+                                    const int nstate,
+                                    const dealii::FullMatrix<double> &basis_x,
+                                    const dealii::FullMatrix<double> &basis_y,
+                                    const dealii::FullMatrix<double> &basis_z);
     ///Standard function to compute factorial of a number.
     double compute_factorial(double n);
 
@@ -434,6 +440,10 @@ public:
     void build_1D_volume_operator(
             const dealii::FESystem<1,1> &finite_element,
             const dealii::Quadrature<1> &quadrature);
+    void build_1D_weighted_volume_operator(
+            const dealii::FESystem<1,1> &finite_element,
+            const dealii::Quadrature<1> &quadrature,
+            const std::vector<double> &weight);
 };
 
 ///Local mass matrix without jacobian dependence.

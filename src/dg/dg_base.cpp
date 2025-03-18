@@ -47,6 +47,10 @@
 #include "global_counter.hpp"
 #include "post_processor/physics_post_processor.h"
 
+#include "linear_solver/helper_functions.h"
+#include <eigen/Eigen/SVD>
+#include <eigen/Eigen/LU>
+
 unsigned int n_vmult;
 unsigned int dRdW_form;
 unsigned int dRdW_mult;
@@ -3042,10 +3046,184 @@ void DGBase<dim,real,MeshType>::set_current_time(const real current_time_input) 
 }
 
 template<int dim, typename real, typename MeshType>
-void DGBase<dim, real, MeshType>::set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis) {
-    this->galerkin_basis = basis;
-}
+void DGBase<dim, real, MeshType>::set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis,
+    bool compute_test_basis) {
+    if (!compute_test_basis) {
+        this->galerkin_basis = basis;
+        return;
+    }
+    galerkin_test_basis.resize(dim);
+    Epetra_CrsMatrix inverse_mass_matrix = this->global_inverse_mass_matrix.trilinos_matrix();
+    const int global_size = solution.size();
+    const int modes = basis->NumGlobalCols();
+    Epetra_MpiComm comm(MPI_COMM_WORLD);
+    Epetra_Map global_map(global_size,0,comm);
+    // Construct Q
+    Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,inverse_mass_matrix.ColMap().MaxElementSize());
+    Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,inverse_mass_matrix.ColMap().MaxElementSize());
+    Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,inverse_mass_matrix.ColMap().MaxElementSize());
+    // const unsigned int n_dofs_cell_estimate = this->fe_collection[this->all_parameters->flow_solver_param.poly_degree].dofs_per_cell;
+    construct_global_Q(Qx,Qy,Qz,false);
+    std::cout << "Constructed Global_Q" << std::endl;
+    for(int idim = 0; idim < dim; ++idim) {
+        std::cout << idim << std::endl;
+        Epetra_CrsMatrix int_step(Epetra_DataAccess::Copy,Qx.DomainMap(),modes);
+        std::ofstream file("Q_" + std::to_string(idim)+".txt");
+        if(idim == 0) {
+            Qx.Print(file);
+            EpetraExt::MatrixMatrix::Multiply(Qx,true,*basis,false,int_step);
+        } else if (idim == 1) {
+            Qy.RowMap().Print(file);
+            EpetraExt::MatrixMatrix::Multiply(Qy,true,*basis,false,int_step);
+        } else if (idim == 2) {
+            Qz.RowMap().Print(file);
+            EpetraExt::MatrixMatrix::Multiply(Qz,true,*basis,false,int_step);
+        }
+        std::cout << "Next Matrix Mult" << std::endl;
+        Epetra_CrsMatrix right_hand_test(Epetra_DataAccess::Copy,inverse_mass_matrix.RowMap(),modes);
+        EpetraExt::MatrixMatrix::Multiply(inverse_mass_matrix,false,int_step,false,right_hand_test);
+        //Epetra_CrsMatrix
+        Epetra_Map input_domain_map(modes*2+1,0,comm);
+        Epetra_CrsMatrix input_into_svd_epetra(Epetra_DataAccess::Copy,basis->RowMap(),modes*2+1);
+        std::cout << "Adding all this shit into the matrix" << std::endl;
+        double one = 1;
+        int zero = 0;
+        int num_entries;
+        double *values = new double[modes];
+        int *indices = new int[modes];
+        for (int i = 0; i < input_into_svd_epetra.NumGlobalRows(); i++) {
+            input_into_svd_epetra.InsertGlobalValues(i,1,&one,&zero);
+            basis->ExtractGlobalRowCopy(i,modes,num_entries,values,indices);
+            for (int j = 0; j < modes; j++) {
+                indices[j] += 1;
+            }
+            input_into_svd_epetra.InsertGlobalValues(i,num_entries,values,indices);
+            right_hand_test.ExtractGlobalRowCopy(i,modes,num_entries,values,indices);
+            for (int j = 0; j < modes; j++) {
+                indices[j] += 1+modes;
+            }
+            input_into_svd_epetra.InsertGlobalValues(i,num_entries,values,indices);
+        }
+        delete[] values;
+        delete[] indices;
+        input_into_svd_epetra.FillComplete(input_domain_map,basis->RowMap());
+        std::ofstream file2("Matrix_to_svd.txt");
+        input_into_svd_epetra.Print(file2);
+        std::cout << "SVD Matrix" << std::endl;
+        Eigen::MatrixXd input_into_svd_eigen = epetra_to_eig_matrix(input_into_svd_epetra);
+        std::cout << "SVD for real" << std::endl;
+        Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(input_into_svd_eigen);
+        MatrixXd test_basis = svd_one.matrixU();
 
+        Epetra_Map row_map = basis->RowMap();
+        //Epetra_Map col_map((int)pod_basis.cols(),(int)pod_basis.cols(), 0, epetra_comm);
+        Epetra_Map domain_map((int)test_basis.cols(), 0, comm);
+        Epetra_CrsMatrix epetra_test_basis(Epetra_DataAccess::Copy, row_map, test_basis.cols());
+
+        const int numMyElements = row_map.NumMyElements(); //Number of elements on the calling processor
+        std::cout << "Back to epetra" << std::endl;
+        for (int localRow = 0; localRow < numMyElements; ++localRow){
+            const int globalRow = row_map.GID(localRow);
+            for(int n = 0 ; n < test_basis.cols() ; n++){
+                double value = test_basis(globalRow, n);
+                epetra_test_basis.InsertGlobalValues(globalRow, 1, &value, &n);
+            }
+        }
+        std::cout << "we did it" << std::endl;
+        epetra_test_basis.FillComplete(domain_map,row_map);
+        galerkin_test_basis[idim] = std::make_shared<Epetra_CrsMatrix>(epetra_test_basis);
+    }
+}
+template<int dim, typename real, typename MeshType>
+void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epetra_CrsMatrix> lhs_matrix, int idim) {
+    std::cout << "P_t " + std::to_string(idim) << std::endl;
+    Epetra_MpiComm comm( MPI_COMM_WORLD );
+    const unsigned int init_grid_degree = this->high_order_grid->fe_system.tensor_degree();
+    OPERATOR::vol_integral_basis<dim,2*dim,real> local_vol_int(1, this->max_degree, init_grid_degree);
+    const auto mapping = (*(this->high_order_grid->mapping_fe_field));
+    dealii::hp::MappingCollection<dim> mapping_collection(mapping);
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume (mapping_collection, this->fe_collection, this->volume_quadrature_collection, this->volume_update_flags); ///< FEValues of volume.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_int (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of interior face.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_ext (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->neighbor_face_update_flags); ///< FEValues of exterior face.
+    dealii::hp::FESubfaceValues<dim,dim> fe_values_collection_subface (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of subface.
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume_lagrange (mapping_collection, this->fe_collection_lagrange, this->volume_quadrature_collection, this->volume_update_flags);
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::local_basis_stiffness<dim,2*dim,real> flux_basis_stiffness(1, this->max_degree, init_grid_degree, true);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
+    std::array<std::vector<real>,dim> mapping_support_points;
+    reinit_operators_for_cell_residual_loop(
+        this->max_degree, this->max_degree, init_grid_degree,
+        soln_basis_int, soln_basis_ext,
+        flux_basis_int, flux_basis_ext,
+        flux_basis_stiffness,
+        soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+        mapping_basis);
+    // galerkin_test_basis[idim]->ColMap()
+    Epetra_Map row_map = galerkin_test_basis[idim]->RowMap();
+    Epetra_Map domain_map = galerkin_test_basis[idim]->DomainMap();
+    Epetra_Map col_map = galerkin_test_basis[idim]->ColMap();
+    Epetra_CrsMatrix vol_int_global(Epetra_DataAccess::Copy,row_map,row_map,16);
+    std::cout << "Pt cell loop" << std::endl;
+    auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
+        std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
+        const int i_fele = current_cell->active_fe_index();
+        const unsigned int poly_degree = i_fele;
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
+        const dealii::FESystem<1,1> &oneD_fe_ref = this->oneD_fe_collection_1state[i_fele];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        const unsigned int n_quad_pts = n_dofs_curr_cell / nstate;
+        std::vector<dealii::types::global_dof_index> current_dofs_indices(n_quad_pts);
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        current_cell->get_dof_indices (current_dofs_indices);
+        std::vector<double> current_weights;
+        current_weights.resize(n_quad_pts);
+        std::fill(current_weights.begin(),current_weights.end(),this->reduced_mesh_weights[current_cell_index]);
+        //std::cout << "current weight " << current_weights.front() << std::endl;
+        local_vol_int.build_1D_volume_operator(oneD_fe_ref,oneD_quadrature_collection[poly_degree]);
+        dealii::FullMatrix<double> Wchi_v_tensor(n_dofs_curr_cell);
+       // std::cout << "Local Integration" << std::endl;
+        Wchi_v_tensor = local_vol_int.tensor_product_nstate(nstate,local_vol_int.oneD_vol_operator,local_vol_int.oneD_vol_operator,local_vol_int.oneD_vol_operator);
+        //Wchi_v_tensor.print_formatted(std::cout,3,true,0,0);
+        for(unsigned int cell_row_idx = 0; cell_row_idx < n_dofs_curr_cell; ++cell_row_idx) {
+            for(unsigned int cell_col_idx = 0; cell_col_idx < n_dofs_curr_cell; ++cell_col_idx) {
+                const int global_row_idx = (int)current_dofs_indices[cell_row_idx];
+                const int global_col_idx = (int)current_dofs_indices[cell_col_idx];
+                const double value = Wchi_v_tensor[cell_row_idx][cell_col_idx];
+                //std::cout << "Row :" << std::to_string(global_row_idx) << " Col :" << std::to_string(global_col_idx) <<  " Val :" << value << std::endl;
+                vol_int_global.InsertGlobalValues(global_row_idx,1,&value,&global_col_idx);
+            }
+        }
+    }
+    std::ofstream fileio("file_happy.txt");
+    vol_int_global.Print(fileio);
+    std::cout << "Fill complete" << std::endl;
+    vol_int_global.FillComplete(row_map,row_map);
+    std::cout << "Build WChiV" << std::endl;
+    Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(*lhs_matrix);
+    //dealii::LAPACKFullMatrix<double> LHS_LAPACK = eig_to_lapack_matrix(LHS_eigen);
+    //LHS_LAPACK.print_formatted(lhs_file,16,true,0,"0");
+    Eigen::MatrixXd LHS_inverse = LHS_eigen.inverse();
+    Epetra_CrsMatrix LHS_inverse_epetra = eig_to_epetra_matrix(LHS_inverse,LHS_eigen.cols(),LHS_eigen.rows(),comm);
+    Epetra_CrsMatrix LHSVt(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),galerkin_test_basis[idim]->NumGlobalRows());
+    std::cout << "First MM" << std::endl;
+    EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,*galerkin_test_basis[idim],true,LHSVt);
+    std::cout << "Second MM" << std::endl;
+    std::cout << "vol_int_global: " + std::to_string(vol_int_global.NumGlobalRows()) +"x"+std::to_string(vol_int_global.NumGlobalCols()) << std::endl;
+    std::cout << "LHSVt: " + std::to_string(LHSVt.NumGlobalRows()) +"x"+std::to_string(LHSVt.NumGlobalCols()) << std::endl;
+    Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),vol_int_global.NumGlobalRows());
+    EpetraExt::MatrixMatrix::Multiply(LHSVt,false,vol_int_global,true,projection_matrix);
+    this->test_projection_matrix[idim] = std::make_shared<Epetra_CrsMatrix>(projection_matrix);
+}
 #if PHILIP_DIM!=1
 template class DGBase <PHILIP_DIM, double, dealii::parallel::distributed::Triangulation<PHILIP_DIM>>;
 #endif

@@ -54,7 +54,7 @@ int HyperReductionDG<dim,nstate>::run_test() const {
     std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg_base);
     std::shared_ptr<Epetra_CrsMatrix> V = std::make_shared<Epetra_CrsMatrix>(pod->getPODBasis()->trilinos_matrix());
     std::shared_ptr<Epetra_CrsMatrix> LeV = generate_test_basis(dg_base,*V);
-    dg->set_galerkin_basis(LeV);
+    dg->set_galerkin_basis(LeV,false);
     std::shared_ptr<Epetra_CrsMatrix> LHS = generate_reduced_lhs(dg_base,*LeV,*LeV);
     dg->calculate_projection_matrix(*LHS,*LeV);
 
@@ -66,11 +66,11 @@ int HyperReductionDG<dim,nstate>::run_test() const {
     Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,dg->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
     Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,dg->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
     Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,dg->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
-    dg->construct_global_Q(Qx,Qy,Qz);
+    dg->construct_global_Q(Qx,Qy,Qz,true);
     Qx.FillComplete(domain_map,global_map);
     Qy.FillComplete(domain_map,global_map);
     Qz.FillComplete(domain_map,global_map);
-    Epetra_CrsMatrix Qt = dg->calculate_hyper_reduced_Q(Qx);
+    Epetra_CrsMatrix Qt = dg->calculate_hyper_reduced_Q(Qx,0);
     std::ofstream Q_outfile("Q.txt");
     Qx.Print(Q_outfile);
     std::ofstream QtOutfile("Qt.txt");

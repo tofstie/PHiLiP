@@ -3957,11 +3957,11 @@ dealii::LinearAlgebra::distributed::Vector<double> &/*quadrature_solution*/)
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGWeak<dim,nstate,real,MeshType>::construct_global_Q(Epetra_CrsMatrix &/*Qx*/,Epetra_CrsMatrix &/*Qy*/,Epetra_CrsMatrix &/*&Qz*/) {
+void DGWeak<dim,nstate,real,MeshType>::construct_global_Q(Epetra_CrsMatrix &/*Qx*/,Epetra_CrsMatrix &/*Qy*/,Epetra_CrsMatrix &/*&Qz*/, bool /*skew_symmetric*/) {
     // Do nothing
 }
 template <int dim, int nstate, typename real, typename MeshType>
-Epetra_CrsMatrix DGWeak<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) {
+Epetra_CrsMatrix DGWeak<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q,const int /*idim*/) {
     return Global_Q;
 }
 // using default MeshType = Triangulation

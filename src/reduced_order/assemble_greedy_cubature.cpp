@@ -37,6 +37,7 @@ AssembleGreedyCubature<dim,nstate>::AssembleGreedyCubature(const PHiLiP::Paramet
         , V_target(V_target_input)
         , initial_weights(initial_weights)
         , A(std::make_shared<dealii::TrilinosWrappers::SparseMatrix>())
+        , n_quad_pts(std::pow(all_parameters->flow_solver_param.poly_degree+1,dim))
 
 {
     b = b_input;
@@ -174,10 +175,16 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             }
         }
         */
-    ///2. Move i from y to z
+    ///2. Move i from y to z (including all dofs associated with that quad point)
         auto y_i = std::next(y.begin(), i);
-        z.insert(*y_i);
-        y.erase(y_i);
+        const int cell_number = *y_i / nstate*n_quad_pts;
+        int local_idof = *y_i - cell_number*n_quad_pts*nstate;
+        for(int istate = 0; istate < nstate; ++istate) {
+            z.insert(local_idof + cell_number*n_quad_pts*nstate);
+            y.erase(local_idof + cell_number*n_quad_pts*nstate);
+            local_idof += n_quad_pts;
+            if (local_idof > nstate*n_quad_pts) local_idof -= n_quad_pts*nstate;
+        }
         unsigned int size_of_set_z = z.size();
         y_vector.assign(y.begin(),y.end());
         this->z_vector.assign(z.begin(),z.end());
@@ -284,8 +291,16 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             }
             /// Remove z_0 from z and add to y
             for(auto value_in_z_0: z_0){
-                y.insert(value_in_z_0);
-                z.erase(value_in_z_0);
+                const int cell_number = value_in_z_0 / nstate*n_quad_pts;
+                int local_idof = value_in_z_0 - cell_number*n_quad_pts*nstate;
+                for(int istate = 0; istate < nstate; ++istate) {
+                    y.insert(local_idof + cell_number*n_quad_pts*nstate);
+                    z.erase(local_idof + cell_number*n_quad_pts*nstate);
+                    local_idof += n_quad_pts;
+                    if (local_idof > nstate*n_quad_pts) local_idof -= n_quad_pts*nstate;
+                }
+                //y.insert(value_in_z_0);
+                //z.erase(value_in_z_0);
             }
             /// Recreate m_index set after changing size of z
             size_of_set_z = z.size();

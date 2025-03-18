@@ -10,7 +10,7 @@ set test_type = unsteady_hyper_reduction
 # DG formulation
 set use_weak_form = false
 set use_split_form = true
-set flux_nodes_type = GLL
+set flux_nodes_type = GL
 
 set flux_reconstruction = cDG
 set use_inverse_mass_on_the_fly = false
@@ -19,7 +19,7 @@ set use_inverse_mass_on_the_fly = false
 set use_periodic_bc = true
 
 # numerical fluxes
-set conv_num_flux = two_point_flux
+set conv_num_flux = two_point_flux_with_lax_friedrichs_dissipation
 set two_point_num_flux_type = CH
 
 # ODE solver
@@ -52,13 +52,14 @@ end
 subsection reduced order
     set output_snapshot_every_x_timesteps = 3
     #set singular_value_threshold = 0.999999
-    set number_modes = 25
+    set number_modes = 180
     set path_to_search = .
 end
 
 subsection hyperreduction
-    set NNLS_tol = 1e-5
-    set NNLS_max_iter = 500
+    set hyper_reduction_type = Cubature
+    set NNLS_tol = 1e-7
+    set NNLS_max_iter = 1000
     set training_data = residual
     set read_in_weights = false
 end

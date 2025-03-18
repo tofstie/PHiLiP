@@ -67,7 +67,7 @@ int main (int argc, char * argv[])
     using namespace PHiLiP;
     std::cout << std::setprecision(std::numeric_limits<long double>::digits10 + 1) << std::scientific;
     const int dim = PHILIP_DIM;
-    const int nstate = 1;
+    const int nstate = 4;
     dealii::ParameterHandler parameter_handler;
     PHiLiP::Parameters::AllParameters::declare_parameters (parameter_handler);
 
@@ -81,22 +81,40 @@ int main (int argc, char * argv[])
 
     bool equiv = true;
     bool sum_fact = true;
-    for(unsigned int poly_degree=2; poly_degree<4; poly_degree++){
+    for(unsigned int poly_degree=1; poly_degree<4; poly_degree++){
 
         const unsigned int n_dofs = nstate * pow(poly_degree+1,dim);
         dealii::QGauss<dim> vol_quad_dim (poly_degree+1);
         const dealii::FE_DGQ<dim> fe_dim(poly_degree);
         const dealii::FESystem<dim,dim> fe_system_dim(fe_dim, nstate);
-        
+
+        dealii::QGauss<dim> quad_dimD (poly_degree+1);
         dealii::QGauss<1> quad_1D (poly_degree+1);
         const dealii::FE_DGQ<1> fe(poly_degree);
         const dealii::FESystem<1,1> fe_system(fe, nstate);
         PHiLiP::OPERATOR::basis_functions<dim,2*dim,real> basis_1D(nstate, poly_degree, 1);
+        PHiLiP::OPERATOR::vol_integral_basis<dim,2*dim,real> vol_int_1D(nstate, poly_degree, 1);
         basis_1D.build_1D_volume_operator(fe, quad_1D);
         basis_1D.build_1D_gradient_operator(fe, quad_1D);
+        vol_int_1D.build_1D_volume_operator(fe, quad_1D);
         dealii::FullMatrix<double> basis_dim(n_dofs);
         basis_dim = basis_1D.tensor_product(basis_1D.oneD_grad_operator, basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
-
+        dealii::FullMatrix<double> chi_v(n_dofs);
+        dealii::FullMatrix<double> W(n_dofs/nstate);
+        dealii::FullMatrix<double> Wchi_v_tensor(n_dofs);
+        dealii::FullMatrix<double> Wchi_v(n_dofs/nstate);
+        std::vector<double> weights = quad_dimD.get_weights();
+        std::vector<double> weights_1D = quad_1D.get_weights();
+        for (unsigned int i =0; i < n_dofs/nstate; i++) {
+            W.set(i,i,weights[i]);
+        }
+        chi_v = basis_1D.tensor_product(basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
+        W.mmult(Wchi_v,chi_v);
+        Wchi_v_tensor = vol_int_1D.tensor_product_nstate(nstate,vol_int_1D.oneD_vol_operator,vol_int_1D.oneD_vol_operator,vol_int_1D.oneD_vol_operator);
+        Wchi_v.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+        std::cout << std::endl;
+        Wchi_v_tensor.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+        std::cout << std::endl;
         for(unsigned int idof=0; idof<n_dofs; idof++){
             for(unsigned int iquad=0; iquad<n_dofs; iquad++){
                 dealii::Point<dim> qpoint = vol_quad_dim.point(iquad);

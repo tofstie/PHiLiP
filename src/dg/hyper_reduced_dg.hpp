@@ -33,6 +33,28 @@ public:
     void allocate_dual_vector ();
 
     void assemble_hyper_reduced_residual (Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) override;
+private:
+    /** Evaluate the average penalty term at the face.
+ *  For a cell with solution of degree p, and Hausdorff measure h,
+ *  which represents the element dimension orthogonal to the face,
+ *  the penalty term is given by p*(p+1)/h .
+ */
+    template<typename DoFCellAccessorType>
+    real evaluate_penalty_scaling_hyper (
+        const DoFCellAccessorType &cell,
+        const int iface,
+        const dealii::hp::FECollection<dim> fe_collection) const;
+
+    /// In the case that two cells have the same coarseness, this function decides if the current cell should perform the work.
+    /** In the case the neighbor is a ghost cell, we let the processor with the lower rank do the work on that face.
+     *  We cannot use the cell->index() because the index is relative to the distributed triangulation.
+     *  Therefore, the cell index of a ghost cell might be different to the physical cell index even if they refer to the same cell.
+     *
+     *  For a locally owned neighbor cell, cell with lower index does work or if both cells have same index, then cell at the lower level does the work
+     *  See https://www.dealii.org/developer/doxygen/deal.II/classTriaAccessorBase.html#a695efcbe84fefef3e4c93ee7bdb446ad
+     */
+    template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
+    bool current_cell_should_do_the_work_hyper (const DoFCellAccessorType1 &current_cell, const DoFCellAccessorType2 &neighbor_cell) const;
 protected:
     /// Builds the necessary operators and assembles volume residual for either primary or auxiliary.
     void assemble_volume_term_and_build_operators(
@@ -361,9 +383,12 @@ public:
     void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
     dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
     void calculate_convective_flux_matrix(Epetra_CrsMatrix &Fx,Epetra_CrsMatrix &Fy,Epetra_CrsMatrix &Fz);
-    void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz) override;
-    Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) override;
+    void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz, bool skew_symmetric) override;
+    Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, const int idim) override;
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
+    void assemble_volume_basis();
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> volume_basis;
+
 };
 }
 #endif //__HYPERREDUCED_DISCONTINUOUSGALERKIN_H__

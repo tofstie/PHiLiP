@@ -241,6 +241,7 @@ public:
         OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
         OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
 
+
     /// Allocates and evaluates the mass matrices for the entire grid
     void evaluate_mass_matrices (bool do_inverse_mass_matrix = false);
 
@@ -259,7 +260,15 @@ public:
         OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real>     &reference_FR,
         OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
         OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
-
+    void evaluate_local_volume_basis_function_and_set_in_global_matrix(
+    const bool                                                       Cartesian_element,//Flag if cell is Cartesian
+    const unsigned int                                               poly_degree,
+    const unsigned int                                               curr_grid_degree,
+    const unsigned int                                               n_quad_pts,
+    const unsigned int                                               n_dofs_cell,
+    const std::vector<dealii::types::global_dof_index>               dofs_indices,
+    OPERATOR::basis_functions<dim,2*dim,real>                        &basis
+    );
     /// Applies the inverse of the local metric dependent mass matrices when the global is not stored.
     /** We use matrix-free methods to apply the inverse of the local mass matrix on-the-fly 
     *   in each cell using sum-factorization techniques.
@@ -880,6 +889,12 @@ protected:
 
 
 public:
+
+    /// Used in the delegated constructor
+    /** The main reason we use this weird function is because all of the above objects
+     *  need to be looped with the various p-orders. This function allows us to do this in a
+     *  single function instead of having like 6 different functions to initialize each of them.
+     */
     /// Allocates the auxiliary equations' variables and right hand side (primarily for Strong form diffusive)
     void allocate_auxiliary_equation ();
 
@@ -895,7 +910,6 @@ protected:
     MPI_Comm mpi_communicator; ///< MPI communicator
     dealii::ConditionalOStream pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
 private:
-
     /** Evaluate the average penalty term at the face.
      *  For a cell with solution of degree p, and Hausdorff measure h,
      *  which represents the element dimension orthogonal to the face,
@@ -918,11 +932,6 @@ private:
     template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
     bool current_cell_should_do_the_work (const DoFCellAccessorType1 &current_cell, const DoFCellAccessorType2 &neighbor_cell) const;
 
-    /// Used in the delegated constructor
-    /** The main reason we use this weird function is because all of the above objects
-     *  need to be looped with the various p-orders. This function allows us to do this in a
-     *  single function instead of having like 6 different functions to initialize each of them.
-     */
     MassiveCollectionTuple create_collection_tuple(const unsigned int max_degree, const int nstate, const Parameters::AllParameters *const parameters_input) const;
 
 public:
@@ -956,19 +965,28 @@ public:
     /// Calculates the Quadrature Solution
     virtual void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x, dealii::LinearAlgebra::distributed::Vector<double> &location_y) = 0;
     /// Sets the galerkin basis
-    void set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis);
+    void set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis, bool compute_test_basis);
+    /// Calculates the test projection matrix
+    void set_test_projection_matrix(std::shared_ptr<Epetra_CrsMatrix> lhs_matrix, int idim);
 
-    virtual void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz) = 0 ;
-    virtual Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) = 0;
+    virtual void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz, bool skew_symmetric) = 0 ;
+    virtual Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, const int idim) = 0;
 
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;
     /// Global Face Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_face_entropy;
-    /// Projection Matrix
+    /// ROM Projection Matrix
     dealii::TrilinosWrappers::SparseMatrix projection_matrix;
     /// Galerkin Basis
     std::shared_ptr<Epetra_CrsMatrix> galerkin_basis;
+
+    /// Galerkin Test Basis
+    std::vector<std::shared_ptr<Epetra_CrsMatrix>> galerkin_test_basis;
+
+    /// Test Projection Matrix
+    std::vector<std::shared_ptr<Epetra_CrsMatrix>> test_projection_matrix;
+
     /// ROM Projected Entropy
     dealii::LinearAlgebra::distributed::Vector<double> projected_entropy;
     /// ROM Projected Face Entropy

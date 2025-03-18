@@ -25,7 +25,7 @@
 #include <Epetra_Comm.h>
 #include <EpetraExt_MatrixMatrix.h>
 #include <deal.II/lac/full_matrix.h> // LAPACK Matrix for Printing/Debugging
-
+#include <chrono>
 namespace PHiLiP {
 
 template<int dim, int nstate, typename real, typename MeshType>
@@ -35,7 +35,8 @@ DGHyper<dim, nstate, real, MeshType>::DGHyper(
     const unsigned int max_degree_input,
     const unsigned int grid_degree_input,
     const std::shared_ptr<Triangulation> triangulation_input)
-    : DGBaseState<dim,nstate,real,MeshType>::DGBaseState(parameters_input, degree, max_degree_input, grid_degree_input, triangulation_input)
+    :   DGBaseState<dim,nstate,real,MeshType>::DGBaseState(parameters_input, degree, max_degree_input, grid_degree_input, triangulation_input)
+    ,   volume_basis(std::make_shared<dealii::TrilinosWrappers::SparseMatrix>())
 {}
 template<int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operators(
@@ -121,10 +122,9 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operat
 template <int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) {
-
+    std::cout << "Starting Assembly" << std::endl;
     const int global_size = this->solution.size();
     const int grid_degree = this->all_parameters->flow_solver_param.grid_degree;
-
     // Construct F
     Epetra_CrsMatrix Fx(Epetra_DataAccess::Copy,Qtx.RowMap(),global_size);
 #if PHILIP_DIM==1
@@ -137,11 +137,13 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qty.RowMap(),global_size);
     Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtz.RowMap(),global_size);
 #endif
+    std::cout << "Calculating Flux" << std::endl;
     this->calculate_convective_flux_matrix(Fx,Fy,Fz);
     Fx.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
     Fy.FillComplete(Qty.DomainMap(),Qty.RowMap());
     Fz.FillComplete(Qtz.DomainMap(),Qtz.RowMap());
-
+    // std::ofstream flux_file("x_flux.txt");
+    // Fx.Print(flux_file);
 
     const int max_poly = this->all_parameters->flow_solver_param.max_poly_degree_for_adaptation;
     Epetra_CrsMatrix QtxF(Epetra_DataAccess::Copy,Qtx.RowMap(),Qtx.ColMap(),Qtx.NumGlobalCols());
@@ -162,23 +164,398 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     // resulty = 0;
     // resultz = 0;
     this->right_hand_side = 0;
+    dealii::LinearAlgebra::distributed::Vector<double> temp_rhs(this->right_hand_side);
+    temp_rhs.update_ghost_values();
     ones = 1.;
     dealii::TrilinosWrappers::SparseMatrix QtxF_deall;
     dealii::TrilinosWrappers::SparseMatrix QtyF_deall;
     dealii::TrilinosWrappers::SparseMatrix QtzF_deall;
-    std::ofstream QtxF_file("QtxF.txt");
-    QtxF.Print(QtxF_file);
+    // std::ofstream QtxF_file("QtxF.txt");
+    // QtxF.Print(QtxF_file);
     QtxF_deall.reinit(QtxF);
     QtyF_deall.reinit(QtyF);
     QtzF_deall.reinit(QtzF);
 
-    QtxF_deall.vmult_add(this->right_hand_side,ones);
-    QtyF_deall.vmult_add(this->right_hand_side,ones);
-    QtzF_deall.vmult_add(this->right_hand_side,ones);
+    QtxF_deall.vmult_add(temp_rhs,ones);
+    QtyF_deall.vmult_add(temp_rhs,ones);
+    QtzF_deall.vmult_add(temp_rhs,ones);
+    std::cout << "temp_rhs norm " + std::to_string(temp_rhs.l2_norm()) << std::endl;
 
+    temp_rhs.compress(dealii::VectorOperation::add);
+    temp_rhs.update_ghost_values();
+    volume_basis->vmult(this->right_hand_side,temp_rhs);
+    std::cout << "rhs norm " + std::to_string(this->right_hand_side.l2_norm()) << std::endl;
+    // Start of face/boundary terms
+    /*
+    const auto mapping = (*(this->high_order_grid->mapping_fe_field));
+    dealii::hp::MappingCollection<dim> mapping_collection(mapping);
 
-    this->right_hand_side.compress(dealii::VectorOperation::add);
-    this->right_hand_side.update_ghost_values();
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume (mapping_collection, this->fe_collection, this->volume_quadrature_collection, this->volume_update_flags); ///< FEValues of volume.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_int (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of interior face.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_ext (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->neighbor_face_update_flags); ///< FEValues of exterior face.
+    dealii::hp::FESubfaceValues<dim,dim> fe_values_collection_subface (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of subface.
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume_lagrange (mapping_collection, this->fe_collection_lagrange, this->volume_quadrature_collection, this->volume_update_flags);
+    const unsigned int init_grid_degree = this->high_order_grid->fe_system.tensor_degree();
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::local_basis_stiffness<dim,2*dim,real> flux_basis_stiffness(1, this->max_degree, init_grid_degree, true);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
+    std::array<std::vector<real>,dim> mapping_support_points;
+    this->reinit_operators_for_cell_residual_loop(
+        this->max_degree, this->max_degree, init_grid_degree,
+        soln_basis_int, soln_basis_ext,
+        flux_basis_int, flux_basis_ext,
+        flux_basis_stiffness,
+        soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+        mapping_basis);
+
+    const bool store_vol_flux_nodes = this->all_parameters->manufactured_convergence_study_param.manufactured_solution_param.use_manufactured_source_term;
+    //for boundary conditions not periodic we need surface flux nodes
+    //should change this flag to something like if have face on boundary not periodic in the future
+    const bool store_surf_flux_nodes = (this->all_parameters->use_periodic_bc) ? false : true;
+    //solution.update_ghost_values();
+    const bool compute_dRdW = false;
+    const bool compute_dRdX = false;
+    const bool compute_d2R = false;
+    const bool compute_auxiliary_right_hand_side = false;
+
+    auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
+        if (this->reduced_mesh_weights[current_cell_index] == 0) continue;
+        std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
+        const int i_fele = current_cell->active_fe_index();
+        const unsigned int poly_degree = i_fele;
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        const unsigned int n_metric_dofs_cell = this->high_order_grid->fe_system.dofs_per_cell;
+        std::vector<dealii::types::global_dof_index> current_dofs_indices(n_dofs_curr_cell);
+        std::vector<dealii::types::global_dof_index> current_metric_dofs_indices(n_metric_dofs_cell);
+        std::vector<dealii::types::global_dof_index> neighbor_metric_dofs_indices(n_metric_dofs_cell);
+        metric_cell->get_dof_indices (current_metric_dofs_indices);
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        current_cell->get_dof_indices (current_dofs_indices);
+        dealii::Vector<real> current_cell_rhs (n_dofs_curr_cell); // Defaults to 0.0 initialization
+        std::vector<dealii::Tensor<1,dim,double>> current_cell_rhs_aux (n_dofs_curr_cell);// Defaults to 0.0 initialization
+        (void) fe_values_collection_face_int;
+        (void) fe_values_collection_face_ext;
+        (void) fe_values_collection_subface;
+        OPERATOR::metric_operators<real,dim,2*dim> metric_oper_int(nstate, poly_degree, grid_degree,
+                                                           store_vol_flux_nodes,
+                                                           store_surf_flux_nodes);
+        const dealii::FESystem<dim> &fe_metric = this->high_order_grid->fe_system;
+        const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
+        const unsigned int n_grid_nodes  = n_metric_dofs / dim;
+
+        for(int idim=0; idim<dim; idim++){
+            mapping_support_points[idim].resize(n_grid_nodes);
+        }
+        const std::vector<unsigned int > &index_renumbering = dealii::FETools::hierarchic_to_lexicographic_numbering<dim>(grid_degree);
+        for (unsigned int idof = 0; idof< n_metric_dofs; ++idof) {
+            const real val = (this->high_order_grid->volume_nodes[current_metric_dofs_indices[idof]]);
+            const unsigned int istate = fe_metric.system_to_component_index(idof).first;
+            const unsigned int ishape = fe_metric.system_to_component_index(idof).second;
+            const unsigned int igrid_node = index_renumbering[ishape];
+            mapping_support_points[istate][igrid_node] = val;
+        }
+        for (unsigned int iface=0; iface < dealii::GeometryInfo<dim>::faces_per_cell; ++iface) {
+            //if(cell->face_flip(iface)){
+            //    std::cout << "A FACE FLIPPED, please break" << std::endl;
+            //}
+            auto current_face = current_cell->face(iface);
+
+            // CASE 1: FACE AT BOUNDARY
+            if ((current_face->at_boundary() && !current_cell->has_periodic_neighbor(iface)))
+            {
+                const real penalty = evaluate_penalty_scaling_hyper (current_cell, iface, this->fe_collection);
+
+                const unsigned int boundary_id = current_face->boundary_id();
+
+                assemble_boundary_term_and_build_operators(
+                    current_cell,
+                    current_cell_index,
+                    iface,
+                    boundary_id,
+                    penalty,
+                    current_dofs_indices,
+                    current_metric_dofs_indices,
+                    poly_degree,
+                    grid_degree,
+                    soln_basis_int,
+                    flux_basis_int,
+                    flux_basis_stiffness,
+                    soln_basis_projection_oper_int,
+                    soln_basis_projection_oper_ext,
+                    metric_oper_int,
+                    mapping_basis,
+                    mapping_support_points,
+                    fe_values_collection_face_int,
+                    current_fe_ref,
+                    current_cell_rhs,
+                    current_cell_rhs_aux,
+                    compute_auxiliary_right_hand_side,
+                    compute_dRdW, compute_dRdX, compute_d2R);
+
+            }
+            // CASE 2: PERIODIC BOUNDARY CONDITIONS
+            // NOTE: Periodicity is not adapted for hp adaptivity yet. this needs to be figured out in the future
+            else if (current_face->at_boundary() && current_cell->has_periodic_neighbor(iface))
+            {
+
+                const auto neighbor_cell = current_cell->periodic_neighbor(iface);
+
+                if ((!current_cell->periodic_neighbor_is_coarser(iface) && current_cell_should_do_the_work_hyper(current_cell, neighbor_cell)) &&
+                    !this->reduced_mesh_weights[neighbor_cell->active_cell_index()] == 0)
+                {
+                    Assert (current_cell->periodic_neighbor(iface).state() == dealii::IteratorState::valid, dealii::ExcInternalError());
+
+                    const unsigned int n_dofs_neigh_cell = this->fe_collection[neighbor_cell->active_fe_index()].n_dofs_per_cell();
+                    dealii::Vector<real> neighbor_cell_rhs (n_dofs_neigh_cell); // Defaults to 0.0 initialization
+
+                    // Obtain the mapping from local dof indices to global dof indices for neighbor cell
+                    neighbor_dofs_indices.resize(n_dofs_neigh_cell);
+                    neighbor_cell->get_dof_indices (neighbor_dofs_indices);
+
+                    // Corresponding face of the neighbor.
+                    const unsigned int neighbor_iface = current_cell->periodic_neighbor_of_periodic_neighbor(iface);
+
+                    const int i_fele_n = neighbor_cell->active_fe_index();
+
+                    // Compute penalty.
+                    const real penalty1 = evaluate_penalty_scaling_hyper (current_cell, iface, this->fe_collection);
+                    const real penalty2 = evaluate_penalty_scaling_hyper (neighbor_cell, neighbor_iface, this->fe_collection);
+                    const real penalty = 0.5 * (penalty1 + penalty2);
+
+                    const dealii::types::global_dof_index neighbor_cell_index = neighbor_cell->active_cell_index();
+                    const auto metric_neighbor_cell = metric_cell->periodic_neighbor(iface);
+                    metric_neighbor_cell->get_dof_indices(neighbor_metric_dofs_indices);
+
+                    const unsigned int poly_degree_ext = i_fele_n;
+                    const unsigned int grid_degree_ext = this->high_order_grid->fe_system.tensor_degree();
+                    //constructor doesn't build anything
+                    OPERATOR::metric_operators<real,dim,2*dim> metric_oper_ext(nstate, poly_degree_ext, grid_degree_ext,
+                                                                               store_vol_flux_nodes,
+                                                                               store_surf_flux_nodes);
+                    assemble_face_term_and_build_operators(
+                        current_cell,
+                        neighbor_cell,
+                        current_cell_index,
+                        neighbor_cell_index,
+                        iface,
+                        neighbor_iface,
+                        penalty,
+                        current_dofs_indices,
+                        neighbor_dofs_indices,
+                        current_metric_dofs_indices,
+                        neighbor_metric_dofs_indices,
+                        poly_degree,
+                        poly_degree_ext,
+                        grid_degree,
+                        grid_degree_ext,
+                        soln_basis_int,
+                        soln_basis_ext,
+                        flux_basis_int,
+                        flux_basis_ext,
+                        flux_basis_stiffness,
+                        soln_basis_projection_oper_int,
+                        soln_basis_projection_oper_ext,
+                        metric_oper_int,
+                        metric_oper_ext,
+                        mapping_basis,
+                        mapping_support_points,
+                        fe_values_collection_face_int,
+                        fe_values_collection_face_ext,
+                        current_cell_rhs,
+                        neighbor_cell_rhs,
+                        current_cell_rhs_aux,
+                        this->right_hand_side,
+                        this->auxiliary_right_hand_side,
+                        compute_auxiliary_right_hand_side,
+                        compute_dRdW, compute_dRdX, compute_d2R);
+                }
+            }
+            // CASE 3: NEIGHBOUR IS FINER
+            // Occurs if the face has children
+            else if (current_cell->face(iface)->has_children())
+            {
+                // Do nothing.
+                // The face contribution from the current cell will appear then the finer neighbor cell is assembled.
+            }
+            // CASE 4: NEIGHBOR IS COARSER
+            // Assemble face residual.
+            else if (current_cell->neighbor(iface)->face(current_cell->neighbor_face_no(iface))->has_children())
+            {
+                Assert (current_cell->neighbor(iface).state() == dealii::IteratorState::valid, dealii::ExcInternalError());
+                Assert (!(current_cell->neighbor(iface)->has_children()), dealii::ExcInternalError());
+
+                // Obtain cell neighbour
+                const auto neighbor_cell = current_cell->neighbor(iface);
+                const unsigned int neighbor_iface = current_cell->neighbor_face_no(iface);
+
+                // Find corresponding subface
+                unsigned int neighbor_i_subface = 0;
+                unsigned int n_subface = dealii::GeometryInfo<dim>::n_subfaces(neighbor_cell->subface_case(neighbor_iface));
+
+                for (; neighbor_i_subface < n_subface; ++neighbor_i_subface) {
+                    if (neighbor_cell->neighbor_child_on_subface (neighbor_iface, neighbor_i_subface) == current_cell) {
+                        break;
+                    }
+                }
+                Assert(neighbor_i_subface != n_subface, dealii::ExcInternalError());
+
+                const int i_fele_n = neighbor_cell->active_fe_index();//, i_quad_n = i_fele_n, i_mapp_n = 0;
+
+                const unsigned int n_dofs_neigh_cell = this->fe_collection[i_fele_n].n_dofs_per_cell();
+                dealii::Vector<real> neighbor_cell_rhs (n_dofs_neigh_cell); // Defaults to 0.0 initialization
+
+                // Obtain the mapping from local dof indices to global dof indices for neighbor cell
+                neighbor_dofs_indices.resize(n_dofs_neigh_cell);
+                neighbor_cell->get_dof_indices (neighbor_dofs_indices);
+
+                const real penalty1 = evaluate_penalty_scaling_hyper (current_cell, iface, this->fe_collection);
+                const real penalty2 = evaluate_penalty_scaling_hyper (neighbor_cell, neighbor_iface, this->fe_collection);
+                const real penalty = 0.5 * (penalty1 + penalty2);
+
+                const dealii::types::global_dof_index neighbor_cell_index = neighbor_cell->active_cell_index();
+                const auto metric_neighbor_cell = metric_cell->neighbor(iface);
+                metric_neighbor_cell->get_dof_indices(neighbor_metric_dofs_indices);
+
+                const unsigned int poly_degree_ext = i_fele_n;
+                const unsigned int grid_degree_ext = this->high_order_grid->fe_system.tensor_degree();
+                //Check if the poly degree or mapping changed order, in which case, then we re-compute the corresponding basis
+                OPERATOR::metric_operators<real,dim,2*dim> metric_oper_ext(nstate, poly_degree_ext, grid_degree_ext,
+                                                                   store_vol_flux_nodes,
+                                                                   store_surf_flux_nodes);
+
+                assemble_subface_term_and_build_operators(
+                    current_cell,
+                    neighbor_cell,
+                    current_cell_index,
+                    neighbor_cell_index,
+                    iface,
+                    neighbor_iface,
+                    neighbor_i_subface,
+                    penalty,
+                    current_dofs_indices,
+                    neighbor_dofs_indices,
+                    current_metric_dofs_indices,
+                    neighbor_metric_dofs_indices,
+                    poly_degree,
+                    poly_degree_ext,
+                    grid_degree,
+                    grid_degree_ext,
+                    soln_basis_int,
+                    soln_basis_ext,
+                    flux_basis_int,
+                    flux_basis_ext,
+                    flux_basis_stiffness,
+                    soln_basis_projection_oper_int,
+                    soln_basis_projection_oper_ext,
+                    metric_oper_int,
+                    metric_oper_ext,
+                    mapping_basis,
+                    mapping_support_points,
+                    fe_values_collection_face_int,
+                    fe_values_collection_subface,
+                    current_cell_rhs,
+                    neighbor_cell_rhs,
+                    current_cell_rhs_aux,
+                    this->right_hand_side,
+                    this->auxiliary_right_hand_side,
+                    compute_auxiliary_right_hand_side,
+                    compute_dRdW, compute_dRdX, compute_d2R);
+            }
+            // CASE 5: NEIGHBOR CELL HAS SAME COARSENESS
+            // Therefore, we need to choose one of them to do the work
+            else if (current_cell_should_do_the_work_hyper(current_cell, current_cell->neighbor(iface)))
+            {
+                Assert (current_cell->neighbor(iface).state() == dealii::IteratorState::valid, dealii::ExcInternalError());
+
+                const auto neighbor_cell = current_cell->neighbor_or_periodic_neighbor(iface);
+                // Corresponding face of the neighbor.
+                // e.g. The 4th face of the current cell might correspond to the 3rd face of the neighbor
+                const unsigned int neighbor_iface = current_cell->neighbor_of_neighbor(iface);
+
+                // Get information about neighbor cell
+                const unsigned int n_dofs_neigh_cell = this->fe_collection[neighbor_cell->active_fe_index()].n_dofs_per_cell();
+
+                // Local rhs contribution from neighbor
+                dealii::Vector<real> neighbor_cell_rhs (n_dofs_neigh_cell); // Defaults to 0.0 initialization
+
+                // Obtain the mapping from local dof indices to global dof indices for neighbor cell
+                neighbor_dofs_indices.resize(n_dofs_neigh_cell);
+                neighbor_cell->get_dof_indices (neighbor_dofs_indices);
+
+                const int i_fele_n = neighbor_cell->active_fe_index();
+
+                // Compute penalty.
+                const real penalty1 = evaluate_penalty_scaling_hyper (current_cell, iface, this->fe_collection);
+                const real penalty2 = evaluate_penalty_scaling_hyper (neighbor_cell, neighbor_iface, this->fe_collection);
+                const real penalty = 0.5 * (penalty1 + penalty2);
+
+                const dealii::types::global_dof_index neighbor_cell_index = neighbor_cell->active_cell_index();
+                const auto metric_neighbor_cell = metric_cell->neighbor_or_periodic_neighbor(iface);
+                metric_neighbor_cell->get_dof_indices(neighbor_metric_dofs_indices);
+
+                const unsigned int poly_degree_ext = i_fele_n;
+                // In future high_order_grids dof object/metric_cell should store the cell's fe degree.
+                // For now high_order_grid only handles all cells of same grid degree.
+                const unsigned int grid_degree_ext = this->high_order_grid->fe_system.tensor_degree();
+                //Check if the poly degree or mapping changed order, in which case, then we re-compute the corresponding basis
+                OPERATOR::metric_operators<real,dim,2*dim> metric_oper_ext(nstate, poly_degree_ext, grid_degree_ext,
+                                                                   store_vol_flux_nodes,
+                                                                   store_surf_flux_nodes);
+
+                assemble_face_term_and_build_operators(
+                    current_cell,
+                    neighbor_cell,
+                    current_cell_index,
+                    neighbor_cell_index,
+                    iface,
+                    neighbor_iface,
+                    penalty,
+                    current_dofs_indices,
+                    neighbor_dofs_indices,
+                    current_metric_dofs_indices,
+                    neighbor_metric_dofs_indices,
+                    poly_degree,
+                    poly_degree_ext,
+                    grid_degree,
+                    grid_degree_ext,
+                    soln_basis_int,
+                    soln_basis_ext,
+                    flux_basis_int,
+                    flux_basis_ext,
+                    flux_basis_stiffness,
+                    soln_basis_projection_oper_int,
+                    soln_basis_projection_oper_ext,
+                    metric_oper_int,
+                    metric_oper_ext,
+                    mapping_basis,
+                    mapping_support_points,
+                    fe_values_collection_face_int,
+                    fe_values_collection_face_ext,
+                    current_cell_rhs,
+                    neighbor_cell_rhs,
+                    current_cell_rhs_aux,
+                    this->right_hand_side,
+                    this->auxiliary_right_hand_side,
+                    compute_auxiliary_right_hand_side,
+                    compute_dRdW, compute_dRdX, compute_d2R);
+            }
+            else {
+                // Should be faces where the neighbor cell has the same coarseness
+                // but will be evaluated when we visit the other cell.
+            }
+        } // end of face loop
+    } // end of cell loop
+    */
 }
 template<int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim, nstate, real, MeshType>::assemble_boundary_term_and_build_operators(
@@ -1234,6 +1611,7 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_strong(
                                                           oneD_vol_quad_weights,
                                                           flux_basis_stiffness_skew_symm_oper_sparse);
     }
+    /*
     const int global_size = this->solution.size();
     Epetra_MpiComm comm(MPI_COMM_WORLD);
     Epetra_Map global_map(global_size,0,comm);
@@ -1257,6 +1635,7 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_strong(
     global_Q.Print(global_Q_file);
     Epetra_CrsMatrix hyper_reduced_Q = this->calculate_hyper_reduced_Q(global_Q);
     hyper_reduced_Q.Print(hyper_Q_file);
+    */
     //For each state we:
     //  1. Compute reference divergence.
     //  2. Then compute and write the rhs for the given state.
@@ -3585,10 +3964,10 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::
     entropy_diff /= 1;
 }
 template<int dim, int nstate, typename real, typename MeshType>
-Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q) {
-
-    Epetra_CrsMatrix galerkin_basis_matrix = *this->galerkin_basis;
-    Epetra_CrsMatrix proj_epetra = this->projection_matrix.trilinos_matrix();
+Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, const int idim) {
+    if (idim >= dim) return Global_Q;
+    Epetra_CrsMatrix galerkin_basis_matrix = *this->galerkin_test_basis[idim];
+    Epetra_CrsMatrix proj_epetra = *this->test_projection_matrix[idim];
     Epetra_Map first_temp_row_map = galerkin_basis_matrix.ColMap();
     Epetra_Map third_temp_row_map = proj_epetra.ColMap();
     Epetra_CrsMatrix first_temp(Epetra_DataAccess::Copy,first_temp_row_map,Global_Q.NumGlobalCols());
@@ -3658,10 +4037,12 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
     const bool store_surf_flux_nodes = (this->all_parameters->use_periodic_bc) ? false : true;
     //solution.update_ghost_values();
     auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
+    std::cout << "Starting Cells Loop" <<std::endl;
+    auto all_cells_start = std::chrono::high_resolution_clock::now();
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
         if (!current_cell->is_locally_owned()) continue;
         if (this->reduced_mesh_weights[current_cell->active_cell_index()] == 0) continue;
-
+        auto this_cells_start = std::chrono::high_resolution_clock::now();
         std::vector<dealii::types::global_dof_index> current_dofs_indices;
         // Current reference element related to this physical cell
         const int i_fele = current_cell->active_fe_index();
@@ -3744,6 +4125,7 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                     soln_state = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var);
                     auto flux_metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
                     std::array<std::vector<real>,dim> flux_mapping_support_points;
+                    auto flux_cells_start = std::chrono::high_resolution_clock::now();
                     for (auto flux_current_cell = this->dof_handler.begin_active(); flux_current_cell != this->dof_handler.end(); ++flux_current_cell, ++flux_metric_cell) {
                         if (!flux_current_cell->is_locally_owned()) continue; // This approach will not work in MPI
                         if (this->reduced_mesh_weights[flux_current_cell->active_cell_index()] == 0) continue;
@@ -3811,15 +4193,23 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
 
                         }
                     }
+                    auto flux_cells_end = std::chrono::high_resolution_clock::now();
+                    auto flux_cells_duration = std::chrono::duration_cast<std::chrono::microseconds>(flux_cells_end - flux_cells_start);
+                    //std::cout << "Flux cells: " << flux_cells_duration.count() << std::endl;
                 }
             }
         }
+    auto this_cells_end = std::chrono::high_resolution_clock::now();
+    auto this_cells_duration = std::chrono::duration_cast<std::chrono::microseconds>(this_cells_end - this_cells_start);
+    //std::cout << "This cells: " << this_cells_duration.count() << std::endl;
     }
+    auto all_cells_end = std::chrono::high_resolution_clock::now();
+    auto all_cells_duration = std::chrono::duration_cast<std::chrono::microseconds>(all_cells_end - all_cells_start);
+    //std::cout << "All cells: " << all_cells_duration.count() << std::endl;
 }
 
 template<int dim, int nstate, typename real, typename MeshType>
-void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz) {
-
+void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz,bool skew_symmetric) {
     const int global_size = this->solution.size();
     Epetra_MpiComm comm(MPI_COMM_WORLD);
     Epetra_Map global_map(global_size,0,comm);
@@ -3901,12 +4291,22 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
         for(int idim=0; idim<dim; idim++){
             flux_basis_stiffness_skew_symm_oper_sparse[idim].reinit(n_quad_pts, n_quad_pts_1D);
         }
-        flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
-                                                          Hadamard_rows_sparsity, Hadamard_columns_sparsity,
-                                                          flux_basis_stiffness.oneD_skew_symm_vol_oper,
-                                                          oneD_vol_quad_weights,
-                                                          flux_basis_stiffness_skew_symm_oper_sparse);
-
+        if(skew_symmetric) {
+            // Construct chi_v
+            std::cout << "Assembling Volume basis" << std::endl;
+            this->assemble_volume_basis();
+            flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
+                                                              Hadamard_rows_sparsity, Hadamard_columns_sparsity,
+                                                              flux_basis_stiffness.oneD_skew_symm_vol_oper,
+                                                              oneD_vol_quad_weights,
+                                                              flux_basis_stiffness_skew_symm_oper_sparse);
+        } else {
+            flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
+                                                   Hadamard_rows_sparsity, Hadamard_columns_sparsity,
+                                                   flux_basis_stiffness.oneD_vol_operator,
+                                                   oneD_vol_quad_weights,
+                                                   flux_basis_stiffness_skew_symm_oper_sparse);
+        }
         // unsigned int precision = 16;
         // char zero = 48;
         // flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout, precision, true, 0,&zero);
@@ -3926,13 +4326,151 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                         else if (idim == 2) Qz.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1,&val,&indices);
                     }
                     if(row == n_quad_pts_1D-1) id_counter++;
-                }
-            }
-        }
-    }
+                } // end of row loop
+            } // end of nstate loop
+        } // end of dim loop
+    } // end of cell loop
     Qx.FillComplete(global_map,global_map);
     Qy.FillComplete(global_map,global_map);
     Qz.FillComplete(global_map,global_map);
+}
+
+template<int dim, int nstate, typename real, typename MeshType>
+template<typename DoFCellAccessorType>
+real DGHyper<dim, nstate, real, MeshType>::evaluate_penalty_scaling_hyper (
+    const DoFCellAccessorType &cell,
+    const int iface,
+    const dealii::hp::FECollection<dim> fe_collection) const
+{
+
+    const unsigned int fe_index = cell->active_fe_index();
+    const unsigned int degree = fe_collection[fe_index].tensor_degree();
+    const unsigned int degsq = (degree == 0) ? 1 : degree * (degree+1);
+
+    const unsigned int normal_direction = dealii::GeometryInfo<dim>::unit_normal_direction[iface];
+    const real vol_div_facearea = cell->extent_in_direction(normal_direction);
+
+    const real penalty = degsq / vol_div_facearea * this->all_parameters->sipg_penalty_factor;// * 20;
+
+    return penalty;
+}
+
+
+template<int dim, int nstate, typename real, typename MeshType>
+template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
+bool DGHyper<dim, nstate, real, MeshType>::current_cell_should_do_the_work_hyper (
+    const DoFCellAccessorType1 &current_cell,
+    const DoFCellAccessorType2 &neighbor_cell) const
+{
+    if (neighbor_cell->has_children()) {
+        // Only happens in 1D where neither faces have children, but neighbor has some children
+        // Can't do the computation now since we need to query the children's DoF
+        AssertDimension(dim,1);
+        return false;
+    } else if (neighbor_cell->is_ghost()) {
+        // In the case the neighbor is a ghost cell, we let the processor with the lower rank do the work on that face
+        // We cannot use the cell->index() because the index is relative to the distributed triangulation
+        // Therefore, the cell index of a ghost cell might be different to the physical cell index even if they refer to the same cell
+        return (current_cell->subdomain_id() < neighbor_cell->subdomain_id());
+        //return true;
+    } else {
+        // Locally owned neighbor cell
+        Assert(neighbor_cell->is_locally_owned(), dealii::ExcMessage("If not ghost, neighbor should be locally owned."));
+
+        if (current_cell->index() < neighbor_cell->index()) {
+            // Cell with lower index does work
+            return true;
+        } else if (neighbor_cell->index() == current_cell->index()) {
+            // If both cells have same index
+            // See https://www.dealii.org/developer/doxygen/deal.II/classTriaAccessorBase.html#a695efcbe84fefef3e4c93ee7bdb446ad
+            // then cell at the lower level does the work
+            return (current_cell->level() < neighbor_cell->level());
+        }
+        return false;
+    }
+    Assert(0==1, dealii::ExcMessage("Should not have reached here. Somehow another possible case has not been considered when two cells have the same coarseness."));
+    return false;
+}
+
+template<int dim, int nstate, typename real, typename MeshType>
+void DGHyper<dim, nstate, real, MeshType>::assemble_volume_basis() {
+    std::cout <<"Chi" << std::endl;
+    Epetra_Map domain_map = this->global_mass_matrix.trilinos_matrix().DomainMap();
+    Epetra_Map row_map = this->global_mass_matrix.trilinos_matrix().RowMap();
+    Epetra_Map col_map = this->global_mass_matrix.trilinos_matrix().ColMap();
+    const unsigned int init_grid_degree = this->high_order_grid->fe_system.tensor_degree();
+    const auto mapping = (*(this->high_order_grid->mapping_fe_field));
+    dealii::hp::MappingCollection<dim> mapping_collection(mapping);
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume (mapping_collection, this->fe_collection, this->volume_quadrature_collection, this->volume_update_flags); ///< FEValues of volume.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_int (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of interior face.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_ext (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->neighbor_face_update_flags); ///< FEValues of exterior face.
+    dealii::hp::FESubfaceValues<dim,dim> fe_values_collection_subface (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of subface.
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume_lagrange (mapping_collection, this->fe_collection_lagrange, this->volume_quadrature_collection, this->volume_update_flags);
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::local_basis_stiffness<dim,2*dim,real> flux_basis_stiffness(1, this->max_degree, init_grid_degree, true);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
+    std::array<std::vector<real>,dim> mapping_support_points;
+    this->reinit_operators_for_cell_residual_loop(
+        this->max_degree, this->max_degree, init_grid_degree,
+        soln_basis_int, soln_basis_ext,
+        flux_basis_int, flux_basis_ext,
+        flux_basis_stiffness,
+        soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+        mapping_basis);
+
+    Epetra_CrsMatrix chi_v_global(Epetra_DataAccess::Copy,row_map,col_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
+
+    auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
+    std::cout <<"Chi cell loop" << std::endl;
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
+        if (this->reduced_mesh_weights[current_cell_index] == 0) continue;
+        std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
+        const int i_fele = current_cell->active_fe_index();
+        const unsigned int poly_degree = i_fele;
+        if(poly_degree != soln_basis_int.current_degree){
+            soln_basis_int.current_degree = poly_degree;
+            soln_basis_ext.current_degree = poly_degree;
+            flux_basis_int.current_degree = poly_degree;
+            flux_basis_ext.current_degree = poly_degree;
+            mapping_basis.current_degree  = poly_degree;
+            const unsigned int grid_degree = this->high_order_grid->fe_system.tensor_degree();
+            this->reinit_operators_for_cell_residual_loop(poly_degree, poly_degree, grid_degree,
+                                                            soln_basis_int, soln_basis_ext,
+                                                            flux_basis_int, flux_basis_ext,
+                                                            flux_basis_stiffness,
+                                                            soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+                                                            mapping_basis);
+        }
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
+        const dealii::FESystem<1,1> &oneD_fe_ref = this->oneD_fe_collection_1state[i_fele];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        std::vector<dealii::types::global_dof_index> current_dofs_indices(n_dofs_curr_cell);
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        current_cell->get_dof_indices (current_dofs_indices);
+        soln_basis_int.build_1D_volume_operator(oneD_fe_ref,this->oneD_quadrature_collection[poly_degree]);
+        dealii::FullMatrix<double> chi_v(n_dofs_curr_cell);
+        chi_v = soln_basis_int.tensor_product_nstate(nstate,soln_basis_int.oneD_vol_operator,soln_basis_int.oneD_vol_operator,soln_basis_int.oneD_vol_operator);
+        for(unsigned int cell_row_idx = 0; cell_row_idx < n_dofs_curr_cell; ++cell_row_idx) {
+            for(unsigned int cell_col_idx = 0; cell_col_idx < n_dofs_curr_cell; ++cell_col_idx) {
+                const int global_row_idx = (int)current_dofs_indices[cell_row_idx];
+                const int global_col_idx = (int)current_dofs_indices[cell_col_idx];
+                const double val = chi_v[cell_row_idx][cell_col_idx];
+                chi_v_global.InsertGlobalValues(global_row_idx,1,&val,&global_col_idx);
+            }
+        }
+    }
+    std::cout <<"Chi made" << std::endl;
+    chi_v_global.FillComplete(domain_map,row_map);
+    volume_basis->reinit(chi_v_global);
 }
 
 // using default MeshType = Triangulation
