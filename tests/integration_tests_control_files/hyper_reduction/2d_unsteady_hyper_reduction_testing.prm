@@ -10,7 +10,7 @@ set test_type = unsteady_hyper_reduction
 # DG formulation
 set use_weak_form = false
 set use_split_form = true
-set flux_nodes_type = GL
+set flux_nodes_type = GLL
 
 set flux_reconstruction = cDG
 set use_inverse_mass_on_the_fly = false
@@ -28,7 +28,7 @@ subsection ODE solver
   set ode_solver_type = runge_kutta
   set runge_kutta_method = rk4_ex
   set initial_time_step = 0.001
-  set output_solution_every_x_steps = 1
+  set output_solution_every_x_steps = 5
 end
 
 subsection linear solver
@@ -44,22 +44,24 @@ subsection flow_solver
   subsection grid
     set grid_left_bound = -1
     set grid_right_bound = 1
-    set number_of_grid_elements_per_dimension = 32
+    set number_of_grid_elements_per_dimension = 16
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end
 
 subsection reduced order
     set output_snapshot_every_x_timesteps = 3
-    #set singular_value_threshold = 0.999999
-    set number_modes = 180
+    #set singular_value_threshold = 0.9999999
+    #set number_modes = 180
     set path_to_search = .
+    set adaptation_tolerance = 1e-8
 end
 
 subsection hyperreduction
-    set hyper_reduction_type = Cubature
-    set NNLS_tol = 1e-7
+    set hyper_reduction_type = ECSW
+    set NNLS_tol = 1e-8
     set NNLS_max_iter = 1000
     set training_data = residual
     set read_in_weights = false
+
 end

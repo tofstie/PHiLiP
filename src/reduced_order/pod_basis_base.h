@@ -33,8 +33,8 @@ public:
     /// Function to return Skew-Symmetric Q
     virtual std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getSkewSymmetric() = 0;
 
-    /// Function to return Vt
-    virtual MatrixXd getTestBasis() = 0;
+    /// Function to return V using quad points instead of dof
+    virtual std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix>  getTestBasis() = 0;
 
     /// Function to Calculate L2 Error
     virtual void CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2error_data_table,

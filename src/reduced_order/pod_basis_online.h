@@ -41,7 +41,7 @@ public:
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getSkewSymmetric() override;
 
     /// This function is not defined for online basis calculations
-    MatrixXd getTestBasis() override;
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix>  getTestBasis() override;
     
     /// Add snapshot
     void addSnapshot(dealii::LinearAlgebra::distributed::Vector<double> snapshot);

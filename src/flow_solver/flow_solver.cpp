@@ -173,7 +173,12 @@ FlowSolver<dim, nstate>::FlowSolver(
                 Eigen::MatrixXd basis = epetra_to_eig_matrix(pod_basis->trilinos_matrix());
                 hyper_reduction.build_chan_target(basis);
                 hyper_reduction.build_problem();
-
+                dealii::LinearAlgebra::distributed::Vector<double> weights = hyper_reduction.final_weights;
+                std::ofstream outfile("Weights_FS_cube.txt");
+                for (unsigned int i = 0;i < weights.size();i++) {
+                    outfile << weights[i] << '\n';
+                }
+                outfile.close();
             }
 
         } else {

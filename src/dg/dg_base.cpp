@@ -556,7 +556,6 @@ void DGBase<dim,real,MeshType>::assemble_cell_residual (
         //    std::cout << "A FACE FLIPPED, please break" << std::endl;
         //}
         auto current_face = current_cell->face(iface);
-
         // CASE 1: FACE AT BOUNDARY
         if ((current_face->at_boundary() && !current_cell->has_periodic_neighbor(iface)))
         {
@@ -3204,10 +3203,11 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
             }
         }
     }
-    std::ofstream fileio("file_happy.txt");
-    vol_int_global.Print(fileio);
+
     std::cout << "Fill complete" << std::endl;
     vol_int_global.FillComplete(row_map,row_map);
+    std::ofstream fileio("file_happy.txt");
+    vol_int_global.Print(fileio);
     std::cout << "Build WChiV" << std::endl;
     Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(*lhs_matrix);
     //dealii::LAPACKFullMatrix<double> LHS_LAPACK = eig_to_lapack_matrix(LHS_eigen);

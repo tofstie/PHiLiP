@@ -39,7 +39,7 @@ public:
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getSkewSymmetric() override;
 
     /// Function to return Vt
-    MatrixXd getTestBasis() override;
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix>  getTestBasis() override;
 
     /// Read snapshots to build POD basis
     bool getPODBasisFromSnapshots();
@@ -75,6 +75,8 @@ public:
     /// Vt - Test Galerkin Matrix
     Eigen::MatrixXd Vt;
 
+    /// Vq - Basis Quad
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix>  Vq;
     const MPI_Comm mpi_communicator; ///< MPI communicator.
     const int mpi_rank; ///< MPI rank.
 
@@ -89,6 +91,8 @@ public:
     bool getEntropyPODBasisFromSnapshots();
 
     bool getEntropyProjPODBasisFromSnapshots();
+
+    bool getHyperEntropyPODBasisFromSnapshots();
 
     bool enrichPOD();
 

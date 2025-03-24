@@ -145,6 +145,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     // Generate the Test and Trail Basis
     epetra_test_basis = generate_test_basis(epetra_pod_basis, false);
     epetra_trial_basis = generate_test_basis(epetra_pod_basis, true);
+    Epetra_CrsMatrix epetra_quad_basis = pod->getTestBasis()->trilinos_matrix();
     std::ofstream test_basis_file("test_basis_file.txt");
     std::ofstream trail_basis_file("trail_basis_file.txt");
     epetra_test_basis->Print(test_basis_file);
@@ -156,7 +157,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_trial_basis);
         this->dg->set_galerkin_basis(epetra_test_basis,false);
         std::cout << "Setting Vt" << std::endl;
-        this->dg->set_galerkin_basis(epetra_test_basis,true);
+        this->dg->set_galerkin_basis(epetra_quad_basis,true);
 
     }
     std::ofstream lhs_file("lhs_file.txt");
@@ -171,8 +172,8 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     // Creation of Qtx,Qty,Qtz
     const int global_size = this->dg->solution.size();
     Epetra_MpiComm comm(MPI_COMM_WORLD);
-    Epetra_Map global_map(global_size,0,comm);
-    Epetra_Map domain_map = this->dg->global_mass_matrix.trilinos_matrix().DomainMap();
+    Epetra_Map global_map(global_size/(dim+2),0,comm); // FIX THIS LATER 📢📢📢, THE NUMBER SHOULD BE NSTATE
+    Epetra_Map domain_map = global_map;
     // Construct Q
     Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
     Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());

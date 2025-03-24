@@ -37,6 +37,7 @@ AssembleGreedyCubature<dim,nstate>::AssembleGreedyCubature(const PHiLiP::Paramet
         , V_target(V_target_input)
         , initial_weights(initial_weights)
         , A(std::make_shared<dealii::TrilinosWrappers::SparseMatrix>())
+        , cell_count(std::pow(all_parameters->flow_solver_param.number_of_grid_elements_per_dimension,dim))
         , n_quad_pts(std::pow(all_parameters->flow_solver_param.poly_degree+1,dim))
 
 {
@@ -55,10 +56,13 @@ std::vector<int> AssembleGreedyCubature<dim,nstate>::get_indices(){
 
 template<int dim, int nstate>
 void AssembleGreedyCubature<dim,nstate>::build_problem(){
+    std::cout << "Starting problem" << std::endl;
     std::set<int> z; // Set of integration points
     std::set<int> y; // Set of candidate points
+    std::map<int,int> dof_to_quad_pt;
     for (unsigned int i = 0; i < this->initial_weights.size(); i++){
         y.insert(y.end(),i);
+        dof_to_quad_pt.insert({(int)i,((int)i / (n_quad_pts*nstate)) * n_quad_pts + (int)i % nstate});
     }
     std::vector<int> y_vector(y.begin(), y.end());
     this->z_vector.assign(z.begin(), z.end());
@@ -98,12 +102,13 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
     dealii::LinearAlgebra::distributed::Vector<double> alpha_g;
     dealii::IndexSet m_index_g;
     unsigned int old_i = -1; /// Setting this to UINT_MAX to avoid old_i being the same as i. Might need to think of a more elegant solution
+    Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
+    std::cout << "start of while loop" << std::endl;
     while(residual.l2_norm()/b_distributed.l2_norm() > this->all_parameters->reduced_order_param.adaptation_tolerance && non_zeros <= snapshots_and_weights){
     /// 1. Compute new point i
         // Reduce J to columns of y
         unsigned int size_of_set_y= y.size();
         //const Epetra_CrsMatrix epetra_V_target  = V_target.trilinos_matrix();
-        Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
         //Epetra_Map row_matrix_map = epetra_V_target.RowMap();
         Epetra_Map row_matrix_map((int)size_of_set_y, 0, epetra_comm);
         Epetra_Map domain_map((int)V_target.cols(), 0, epetra_comm);
@@ -126,6 +131,7 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             double row_norm = V_target_y_Eigen.row(row).norm();
             V_target_y_Eigen.row(row) /= row_norm;
         }
+        std::cout << "Building Vy" << std::endl;
         const int numMyElements_y = row_matrix_map.NumMyElements(); //Number of elements on the calling processor
         for (int localRow = 0; localRow < numMyElements_y; ++localRow){
             const int globalRow = row_matrix_map.GID(localRow);
@@ -137,6 +143,7 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
         dealii::TrilinosWrappers::SparseMatrix V_target_y;
         V_target_y.reinit(V_target_y_Epetra);
         /// Compute the i_vector
+        std::cout << "compute i vector" << std::endl;
         double norm_residual = residual.linfty_norm();
         residual /= norm_residual;
         dealii::IndexSet y_map = V_target_y.locally_owned_range_indices();
@@ -147,7 +154,33 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
 
         //dealii::Utilities::MPI::MinMaxAvg indexstore;
         //int processor_containing_max;
-        auto local_max_iteration = std::max_element(i_values_in_set_y.begin(),i_values_in_set_y.end());
+        std::cout << V_target_y_Eigen.rows() << std::endl;
+        Epetra_Map i_values_at_each_quad_map(n_quad_pts*cell_count, 0, epetra_comm);
+        dealii::IndexSet quad_pts_map(i_values_at_each_quad_map);
+        dealii::LinearAlgebra::distributed::Vector<double> i_values_at_each_quad_pt(quad_pts_map, this->mpi_communicator);
+        for (int j = 0; j < (int)i_values_in_set_y.size(); j++) {
+            //std::cout << "quad: " << dof_to_quad_pt[y_vector[j]] << " dof: " << j << std::endl;
+            i_values_at_each_quad_pt(dof_to_quad_pt[y_vector[j]]) += i_values_in_set_y(j);
+        }
+        // int smudge_factor = 0;
+        // for (int quad = 0; quad < (int)i_values_at_each_quad_pt.size() ; quad++) {
+        //     const int cell_number = quad / n_quad_pts;
+        //     const int local_quad_num = quad % n_quad_pts;
+        //     int starting_index = cell_number * (nstate*n_quad_pts)+local_quad_num;
+        //     if(z.find(starting_index) != z.end()) {
+        //         i_values_at_each_quad_pt(quad) = 0;
+        //         smudge_factor++;
+        //     } else {
+        //         starting_index -= smudge_factor;
+        //         for(int istate = 0; istate < nstate; istate++) {
+        //             std::cout << starting_index+istate*n_quad_pts << " " << quad << std::endl;
+        //             i_values_at_each_quad_pt(quad) += i_values_in_set_y(starting_index+istate*n_quad_pts);
+        //         }
+        //     }
+        // }
+
+        std::cout << "out" << std::endl;
+        auto local_max_iteration = std::max_element(i_values_at_each_quad_pt.begin(),i_values_at_each_quad_pt.end());
         double local_max_value = *local_max_iteration;
         double max_value;
         MPI_Allreduce(&local_max_value, &max_value, 1, MPI_DOUBLE, MPI_MAX, this->mpi_communicator);
@@ -155,11 +188,11 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
         //indexstore = dealii::Utilities::MPI::min_max_avg(i_values_in_set_y, this->mpi_communicator);
         //processor_containing_max = indexstore.max_index;
         //max_value = indexstore.max;
-        unsigned int local_max_idx = std::distance(i_values_in_set_y.begin(),local_max_iteration);
+        unsigned int local_max_idx = std::distance(i_values_at_each_quad_pt.begin(),local_max_iteration);
         unsigned int i;
         const int mpi_rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
         if(local_max_value == max_value){
-            const auto local_elements = i_values_in_set_y.locally_owned_elements();
+            const auto local_elements = i_values_at_each_quad_pt.locally_owned_elements();
             i = *local_elements.begin() + local_max_idx;
         }
         MPI_Bcast(&i, 1, MPI_UNSIGNED, mpi_rank, this->mpi_communicator);
@@ -176,18 +209,24 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
         }
         */
     ///2. Move i from y to z (including all dofs associated with that quad point)
-        auto y_i = std::next(y.begin(), i);
-        const int cell_number = *y_i / nstate*n_quad_pts;
-        int local_idof = *y_i - cell_number*n_quad_pts*nstate;
+        std::cout << "Steo 2: " << i << std::endl;
+        const int quad_pt_num = i;
+        const int cell_number = quad_pt_num / n_quad_pts;
+        const int local_quad_num = quad_pt_num % n_quad_pts;
+        const int starting_index = cell_number * (nstate*n_quad_pts)+local_quad_num;
+        int local_idof = starting_index;
         for(int istate = 0; istate < nstate; ++istate) {
-            z.insert(local_idof + cell_number*n_quad_pts*nstate);
-            y.erase(local_idof + cell_number*n_quad_pts*nstate);
+            //std::cout << "local_idof: " << local_idof << std::endl;
+            z.insert(local_idof);
+            y.erase(local_idof);
             local_idof += n_quad_pts;
-            if (local_idof > nstate*n_quad_pts) local_idof -= n_quad_pts*nstate;
         }
         unsigned int size_of_set_z = z.size();
         y_vector.assign(y.begin(),y.end());
         this->z_vector.assign(z.begin(),z.end());
+        // for (long unsigned int j = 0; j < this->z_vector.size(); j++) {
+        //     std::cout << this->z_vector[j] << std::endl;
+        // }
         // Create IndexSet for size m
         dealii::IndexSet m_index(size_of_set_z);
         
@@ -232,6 +271,8 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
         V_target_z.reinit(V_target_z_Epetra);
         dealii::TrilinosWrappers::SparseMatrix V_target_z_T;
         V_target_z_T.reinit(V_target_z_T_Epetra);
+        std::cout << "V_target_z_T rows: " << V_target_z_T.m() << " cols: " << V_target_z_T.n() << std::endl;
+        std::cout << "V_target_z rows: " << V_target_z.m() << " cols: " << V_target_z.n() << std::endl;
         dealii::LinearAlgebra::distributed::Vector<double> alpha(m_index, this->mpi_communicator);
         dealii::TrilinosWrappers::SparseMatrix LS_LHS;
         dealii::LinearAlgebra::distributed::Vector<double> LS_RHS(alpha);
@@ -249,7 +290,7 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
         double local_min_value = *local_min_iteration;
         double min_value;
         MPI_Allreduce(&local_min_value, &min_value, 1, MPI_DOUBLE, MPI_MIN, this->mpi_communicator);
-        
+        std::cout << "Min value: "<< min_value << std::endl;
         //minstore = dealii::Utilities::MPI::min_max_avg(alpha, this->mpi_communicator);
         //min_value = minstore.min;
     ///5. Preform NNLS
@@ -282,6 +323,8 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             alpha_nnls_epetra.Norm2(&l2_norm_alpha);
     ///6. Fiddle with Sets for all alpha(z_0) = 0 
             // Fiddle here
+            /*
+            std::cout << "Fiddle" <<std::endl;
             std::set<int> z_0;
             for(unsigned int idx = 0; idx < size_of_set_z; idx++){
                 if(alpha_nnls_epetra[idx] == 0.){ // Float comp here, careful.
@@ -291,21 +334,29 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             }
             /// Remove z_0 from z and add to y
             for(auto value_in_z_0: z_0){
-                const int cell_number = value_in_z_0 / nstate*n_quad_pts;
-                int local_idof = value_in_z_0 - cell_number*n_quad_pts*nstate;
+                std::cout << value_in_z_0 << std::endl;
+                const int cell_number = value_in_z_0 / (nstate*n_quad_pts);
+                const int ending_index = (cell_number+1) * (nstate*n_quad_pts);
+                int local_idof = value_in_z_0;
                 for(int istate = 0; istate < nstate; ++istate) {
-                    y.insert(local_idof + cell_number*n_quad_pts*nstate);
-                    z.erase(local_idof + cell_number*n_quad_pts*nstate);
+                    std::cout << "local_idof: " << local_idof << std::endl;
+                    y.insert(local_idof);
+                    z.erase(local_idof);
                     local_idof += n_quad_pts;
-                    if (local_idof > nstate*n_quad_pts) local_idof -= n_quad_pts*nstate;
+                    if (local_idof > ending_index) local_idof -= n_quad_pts*nstate;
                 }
                 //y.insert(value_in_z_0);
                 //z.erase(value_in_z_0);
             }
+            std::cout << "Recreate" <<std::endl;
+            */
             /// Recreate m_index set after changing size of z
             size_of_set_z = z.size();
             y_vector.assign(y.begin(),y.end());
             this->z_vector.assign(z.begin(),z.end());
+            // for (long unsigned int j = 0; j < this->z_vector.size(); j++) {
+            //     std::cout << this->z_vector[j] << std::endl;
+            // }
             m_index.clear();
             m_index.set_size(size_of_set_z);
             const unsigned int size_on_each_core_m_nlss = size_of_set_z / n_procs;
@@ -331,6 +382,7 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
             V_target_z_Epetra_nnls.FillComplete(domain_map,row_map_z_nnls);
             V_target_z.reinit(V_target_z_Epetra_nnls);
             // Remake smaller alpha
+            std::cout << "Remakeing alpha" <<std::endl;
             alpha.reinit(m_index, this->mpi_communicator);
             std::set<int>::iterator z_iter = z.begin();
             for(unsigned int new_idx = 0; new_idx < size_of_set_z; new_idx++){
@@ -347,7 +399,7 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
 
     ///8. Update Iterations and store last value of alpha
         iteration++;
-        if (iteration % 10 == 0) {
+        if (iteration % 1 == 0) {
             std::cout << "Points: " << size_of_set_z << std::endl;
             std::cout << "Residual L2: " << residual.l2_norm() << std::endl;
             std::cout << "Escape: " << residual.l2_norm()/b_distributed.l2_norm() << std::endl;
@@ -358,10 +410,12 @@ void AssembleGreedyCubature<dim,nstate>::build_problem(){
         if(old_i != i){ // Remove posibility of infinite loops, might be better to add a random point from set y instead or a iter counter 
             old_i = i;
         } else {
+            std::cout << "Infinite Loop, breaking" << std::endl;
             break;
         }
     };
     // Building weights of set z
+    std::cout << "Free" << std::endl;
     dealii::LinearAlgebra::distributed::Vector<double> initial_weights_set_z(alpha_g);
     int set_iter = 0;
     for(std::set<int>::iterator idx = z.begin(); idx != z.end(); idx++){

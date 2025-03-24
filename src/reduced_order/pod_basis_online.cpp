@@ -150,8 +150,8 @@ std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> OnlinePOD<dim>::getSkewS
 
 /// This function is not defined for online basis calculations
 template <int dim>
-MatrixXd OnlinePOD<dim>::getTestBasis() {
-    return snapshotMatrix;
+std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix>  OnlinePOD<dim>::getTestBasis() {
+    return basis;
 }
 template <int dim>
 

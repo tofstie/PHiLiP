@@ -45,14 +45,21 @@ AssembleGreedyRes<dim,nstate>::AssembleGreedyRes(const PHiLiP::Parameters::AllPa
 
 template<int dim, int nstate>
 void AssembleGreedyRes<dim,nstate>::build_problem(){
+    std::cout << "Build first problem" << std::endl;
+    std::ofstream testing_file("testing_file.txt");
+    for(unsigned int i = 0; i < dg->solution.size(); i++) {
+        testing_file << i << " " <<dg->solution[i] << std::endl;
+    }
     AssembleGreedyCubature<dim, nstate> First_Cubature_Problem(all_parameters, this->parameter_handler, this->initial_weights, this->b, this->V_target);
     First_Cubature_Problem.build_problem();
     dealii::LinearAlgebra::distributed::Vector<double> weights = First_Cubature_Problem.get_weights();
     int length_of_weights = weights.size();
+    std::cout <<" Length of Weights: " + std::to_string(length_of_weights) << std::endl;
     Eigen::VectorXd final_weights_eigen(length_of_weights); // Set up from final_weights
     weights.extract_subvector_to(weights.begin(),weights.end(),final_weights_eigen.begin());
     std::vector<int> z_vector = First_Cubature_Problem.get_indices();
-    Eigen::MatrixXd Vt_id = this->pod->getTestBasis()(z_vector,Eigen::placeholders::all); 
+    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> Vt = this->pod->getPODBasis(); //update this to Vt later
+    Eigen::MatrixXd Vt_id = epetra_to_eig_matrix(Vt->trilinos_matrix())(z_vector,Eigen::placeholders::all);
     Eigen::MatrixXd diag_weights = final_weights_eigen.asDiagonal();
     Eigen::MatrixXd M_test = Vt_id.transpose()*diag_weights*Vt_id;
 
@@ -89,7 +96,7 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
         for(unsigned int i = 0;i<columns_to_keep.size(); ++i){
             Vx.col(i) = eigenvectors.col(columns_to_keep[i]);
         }
-        Eigen::MatrixXd Z = this->pod->getTestBasis()*Vx;
+        Eigen::MatrixXd Z = Vx; // Need to fix this line later, as I had to remove this->pod->getTestBasis() due to a type change
         Eigen::MatrixXd V_mass = this->V_target;
         this->build_chan_target(Z);
         AssembleGreedyCubature<dim, nstate> Second_Cubature_Problem(all_parameters, this->parameter_handler, this->initial_weights, this->b, this->V_target);
@@ -129,7 +136,9 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
         epetra_to_eig_vec(w_unscaled.GlobalLength(),w_unscaled,w_unscaled_eigen);
         double w_unscaled_sum = w_unscaled_eigen.sum();
         Eigen::VectorXd w_eigen = w_unscaled_eigen*w_unscaled_sum/length_of_weights;
-        Eigen::MatrixXd Vt_idt = this->pod->getTestBasis()(unique_pts,Eigen::placeholders::all);
+        // Eigen::MatrixXd Vt_idt = this->pod->getTestBasis()(unique_pts,Eigen::placeholders::all); Commenting out for now as
+        // this->pod->getTestBasis type was changed
+        Eigen::MatrixXd Vt_idt = M_test; // Fake line
         final_weights_eigen = w_eigen;
         diag_weights = final_weights_eigen.asDiagonal();    
         Eigen::MatrixXd M_test_2 = Vt_id.transpose()*diag_weights*Vt_id;
@@ -153,10 +162,11 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
 
 template<int dim, int nstate>
 void AssembleGreedyRes<dim,nstate>::build_weights(){
+    std::cout << "I've started building the weights incorrectly" << std::endl;
     int rows = this->dg->global_mass_matrix.m();
     this->initial_weights.reinit(rows);
     for(int i = 0; i < rows; i++){
-        this->initial_weights[i] = this->dg->global_mass_matrix.diag_element(i);
+        this->initial_weights[i] = this->dg->global_mass_matrix.diag_element(i); // Change this to quad weights later
     }
     return;
 }
@@ -229,6 +239,7 @@ void AssembleGreedyRes<dim, nstate>::build_initial_target(){
 
 template<int dim, int nstate>
 void AssembleGreedyRes<dim, nstate>::build_chan_target(Eigen::MatrixXd &Input_Matrix){
+    std::cout << "Building Chan" << std::endl;
     Eigen::MatrixXd V_t_1 = Input_Matrix;
     Eigen::MatrixXd V_t_2 = Input_Matrix;
     Eigen::MatrixXd V_mass(V_t_1.rows(),V_t_1.cols()*(V_t_1.cols()+1)/2);
@@ -239,6 +250,7 @@ void AssembleGreedyRes<dim, nstate>::build_chan_target(Eigen::MatrixXd &Input_Ma
             sk++;
         }
     }
+    std::cout << "SVD of big ass matrix" << std::endl;
     Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd(V_mass);
     Eigen::MatrixXd V_target_temp = svd.matrixU();
     Eigen::VectorXd singular_values = svd.singularValues();
@@ -268,6 +280,7 @@ void AssembleGreedyRes<dim, nstate>::build_chan_target(Eigen::MatrixXd &Input_Ma
     for(int i = 0; i < size_of_weights; ++i){
         weights_eigen(i) = this->initial_weights(i);
     }
+    std::cout << "Creating b matrix" << std::endl;
     Eigen::VectorXd b_eigen = V_filtered*weights_eigen;
 
     this->b.reinit(b_eigen.size());

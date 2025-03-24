@@ -1661,7 +1661,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
         }
         //get the surface basis operator from Hadamard sparsity pattern
         //to be applied at n^d operations (on the face so n^{d+1-1}=n^d flops)
-        //also only allocates n^d terms.
+        //also only allocates n^d fterms.
         const int iface_1D = iface % 2;//the reference face number
         const std::vector<double> &oneD_quad_weights_vol= this->oneD_quadrature_collection[poly_degree].get_weights();
         dealii::FullMatrix<real> surf_oper_sparse(n_face_quad_pts, n_quad_pts_1D);

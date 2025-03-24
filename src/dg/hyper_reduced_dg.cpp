@@ -142,9 +142,10 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     Fx.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
     Fy.FillComplete(Qty.DomainMap(),Qty.RowMap());
     Fz.FillComplete(Qtz.DomainMap(),Qtz.RowMap());
-    // std::ofstream flux_file("x_flux.txt");
-    // Fx.Print(flux_file);
-
+    std::ofstream flux_file("x_flux.txt");
+    Fx.Print(flux_file);
+    std::ofstream qtxfile("Qtx.txt");
+    Qtx.Print(qtxfile);
     const int max_poly = this->all_parameters->flow_solver_param.max_poly_degree_for_adaptation;
     Epetra_CrsMatrix QtxF(Epetra_DataAccess::Copy,Qtx.RowMap(),Qtx.ColMap(),Qtx.NumGlobalCols());
     Epetra_CrsMatrix QtyF(Epetra_DataAccess::Copy,Qty.RowMap(),Qty.ColMap(),Qty.NumGlobalCols());
@@ -170,8 +171,8 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     dealii::TrilinosWrappers::SparseMatrix QtxF_deall;
     dealii::TrilinosWrappers::SparseMatrix QtyF_deall;
     dealii::TrilinosWrappers::SparseMatrix QtzF_deall;
-    // std::ofstream QtxF_file("QtxF.txt");
-    // QtxF.Print(QtxF_file);
+    std::ofstream QtxF_file("QtxF.txt");
+    QtxF.Print(QtxF_file);
     QtxF_deall.reinit(QtxF);
     QtyF_deall.reinit(QtyF);
     QtzF_deall.reinit(QtzF);
@@ -184,6 +185,7 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     temp_rhs.compress(dealii::VectorOperation::add);
     temp_rhs.update_ghost_values();
     volume_basis->vmult(this->right_hand_side,temp_rhs);
+    this->right_hand_side *= 2;
     std::cout << "rhs norm " + std::to_string(this->right_hand_side.l2_norm()) << std::endl;
     // Start of face/boundary terms
     /*
@@ -3968,6 +3970,10 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
     if (idim >= dim) return Global_Q;
     Epetra_CrsMatrix galerkin_basis_matrix = *this->galerkin_test_basis[idim];
     Epetra_CrsMatrix proj_epetra = *this->test_projection_matrix[idim];
+    std::ofstream proj_file("test_projec_" + std::to_string(idim) + ".txt");
+    proj_epetra.Print(proj_file);
+    std::ofstream basis_file("test_basis_" + std::to_string(idim) + ".txt");
+    galerkin_basis_matrix.Print(basis_file);
     Epetra_Map first_temp_row_map = galerkin_basis_matrix.ColMap();
     Epetra_Map third_temp_row_map = proj_epetra.ColMap();
     Epetra_CrsMatrix first_temp(Epetra_DataAccess::Copy,first_temp_row_map,Global_Q.NumGlobalCols());
@@ -4157,6 +4163,8 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                             mapping_basis, //Will have to remake these later
                             this->all_parameters->use_invariant_curl_form);
                         for(unsigned int flux_quad=0; flux_quad<n_quad_pts; ++flux_quad){
+
+
                             for (int ref_dim =0;ref_dim<dim;ref_dim++){
 
                                 dealii::Tensor<2,dim,real> metric_cofactor_flux_basis;
@@ -4185,6 +4193,9 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                                         0.5*(metric_cofactor + metric_cofactor_flux_basis),
                                         conv_ref_flux_2pt);
                                     //write into reference Hadamard flux matrix
+                                    if (current_dofs_indices[iquad] == 1 && flux_dofs_indices[flux_quad] == 5441) {
+                                        std::cout << conv_ref_flux_2pt[ref_dim] << std::endl;
+                                    }
                                     if(ref_dim == 0)    Fx.InsertGlobalValues(current_dofs_indices[iquad+nstate*istate],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
                                     if(ref_dim == 1)    Fy.InsertGlobalValues(current_dofs_indices[iquad+nstate*istate],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
                                     if(ref_dim == 2)    Fz.InsertGlobalValues(current_dofs_indices[iquad+nstate*istate],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
@@ -4210,7 +4221,7 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
 
 template<int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz,bool skew_symmetric) {
-    const int global_size = this->solution.size();
+    const int global_size = this->solution.size()/nstate;
     Epetra_MpiComm comm(MPI_COMM_WORLD);
     Epetra_Map global_map(global_size,0,comm);
    // const unsigned int n_dofs_cell_estimate = this->fe_collection[this->all_parameters->flow_solver_param.poly_degree].dofs_per_cell;
@@ -4245,11 +4256,13 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
     auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
         if (!current_cell->is_locally_owned()) continue;
-        if (this->reduced_mesh_weights[current_cell->active_cell_index()] == 0) continue;
+        //if (this->reduced_mesh_weights[current_cell->active_cell_index()] == 0) continue;
         std::vector<dealii::types::global_dof_index> current_dofs_indices;
+        std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
         // Current reference element related to this physical cell
         const int i_fele = current_cell->active_fe_index();
         const unsigned int poly_degree = i_fele;
+        const int current_cell_index = current_cell->active_cell_index();
         if(poly_degree != soln_basis_int.current_degree){
             soln_basis_int.current_degree = poly_degree;
             soln_basis_ext.current_degree = poly_degree;
@@ -4266,7 +4279,7 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
         }
         const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
         const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
-        const unsigned int n_dofs_cell = this->fe_collection[poly_degree].dofs_per_cell;
+        //const unsigned int n_dofs_cell = this->fe_collection[poly_degree].dofs_per_cell;
         const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
         const unsigned int n_quad_pts_1D  = this->oneD_quadrature_collection[poly_degree].size();
         const std::vector<double> &oneD_vol_quad_weights = this->oneD_quadrature_collection[poly_degree].get_weights();
@@ -4303,36 +4316,110 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
         } else {
             flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
                                                    Hadamard_rows_sparsity, Hadamard_columns_sparsity,
-                                                   flux_basis_stiffness.oneD_vol_operator,
+                                                   flux_basis_stiffness.oneD_skew_symm_vol_oper,
                                                    oneD_vol_quad_weights,
                                                    flux_basis_stiffness_skew_symm_oper_sparse);
         }
-        // unsigned int precision = 16;
-        // char zero = 48;
-        // flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout, precision, true, 0,&zero);
-        const int global_size = this->solution.size();
-        Epetra_MpiComm comm(MPI_COMM_WORLD);
-        Epetra_Map global_map(global_size,0,comm);
-        dealii::FullMatrix<double> local_Q(n_dofs_cell);
-        for(int idim = 0; idim < dim; idim++){
-            for(unsigned int istate_counter = 0; istate_counter < (unsigned int) nstate; ++istate_counter ) {
-                unsigned int id_counter = 0;
-                for (unsigned int row = 0; row < n_quad_pts; ++row) {
-                    for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
-                        double val = flux_basis_stiffness_skew_symm_oper_sparse[idim](row,col);
-                        int indices = current_dofs_indices[col+n_quad_pts_1D*id_counter+n_quad_pts*istate_counter];
-                        if(idim == 0) Qx.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1,&val,&indices);
-                        else if (idim == 1) Qy.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1,&val,&indices);
-                        else if (idim == 2) Qz.InsertGlobalValues(current_dofs_indices[row+n_quad_pts*istate_counter],1,&val,&indices);
+        dealii::FullMatrix<double> local_S(n_quad_pts);
+        local_S = flux_basis_stiffness.tensor_product(flux_basis_stiffness.oneD_skew_symm_vol_oper,flux_basis_stiffness.oneD_skew_symm_vol_oper,flux_basis_stiffness.oneD_skew_symm_vol_oper);
+
+         const int global_size = this->solution.size();
+         Epetra_MpiComm comm(MPI_COMM_WORLD);
+         Epetra_Map global_map(global_size,0,comm);
+         for(int idim = 0; idim < dim; idim++){
+             unsigned int id_counter = 0;
+             for (unsigned int row = 0; row < n_quad_pts; ++row) {
+                 for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
+                     double val = flux_basis_stiffness_skew_symm_oper_sparse[idim](row,col);
+                     int indices = current_cell_index+col+n_quad_pts_1D*id_counter;
+                     if(idim == 0) Qx.InsertGlobalValues(current_cell_index+row,1,&val,&indices);
+                     else if (idim == 1) Qy.InsertGlobalValues(current_cell_index+row,1,&val,&indices);
+                     else if (idim == 2) Qz.InsertGlobalValues(current_cell_index+row,1,&val,&indices);
+                 }
+                 if(row == n_quad_pts_1D-1) id_counter++;
+             } // end of row loop
+         } // end of dim loop
+         //Build the face terms
+
+        std::vector<std::map<int,int>> tangential_face_mapping(dealii::GeometryInfo<dim>::faces_per_cell);
+        if (dim == 1) {
+            tangential_face_mapping[0][0] = n_quad_pts_1D-1;
+            tangential_face_mapping[0][n_quad_pts_1D-1] = 0;
+        } else if (dim == 2) {
+
+            for (unsigned int idim=0; idim < dim; ++idim) {
+                int starting_quad = 0;
+                int ending_quad = n_quad_pts_1D-1;
+                if (idim == 1) ending_quad *= n_quad_pts_1D;
+                for (unsigned int i_quad_pts_1D =0; i_quad_pts_1D < n_quad_pts_1D; ++i_quad_pts_1D) {
+                    tangential_face_mapping[2*idim][starting_quad] = ending_quad;
+                    tangential_face_mapping[2*idim+1][ending_quad] = starting_quad;
+                    if(idim == 0) {
+                        starting_quad += n_quad_pts_1D;
+                        ending_quad += n_quad_pts_1D;
+                    } else if (idim == 1){
+                        starting_quad += 1;
+                        ending_quad += 1;
                     }
-                    if(row == n_quad_pts_1D-1) id_counter++;
-                } // end of row loop
-            } // end of nstate loop
-        } // end of dim loop
+                }
+            }
+        }
+
+        for (unsigned int iface=0; iface < dealii::GeometryInfo<dim>::faces_per_cell; ++iface) {
+            auto current_face = current_cell->face(iface);
+            if ((current_face->at_boundary() && !current_cell->has_periodic_neighbor(iface))) {
+                continue; // Right now ignore boundary term
+            } else {
+                const int iface_1D = iface % 2;//the reference face number
+                const auto neighbor_cell = (current_cell->has_periodic_neighbor(iface)) ? current_cell->periodic_neighbor(iface) : current_cell->neighbor(iface);
+                const int neighbor_cell_index = neighbor_cell->active_cell_index();
+                const unsigned int n_dofs_neigh_cell = this->fe_collection[neighbor_cell->active_fe_index()].n_dofs_per_cell();
+                // Obtain the mapping from local dof indices to global dof indices for neighbor cell
+                neighbor_dofs_indices.resize(n_dofs_neigh_cell);
+                neighbor_cell->get_dof_indices (neighbor_dofs_indices);
+                // Corresponding face of the neighbor.
+                // const unsigned int neighbor_iface = current_cell->periodic_neighbor_of_periodic_neighbor(iface);
+                //
+                // const int i_fele_n = neighbor_cell->active_fe_index();
+                // const dealii::types::global_dof_index neighbor_cell_index = neighbor_cell->active_cell_index();
+
+                dealii::FullMatrix<double> FaceTerm(n_quad_pts);
+                int starting_quad = iface*(n_quad_pts_1D-1);
+                int quad_point_iter = n_quad_pts_1D;
+                if (iface / 2 == 1) {
+                    starting_quad *= n_quad_pts_1D;
+                    quad_point_iter /= n_quad_pts_1D;
+                }
+
+                for (unsigned int i_quad_1d = 0; i_quad_1d < n_quad_pts_1D; ++i_quad_1d) {
+                    FaceTerm = soln_basis_int.tensor_product(soln_basis_int.oneD_surf_operator[iface_1D],soln_basis_int.oneD_surf_operator[iface_1D],soln_basis_int.oneD_surf_operator[iface_1D]);
+
+                    FaceTerm *= oneD_vol_quad_weights[i_quad_1d] * pow(-1.,iface_1D+1);
+                   // FaceTerm.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+
+
+                    int neighbour_local_quad = tangential_face_mapping[iface][starting_quad];
+                    int neighbour_global_quad = neighbour_local_quad+neighbor_cell_index;
+
+                    double value = FaceTerm(0,iface_1D*(n_quad_pts-1));
+
+                    if (iface / 2 == 0) {
+                        Qx.InsertGlobalValues(current_dofs_indices[starting_quad+istate*n_quad_pts],1,&value,&neighbour_global_quad);
+                    } else {
+                        Qy.InsertGlobalValues(current_dofs_indices[starting_quad+istate*n_quad_pts],1,&value,&neighbour_global_quad);
+                    }
+
+                    starting_quad += quad_point_iter;
+                }
+
+            } // end of if statement for faces
+        } // end of face loop
     } // end of cell loop
     Qx.FillComplete(global_map,global_map);
     Qy.FillComplete(global_map,global_map);
     Qz.FillComplete(global_map,global_map);
+    std::ofstream QxFile("Qx_file.txt");
+    Qx.Print(QxFile);
 }
 
 template<int dim, int nstate, typename real, typename MeshType>

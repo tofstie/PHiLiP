@@ -81,7 +81,7 @@ int main (int argc, char * argv[])
 
     bool equiv = true;
     bool sum_fact = true;
-    for(unsigned int poly_degree=1; poly_degree<4; poly_degree++){
+    for(unsigned int poly_degree=2; poly_degree<4; poly_degree++){
 
         const unsigned int n_dofs = nstate * pow(poly_degree+1,dim);
         dealii::QGauss<dim> vol_quad_dim (poly_degree+1);
@@ -90,31 +90,50 @@ int main (int argc, char * argv[])
 
         dealii::QGauss<dim> quad_dimD (poly_degree+1);
         dealii::QGauss<1> quad_1D (poly_degree+1);
+        dealii::QGauss<0> face_quad1D (poly_degree+1);
         const dealii::FE_DGQ<1> fe(poly_degree);
         const dealii::FESystem<1,1> fe_system(fe, nstate);
         PHiLiP::OPERATOR::basis_functions<dim,2*dim,real> basis_1D(nstate, poly_degree, 1);
         PHiLiP::OPERATOR::vol_integral_basis<dim,2*dim,real> vol_int_1D(nstate, poly_degree, 1);
+        PHiLiP::OPERATOR::local_basis_stiffness<dim,2*dim,real> stiffess_1D(nstate, poly_degree, 1,true);
         basis_1D.build_1D_volume_operator(fe, quad_1D);
+        basis_1D.build_1D_surface_operator(fe, face_quad1D);
         basis_1D.build_1D_gradient_operator(fe, quad_1D);
         vol_int_1D.build_1D_volume_operator(fe, quad_1D);
+        stiffess_1D.build_1D_volume_operator(fe, quad_1D);
         dealii::FullMatrix<double> basis_dim(n_dofs);
         basis_dim = basis_1D.tensor_product(basis_1D.oneD_grad_operator, basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
-        dealii::FullMatrix<double> chi_v(n_dofs);
-        dealii::FullMatrix<double> W(n_dofs/nstate);
-        dealii::FullMatrix<double> Wchi_v_tensor(n_dofs);
-        dealii::FullMatrix<double> Wchi_v(n_dofs/nstate);
-        std::vector<double> weights = quad_dimD.get_weights();
+
         std::vector<double> weights_1D = quad_1D.get_weights();
-        for (unsigned int i =0; i < n_dofs/nstate; i++) {
-            W.set(i,i,weights[i]);
+        std::vector<double> face_weights_1D = face_quad1D.get_weights();
+
+        dealii::FullMatrix<double> W(weights_1D.size());
+        for (unsigned int i =0; i < weights_1D.size(); i++) {
+            W.set(i,i,weights_1D[i]);
         }
-        chi_v = basis_1D.tensor_product(basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
-        W.mmult(Wchi_v,chi_v);
-        Wchi_v_tensor = vol_int_1D.tensor_product_nstate(nstate,vol_int_1D.oneD_vol_operator,vol_int_1D.oneD_vol_operator,vol_int_1D.oneD_vol_operator);
-        Wchi_v.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
-        std::cout << std::endl;
-        Wchi_v_tensor.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
-        std::cout << std::endl;
+        dealii::FullMatrix<double> Qx(n_dofs/nstate);
+        dealii::FullMatrix<double> Qy(n_dofs/nstate);
+
+        Qx = stiffess_1D.tensor_product(stiffess_1D.oneD_skew_symm_vol_oper,W,W);
+        Qy = stiffess_1D.tensor_product(W,stiffess_1D.oneD_skew_symm_vol_oper,W);
+        dealii::FullMatrix<double> QxminusQxt(Qx);
+        QxminusQxt.Tadd(-1,Qx);
+        dealii::FullMatrix<double> QyminusQyt(Qx);
+        QyminusQyt.Tadd(-1,Qy);
+        dealii::FullMatrix<double> FaceTerm(n_dofs/nstate);
+        for (unsigned int j =0; j < weights_1D.size(); j++) {
+            for (unsigned int i =0; i < 2; i++) {
+                std::cout << " Face i: " << i << std::endl;
+                FaceTerm = basis_1D.tensor_product(basis_1D.oneD_surf_operator[i],basis_1D.oneD_surf_operator[i],basis_1D.oneD_surf_operator[i]);
+                FaceTerm *= weights_1D[j] * pow(-1.,i+1);
+                FaceTerm.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+            }
+        }
+        std::cout << "Qx" << std::endl;
+        Qx.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+        std::cout << "Qy" << std::endl;
+        Qy.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+
         for(unsigned int idof=0; idof<n_dofs; idof++){
             for(unsigned int iquad=0; iquad<n_dofs; iquad++){
                 dealii::Point<dim> qpoint = vol_quad_dim.point(iquad);
