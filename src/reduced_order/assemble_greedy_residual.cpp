@@ -50,17 +50,20 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
     for(unsigned int i = 0; i < dg->solution.size(); i++) {
         testing_file << i << " " <<dg->solution[i] << std::endl;
     }
-    AssembleGreedyCubature<dim, nstate> First_Cubature_Problem(all_parameters, this->parameter_handler, this->initial_weights, this->b, this->V_target);
+    AssembleGreedyCubature<dim, nstate> First_Cubature_Problem(all_parameters, this->parameter_handler, this->initial_weights, this->b, this->V_target,pod->hyper_reduction_tolerance);
     First_Cubature_Problem.build_problem();
     dealii::LinearAlgebra::distributed::Vector<double> weights = First_Cubature_Problem.get_weights();
     int length_of_weights = weights.size();
     std::cout <<" Length of Weights: " + std::to_string(length_of_weights) << std::endl;
     Eigen::VectorXd final_weights_eigen(length_of_weights); // Set up from final_weights
     weights.extract_subvector_to(weights.begin(),weights.end(),final_weights_eigen.begin());
+
     std::vector<int> z_vector = First_Cubature_Problem.get_indices();
+    Eigen::VectorXd final_weights_size_z = final_weights_eigen(z_vector);
+    final_weights = weights;
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> Vt = this->pod->getPODBasis(); //update this to Vt later
     Eigen::MatrixXd Vt_id = epetra_to_eig_matrix(Vt->trilinos_matrix())(z_vector,Eigen::placeholders::all);
-    Eigen::MatrixXd diag_weights = final_weights_eigen.asDiagonal();
+    Eigen::MatrixXd diag_weights = final_weights_size_z.asDiagonal();
     Eigen::MatrixXd M_test = Vt_id.transpose()*diag_weights*Vt_id;
 
     Eigen::EigenSolver<Eigen::MatrixXd> eigensolver;
@@ -99,7 +102,7 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
         Eigen::MatrixXd Z = Vx; // Need to fix this line later, as I had to remove this->pod->getTestBasis() due to a type change
         Eigen::MatrixXd V_mass = this->V_target;
         this->build_chan_target(Z);
-        AssembleGreedyCubature<dim, nstate> Second_Cubature_Problem(all_parameters, this->parameter_handler, this->initial_weights, this->b, this->V_target);
+        AssembleGreedyCubature<dim, nstate> Second_Cubature_Problem(all_parameters, this->parameter_handler, this->initial_weights, this->b, this->V_target,pod->hyper_reduction_tolerance);
         Second_Cubature_Problem.build_problem();
         dealii::LinearAlgebra::distributed::Vector<double> weights = Second_Cubature_Problem.get_weights();
         std::vector<int> z_additional = Second_Cubature_Problem.get_indices();
@@ -162,12 +165,26 @@ void AssembleGreedyRes<dim,nstate>::build_problem(){
 
 template<int dim, int nstate>
 void AssembleGreedyRes<dim,nstate>::build_weights(){
-    std::cout << "I've started building the weights incorrectly" << std::endl;
-    int rows = this->dg->global_mass_matrix.m();
+    int rows = this->dg->global_mass_matrix.m()/nstate;
     this->initial_weights.reinit(rows);
-    for(int i = 0; i < rows; i++){
-        this->initial_weights[i] = this->dg->global_mass_matrix.diag_element(i); // Change this to quad weights later
+    for (auto cell = this->dg->dof_handler.begin_active(); cell!=this->dg->dof_handler.end(); ++cell) {
+        if (!cell->is_locally_owned()) continue;
+
+        const unsigned int fe_index_curr_cell = cell->active_fe_index();
+
+        // Current reference element related to this physical cell
+        const unsigned int n_quad_pts  = this->dg->volume_quadrature_collection[fe_index_curr_cell].size();
+        const int active_cell_index  = cell->active_cell_index();
+        const std::vector<double> &quad_weights = this->dg->volume_quadrature_collection[fe_index_curr_cell].get_weights();
+        for(int i_quad = 0; i_quad < (int)n_quad_pts; ++i_quad) {
+            this->initial_weights[active_cell_index * n_quad_pts + i_quad] = quad_weights[i_quad];
+        }
     }
+    std::ofstream file("b.txt");
+    for(int i =0; i < rows; i++) {
+        file << this->initial_weights[i] << std::endl;
+    }
+    file.close();
     return;
 }
 
@@ -272,14 +289,20 @@ void AssembleGreedyRes<dim, nstate>::build_chan_target(Eigen::MatrixXd &Input_Ma
     for(unsigned int i = 0; i < columns_to_keep.size(); ++i){
         V_filtered.col(i) = V_target_temp.col(columns_to_keep[i]);
     }
-
-    V_target = V_filtered;
+    MatrixXd V_target_deep_copy = V_filtered;
+    V_target = V_target_deep_copy;
     V_filtered.transposeInPlace();
     int size_of_weights = this->initial_weights.size();
     Eigen::VectorXd weights_eigen(size_of_weights);
     for(int i = 0; i < size_of_weights; ++i){
         weights_eigen(i) = this->initial_weights(i);
     }
+    std::ofstream file("weights_target.txt");
+    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    if (file.is_open()){
+        file << weights_eigen.format(CSVFormat);
+    }
+    file.close();
     std::cout << "Creating b matrix" << std::endl;
     Eigen::VectorXd b_eigen = V_filtered*weights_eigen;
 

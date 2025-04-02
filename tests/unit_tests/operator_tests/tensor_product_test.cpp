@@ -81,7 +81,7 @@ int main (int argc, char * argv[])
 
     bool equiv = true;
     bool sum_fact = true;
-    for(unsigned int poly_degree=2; poly_degree<4; poly_degree++){
+    for(unsigned int poly_degree=1; poly_degree<4; poly_degree++){
 
         const unsigned int n_dofs = nstate * pow(poly_degree+1,dim);
         dealii::QGauss<dim> vol_quad_dim (poly_degree+1);
@@ -96,6 +96,8 @@ int main (int argc, char * argv[])
         PHiLiP::OPERATOR::basis_functions<dim,2*dim,real> basis_1D(nstate, poly_degree, 1);
         PHiLiP::OPERATOR::vol_integral_basis<dim,2*dim,real> vol_int_1D(nstate, poly_degree, 1);
         PHiLiP::OPERATOR::local_basis_stiffness<dim,2*dim,real> stiffess_1D(nstate, poly_degree, 1,true);
+        PHiLiP::OPERATOR::local_mass<dim,2*dim,real> mass_1D(nstate,poly_degree,1);
+        mass_1D.build_1D_volume_operator(fe,quad_1D);
         basis_1D.build_1D_volume_operator(fe, quad_1D);
         basis_1D.build_1D_surface_operator(fe, face_quad1D);
         basis_1D.build_1D_gradient_operator(fe, quad_1D);
@@ -103,19 +105,32 @@ int main (int argc, char * argv[])
         stiffess_1D.build_1D_volume_operator(fe, quad_1D);
         dealii::FullMatrix<double> basis_dim(n_dofs);
         basis_dim = basis_1D.tensor_product(basis_1D.oneD_grad_operator, basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
-
+        dealii::FullMatrix<double>  basis(n_dofs/nstate);
+        basis = basis_1D.tensor_product(basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
+        dealii::FullMatrix<double>  vol_int(n_dofs/nstate);
+        vol_int = vol_int_1D.tensor_product(vol_int_1D.oneD_vol_operator,vol_int_1D.oneD_vol_operator,vol_int_1D.oneD_vol_operator);
+        dealii::FullMatrix<double>  mass(n_dofs/nstate);
+        mass = mass_1D.tensor_product(mass_1D.oneD_vol_operator,mass_1D.oneD_vol_operator,mass_1D.oneD_vol_operator);
         std::vector<double> weights_1D = quad_1D.get_weights();
         std::vector<double> face_weights_1D = face_quad1D.get_weights();
-
-        dealii::FullMatrix<double> W(weights_1D.size());
+        std::vector<double> weights = quad_dimD.get_weights();
+        dealii::FullMatrix<double> W_1d(weights_1D.size());
         for (unsigned int i =0; i < weights_1D.size(); i++) {
-            W.set(i,i,weights_1D[i]);
+            W_1d.set(i,i,weights_1D[i]);
         }
+        dealii::FullMatrix<double> W(weights.size());
+        for (unsigned int i =0; i < weights.size(); i++) {
+            W.set(i,i,weights[i]);
+        }
+        dealii::FullMatrix<double> int_step(weights.size());
+        dealii::FullMatrix<double> mass_no_tensor(weights.size());
+        basis.Tmmult(int_step,W);
+        int_step.mmult(mass_no_tensor,basis);
         dealii::FullMatrix<double> Qx(n_dofs/nstate);
         dealii::FullMatrix<double> Qy(n_dofs/nstate);
 
-        Qx = stiffess_1D.tensor_product(stiffess_1D.oneD_skew_symm_vol_oper,W,W);
-        Qy = stiffess_1D.tensor_product(W,stiffess_1D.oneD_skew_symm_vol_oper,W);
+        Qx = stiffess_1D.tensor_product(stiffess_1D.oneD_skew_symm_vol_oper,W_1d,W_1d);
+        Qy = stiffess_1D.tensor_product(W_1d,stiffess_1D.oneD_skew_symm_vol_oper,W_1d);
         dealii::FullMatrix<double> QxminusQxt(Qx);
         QxminusQxt.Tadd(-1,Qx);
         dealii::FullMatrix<double> QyminusQyt(Qx);
@@ -129,11 +144,20 @@ int main (int argc, char * argv[])
                 FaceTerm.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
             }
         }
+        std::cout << "Basis _ not tensored" << std::endl;
+        basis_1D.oneD_vol_operator.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
         std::cout << "Qx" << std::endl;
         Qx.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
         std::cout << "Qy" << std::endl;
         Qy.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
-
+        std::cout << "Basis" << std::endl;
+        basis.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+        std::cout << "Wbasis" << std::endl;
+        vol_int.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+        std::cout << "mass" << std::endl;
+        mass.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+        std::cout << "NonTensorMass" << std::endl;
+        mass_no_tensor.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
         for(unsigned int idof=0; idof<n_dofs; idof++){
             for(unsigned int iquad=0; iquad<n_dofs; iquad++){
                 dealii::Point<dim> qpoint = vol_quad_dim.point(iquad);

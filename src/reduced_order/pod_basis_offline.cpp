@@ -240,6 +240,12 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
         int num_modes = dg->all_parameters->reduced_order_param.number_modes;
         if(num_modes > pod_basis.cols()) num_modes = pod_basis.cols();
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,num_modes));
+        Eigen::VectorXd singular_values = svd_one.singularValues();
+        if (reference_type == "quad") {
+            double l1_norm = singular_values.sum();
+            double l1_norm_removed = singular_values(Eigen::seqN(num_modes,pod_basis.cols()-num_modes)).sum();
+            this->hyper_reduction_tolerance = l1_norm_removed/l1_norm;
+        }
         pod_basis = pod_basis_n_modes;
     }
     else if (dg->all_parameters->reduced_order_param.singular_value_threshold < 1){
@@ -252,10 +258,18 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
             singular_value_cumm_sum += singular_values(iter);
             iter++;
         }
+        if (reference_type == "quad") {
+            double l1_norm_removed = singular_values(Eigen::seqN(iter,pod_basis.cols()-iter)).sum();
+            this->hyper_reduction_tolerance = l1_norm_removed/l1_norm;
+        }
         Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,iter));
+
         pod_basis = pod_basis_n_modes;
 
+    } else {
+        this->hyper_reduction_tolerance = 0.0015;
     }
+
     //this->Vt = pod_basis;
     /*
     fullBasis.reinit(snapshots.rows(), snapshots.cols());
@@ -275,7 +289,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
         }
     }
 
-    std::ofstream out_file("POD_basis.txt");
+    std::ofstream out_file("POD_basis_" + reference_type + ".txt");
     unsigned int precision = 16;
     char zero = 48;
     fullBasis.print_formatted(out_file, precision, true, 0,&zero);
@@ -315,6 +329,11 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
 template <int dim>
 std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> OfflinePOD<dim>::getPODBasis() {
     return basis;
+}
+
+template<int dim>
+void OfflinePOD<dim>::setPODBasis(std::shared_ptr<Epetra_CrsMatrix> input_basis) {
+    this->basis->reinit(*input_basis);
 }
 
 template <int dim>
@@ -1269,7 +1288,7 @@ void OfflinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2
         dg->assemble_residual();
         dealii::LinearAlgebra::distributed::Vector<double> inner_product_vector_ROM;
         inner_product_vector_ROM.reinit(dg->projected_entropy);
-        inner_product_ROM = inner_product_vector_ROM.add_and_dot(1.0,dg->projected_entropy,dg->right_hand_side);
+        inner_product_ROM = 1;//inner_product_vector_ROM.add_and_dot(1.0,dg->projected_entropy,dg->right_hand_side);
     } else {
         std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = this->getPODBasis();
         dg->calculate_global_entropy();
@@ -1286,7 +1305,7 @@ void OfflinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2
     dg->assemble_residual();
     dealii::LinearAlgebra::distributed::Vector<double> inner_product_vector_FOM;
     inner_product_vector_FOM.reinit(dg->global_entropy);
-    double inner_product_FOM = inner_product_vector_FOM.add_and_dot(1.0,dg->global_entropy,dg->right_hand_side);
+    double inner_product_FOM = 1;//inner_product_vector_FOM.add_and_dot(1.0,dg->global_entropy,dg->right_hand_side);
 
     std::array<std::vector<double>,4> FOM_quantities;
     FOM_quantities = compute_quantities(*this->dg,euler_physics_double);

@@ -70,7 +70,7 @@ int HyperReductionDG<dim,nstate>::run_test() const {
     Qx.FillComplete(domain_map,global_map);
     Qy.FillComplete(domain_map,global_map);
     Qz.FillComplete(domain_map,global_map);
-    Epetra_CrsMatrix Qt = dg->calculate_hyper_reduced_Q(Qx,0);
+    Epetra_CrsMatrix Qt = dg->calculate_hyper_reduced_Q(Qx,Qx,0);
     std::ofstream Q_outfile("Q.txt");
     Qx.Print(Q_outfile);
     std::ofstream QtOutfile("Qt.txt");

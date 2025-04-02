@@ -121,7 +121,7 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operat
 }
 template <int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
-    Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) {
+    Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &/*Qtz*/) {
     std::cout << "Starting Assembly" << std::endl;
     const int global_size = this->solution.size();
     const int grid_degree = this->all_parameters->flow_solver_param.grid_degree;
@@ -129,32 +129,38 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     Epetra_CrsMatrix Fx(Epetra_DataAccess::Copy,Qtx.RowMap(),global_size);
 #if PHILIP_DIM==1
     Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qty.RowMap(),0);
-    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtz.RowMap(),0);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtx.RowMap(),0);
 #elif PHILIP_DIM==2
     Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qty.RowMap(),global_size);
-    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtz.RowMap(),0);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtx.RowMap(),0);
 #elif PHILIP_DIM==3
     Epetra_CrsMatrix Fy(Epetra_DataAccess::Copy,Qty.RowMap(),global_size);
-    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtz.RowMap(),global_size);
+    Epetra_CrsMatrix Fz(Epetra_DataAccess::Copy,Qtx.RowMap(),global_size);
 #endif
     std::cout << "Calculating Flux" << std::endl;
     this->calculate_convective_flux_matrix(Fx,Fy,Fz);
     Fx.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
     Fy.FillComplete(Qty.DomainMap(),Qty.RowMap());
-    Fz.FillComplete(Qtz.DomainMap(),Qtz.RowMap());
+    Fz.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
     std::ofstream flux_file("x_flux.txt");
     Fx.Print(flux_file);
+    std::ofstream yflux_file("y_flux.txt");
+    Fy.Print(yflux_file);
     std::ofstream qtxfile("Qtx.txt");
     Qtx.Print(qtxfile);
+    std::ofstream qtyfile("Qty.txt");
+    Qty.Print(qtyfile);
+    //std::ofstream qtzfile("Qtz.txt");
+    //Qtz.Print(qtzfile);
     const int max_poly = this->all_parameters->flow_solver_param.max_poly_degree_for_adaptation;
     Epetra_CrsMatrix QtxF(Epetra_DataAccess::Copy,Qtx.RowMap(),Qtx.ColMap(),Qtx.NumGlobalCols());
     Epetra_CrsMatrix QtyF(Epetra_DataAccess::Copy,Qty.RowMap(),Qty.ColMap(),Qty.NumGlobalCols());
-    Epetra_CrsMatrix QtzF(Epetra_DataAccess::Copy,Qtz.RowMap(),Qtz.ColMap(),Qtz.NumGlobalCols());
+    //Epetra_CrsMatrix QtzF(Epetra_DataAccess::Copy,Qtx.RowMap(),Qtx.ColMap(),Qtx.NumGlobalCols());
 
     OPERATOR::SumFactorizedOperators<dim,2*dim,double> op(nstate,max_poly,grid_degree);
     op.Hadamard_product(Qtx,Fx,QtxF);
     op.Hadamard_product(Qty,Fy,QtyF);
-    op.Hadamard_product(Qtz,Fz,QtzF);
+    //op.Hadamard_product(Qtz,Fz,QtzF);
 
     dealii::LinearAlgebra::distributed::Vector<double> ones(this->solution);
     //dealii::LinearAlgebra::distributed::Vector<double> resultx(this->solution);
@@ -170,16 +176,16 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     ones = 1.;
     dealii::TrilinosWrappers::SparseMatrix QtxF_deall;
     dealii::TrilinosWrappers::SparseMatrix QtyF_deall;
-    dealii::TrilinosWrappers::SparseMatrix QtzF_deall;
+    //dealii::TrilinosWrappers::SparseMatrix QtzF_deall;
     std::ofstream QtxF_file("QtxF.txt");
     QtxF.Print(QtxF_file);
     QtxF_deall.reinit(QtxF);
     QtyF_deall.reinit(QtyF);
-    QtzF_deall.reinit(QtzF);
+    //QtzF_deall.reinit(QtzF);
 
     QtxF_deall.vmult_add(temp_rhs,ones);
     QtyF_deall.vmult_add(temp_rhs,ones);
-    QtzF_deall.vmult_add(temp_rhs,ones);
+    //QtzF_deall.vmult_add(temp_rhs,ones);
     std::cout << "temp_rhs norm " + std::to_string(temp_rhs.l2_norm()) << std::endl;
 
     temp_rhs.compress(dealii::VectorOperation::add);
@@ -3718,19 +3724,23 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_global_entropy()
                 entropy_var_at_q[istate][iquad] = entropy_var[istate];
             }
         }
-        for(int istate=0; istate<nstate; istate++){
-            std::vector<real> entropy_var_coeff(n_shape_fns);
-            soln_basis_projection_oper_int.matrix_vector_mult_1D(entropy_var_at_q[istate],
-                                                                entropy_var_coeff,
-                                                                soln_basis_projection_oper_int.oneD_vol_operator);
-            entropy_coeff[istate] = entropy_var_coeff;
+        // Here I am now using global QUADRATURE entropy as I am making my projection operator the full one.
+        for(int istate=0; istate<nstate; istate++) {
             for(unsigned int iquad = 0; iquad < n_quad_pts; iquad++){
-                this->global_entropy[current_dofs_indices[istate*n_shape_fns + iquad]] = entropy_var_coeff[iquad];
+                this->global_entropy[current_dofs_indices[istate*n_shape_fns + iquad]] = entropy_var_at_q[istate][iquad];
             }
-            soln_basis_int.matrix_vector_mult_1D(entropy_var_coeff,
-                                                projected_entropy_var_at_q[istate],
-                                                soln_basis_int.oneD_vol_operator);
         }
+        // for(int istate=0; istate<nstate; istate++){
+        //     std::vector<real> entropy_var_coeff(n_shape_fns);
+        //     soln_basis_projection_oper_int.matrix_vector_mult_1D(entropy_var_at_q[istate],
+        //                                                         entropy_var_coeff,
+        //                                                         soln_basis_projection_oper_int.oneD_vol_operator);
+        //     entropy_coeff[istate] = entropy_var_coeff;
+        //
+        //     soln_basis_int.matrix_vector_mult_1D(entropy_var_coeff,
+        //                                         projected_entropy_var_at_q[istate],
+        //                                         soln_basis_int.oneD_vol_operator);
+        // }
 /*         for(unsigned int ishape_fn=0; ishape_fn<n_shape_fns; ishape_fn++){
                 for(int istate=0; istate<nstate; istate++){
                     //entropy_var[istate] = projected_entropy_var_at_q[istate][iquad];
@@ -3878,60 +3888,116 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tril
 template <int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim,nstate,real,MeshType>::calculate_projection_matrix(Epetra_CrsMatrix &LHS, Epetra_CrsMatrix &LeV)
 {
-    Epetra_MpiComm comm( MPI_COMM_WORLD );
-    Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(LHS);
-    std::ofstream eigen_lhs("lhs_eigen.txt");
+Epetra_MpiComm comm( MPI_COMM_WORLD );
+    const unsigned int init_grid_degree = this->high_order_grid->fe_system.tensor_degree();
+    const auto mapping = (*(this->high_order_grid->mapping_fe_field));
+    dealii::hp::MappingCollection<dim> mapping_collection(mapping);
 
-    std::ofstream lhs_file("lhs.txt");
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume (mapping_collection, this->fe_collection, this->volume_quadrature_collection, this->volume_update_flags); ///< FEValues of volume.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_int (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of interior face.
+    dealii::hp::FEFaceValues<dim,dim>    fe_values_collection_face_ext (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->neighbor_face_update_flags); ///< FEValues of exterior face.
+    dealii::hp::FESubfaceValues<dim,dim> fe_values_collection_subface (mapping_collection, this->fe_collection, this->face_quadrature_collection, this->face_update_flags); ///< FEValues of subface.
+
+    dealii::hp::FEValues<dim,dim>        fe_values_collection_volume_lagrange (mapping_collection, this->fe_collection_lagrange, this->volume_quadrature_collection, this->volume_update_flags);
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> soln_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::basis_functions<dim,2*dim,real> flux_basis_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::local_basis_stiffness<dim,2*dim,real> flux_basis_stiffness(1, this->max_degree, init_grid_degree, true);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_int(1, this->max_degree, init_grid_degree);
+    OPERATOR::vol_projection_operator<dim,2*dim,real> soln_basis_projection_oper_ext(1, this->max_degree, init_grid_degree);
+    OPERATOR::mapping_shape_functions<dim,2*dim,real> mapping_basis(1, init_grid_degree, init_grid_degree);
+    std::array<std::vector<real>,dim> mapping_support_points;
+    this->reinit_operators_for_cell_residual_loop(
+        this->max_degree, this->max_degree, init_grid_degree,
+        soln_basis_int, soln_basis_ext,
+        flux_basis_int, flux_basis_ext,
+        flux_basis_stiffness,
+        soln_basis_projection_oper_int, soln_basis_projection_oper_ext,
+        mapping_basis);
+    // galerkin_test_basis[idim]->ColMap()
+    Epetra_Map row_map = LeV.RowMap();
+    Epetra_Map domain_map = LeV.DomainMap();
+    Epetra_Map col_map = LeV.ColMap();
+    Epetra_CrsMatrix chi_v(Epetra_DataAccess::Copy,row_map,row_map,16);
+    Epetra_CrsMatrix W(Epetra_DataAccess::Copy,row_map,1);
+    Epetra_Vector W_vector(row_map);
+    std::vector<int> indices(row_map.NumGlobalElements());
+
+
+    std::cout << "Pt cell loop" << std::endl;
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
+        std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
+        const int i_fele = current_cell->active_fe_index();
+        const unsigned int poly_degree = i_fele;
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
+        const dealii::FESystem<1,1> &oneD_fe_ref = this->oneD_fe_collection_1state[i_fele];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        const unsigned int n_quad_pts = n_dofs_curr_cell / nstate;
+        std::vector<dealii::types::global_dof_index> current_dofs_indices(n_quad_pts);
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        current_cell->get_dof_indices (current_dofs_indices);
+        //std::cout << "current weight " << current_weights.front() << std::endl;
+        soln_basis_int.build_1D_volume_operator(oneD_fe_ref,this->oneD_quadrature_collection[poly_degree]);
+        dealii::FullMatrix<double> chi_v_tensor(n_quad_pts);
+       // std::cout << "Local Integration" << std::endl;
+        chi_v_tensor = soln_basis_int.tensor_product_nstate(1,soln_basis_int.oneD_vol_operator,soln_basis_int.oneD_vol_operator,soln_basis_int.oneD_vol_operator);
+        //Wchi_v_tensor.print_formatted(std::cout,3,true,0,0);
+
+        for(unsigned int cell_row_idx = 0; cell_row_idx < n_quad_pts; ++cell_row_idx) {
+            if(this->reduced_mesh_weights[current_cell_index*n_quad_pts + cell_row_idx] == 0) continue;
+            for(int istate = 0; istate < nstate; ++istate) {
+                const int global_row_idx = (int)current_dofs_indices[cell_row_idx+istate*n_quad_pts];
+                W.ReplaceGlobalValues(global_row_idx,1,&this->reduced_mesh_weights[current_cell_index*n_quad_pts + cell_row_idx],&global_row_idx);
+                for(unsigned int cell_col_idx = 0; cell_col_idx < n_quad_pts; ++cell_col_idx) {
+                    if(this->reduced_mesh_weights[current_cell_index*n_quad_pts + cell_col_idx] == 0) continue;
+                    const int global_col_idx = (int)current_dofs_indices[cell_col_idx+istate*n_quad_pts];
+                    const double val = chi_v[cell_row_idx+istate*n_quad_pts][cell_row_idx+istate*n_quad_pts];
+                    //std::cout << "Row :" << std::to_string(global_row_idx) << " Col :" << std::to_string(global_col_idx) <<  " Val :" << value << std::endl;
+                    chi_v.InsertGlobalValues(global_row_idx,1,&val,&global_col_idx);
+                }
+            }
+        }
+    }
+
+    W.FillComplete(row_map,row_map);
+    std::cout << "Fill complete" << std::endl;
+    chi_v.FillComplete(row_map,row_map);
+    std::ofstream fileio("file_happy.txt");
+    chi_v.Print(fileio);
+    std::cout << "Build WChiV" << std::endl;
+    Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(LHS);
     //dealii::LAPACKFullMatrix<double> LHS_LAPACK = eig_to_lapack_matrix(LHS_eigen);
     //LHS_LAPACK.print_formatted(lhs_file,16,true,0,"0");
     Eigen::MatrixXd LHS_inverse = LHS_eigen.inverse();
-    //eigen_lhs << LHS_inverse;
-    std::ofstream inverse_file("inverse.txt");
-    //dealii::LAPACKFullMatrix<double> LHSINVERSE_LAPACK = eig_to_lapack_matrix(LHS_inverse);
-    //LHSINVERSE_LAPACK.print_formatted(inverse_file,16,true,0,"0");
     Epetra_CrsMatrix LHS_inverse_epetra = eig_to_epetra_matrix(LHS_inverse,LHS_eigen.cols(),LHS_eigen.rows(),comm);
-    std::ofstream LHS_INVERSE_FILE_EPETRA("inverse_epetra.txt");
-    //LHS_inverse_epetra.Print(LHS_INVERSE_FILE_EPETRA);
-    Epetra_CrsMatrix LHSLeV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
-    Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
-    EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,LeV,true,LHSLeV);
-    EpetraExt::MatrixMatrix::Multiply(LHSLeV,false,this->global_mass_matrix.trilinos_matrix(),false,projection_matrix);
+    std::ofstream LHS_inverse_file("LHS_inverse_matrix.txt");
+    LHS_inverse_epetra.Print(LHS_inverse_file);
+    Epetra_CrsMatrix LHSVt(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
+    std::cout << "First MM" << std::endl;
+    EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,LeV,true,LHSVt);
+    std::cout << "Second MM" << std::endl;
+    std::cout << "LHSVt: " + std::to_string(LHSVt.NumGlobalRows()) +"x"+std::to_string(LHSVt.NumGlobalCols()) << std::endl;
+    Epetra_CrsMatrix LHSVtChiV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),chi_v.NumGlobalRows());
+    EpetraExt::MatrixMatrix::Multiply(LHSVt,false,chi_v,true,LHSVtChiV);
+    Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),W.NumGlobalRows());
+    EpetraExt::MatrixMatrix::Multiply(LHSVtChiV,false,W,false,projection_matrix);
     this->projection_matrix.reinit(projection_matrix);
-    std::ofstream file4("projection_matrix.txt");
-    projection_matrix.Print(file4);
-    /*
-    {
-        Eigen::MatrixXd LeV_eig = epetra_to_eig_matrix(LeV);
-        dealii::LAPACKFullMatrix<double> LeV_lapack = eig_to_lapack_matrix(LeV_eig);
-        std::ofstream LeV_file("LeV_proj.txt");
-        LeV_lapack.print_formatted(LeV_file,16,true,0,"0");
-    }
-    {
-        Eigen::MatrixXd LeV_eig = epetra_to_eig_matrix(projection_matrix);
-        dealii::LAPACKFullMatrix<double> proj_mat_lapack = eig_to_lapack_matrix(LeV_eig);
-        std::ofstream proj_file("proj_matrix.txt");
-        proj_mat_lapack.print_formatted(proj_file,16,true,0,"0");
-    }
-    {
-        Epetra_CrsMatrix mass = this->global_mass_matrix.trilinos_matrix();
-        Eigen::MatrixXd mass_eig = epetra_to_eig_matrix(mass);
-        dealii::LAPACKFullMatrix<double> mass_lapack = eig_to_lapack_matrix(mass_eig);
-        std::ofstream LeV_file("mass_proj.txt");
-        mass_lapack.print_formatted(LeV_file,16,true,0,"0");
-    }
-    */
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGHyper<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V)
+void DGHyper<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &/*V*/)
 {
 
     dealii::LinearAlgebra::distributed::Vector<double> temp_val (this->projection_matrix.locally_owned_range_indices(), this->mpi_communicator);
     // Global Volume Entropy
+    dealii::TrilinosWrappers::SparseMatrix V_dealii;
+    V_dealii.reinit(*this->galerkin_basis);
     this->projected_entropy= this->solution;
     this->projection_matrix.vmult(temp_val,this->global_entropy);
-    V.vmult(this->projected_entropy,temp_val);
+    V_dealii.vmult(this->projected_entropy,temp_val);
     // Global Face Entropy
     /* Commenting out for now
     this->projection_matrix.vmult(temp_val,this->global_face_entropy);
@@ -3966,10 +4032,11 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::
     entropy_diff /= 1;
 }
 template<int dim, int nstate, typename real, typename MeshType>
-Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, const int idim) {
+Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &hyper_Vt, const int idim) {
     if (idim >= dim) return Global_Q;
-    Epetra_CrsMatrix galerkin_basis_matrix = *this->galerkin_test_basis[idim];
-    Epetra_CrsMatrix proj_epetra = *this->test_projection_matrix[idim];
+    Epetra_MpiComm comm( MPI_COMM_WORLD );
+    Epetra_CrsMatrix galerkin_basis_matrix = hyper_Vt;
+    Epetra_CrsMatrix proj_epetra = *(this->test_projection_matrix[idim]);
     std::ofstream proj_file("test_projec_" + std::to_string(idim) + ".txt");
     proj_epetra.Print(proj_file);
     std::ofstream basis_file("test_basis_" + std::to_string(idim) + ".txt");
@@ -3987,8 +4054,57 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
 
     Epetra_CrsMatrix hyper_reduced_Q(Epetra_DataAccess::Copy,third_temp_row_map,proj_epetra.NumGlobalCols());
     EpetraExt::MatrixMatrix::Multiply(third_temp,false,proj_epetra,false,hyper_reduced_Q);
+    std::ofstream Qtfile("Qt_nquad_"+std::to_string(idim) + ".txt");
+    hyper_reduced_Q.Print(Qtfile);
+    Epetra_Map global_map((int)this->solution.size(),0,comm);
+    Epetra_CrsMatrix global_hyper_reduced_Q(Epetra_DataAccess::Copy, global_map,global_map,hyper_reduced_Q.NumGlobalCols());
+    std::map<int,int> quad_to_dof;
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        const unsigned int fe_index_curr_cell = current_cell->active_fe_index();
+        // Current reference element related to this physical cell
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[fe_index_curr_cell];
+        const unsigned int n_dofs_cell = current_fe_ref.n_dofs_per_cell();
+        std::vector<dealii::types::global_dof_index> current_dofs_indices(n_dofs_cell);
+        current_cell->get_dof_indices(current_dofs_indices);
+        const int current_cell_index = current_cell->active_cell_index();
+        const int n_quad_pts = this->volume_quadrature_collection[fe_index_curr_cell].size();
+        for(int iquad = 0; iquad < n_quad_pts; ++iquad) {
+            quad_to_dof.insert({iquad+current_cell_index*n_quad_pts,current_dofs_indices[iquad]});
+        }
+    }
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
+        if (!current_cell->is_locally_owned()) continue;
+        // Set up for cell
+        const unsigned int fe_index_curr_cell = current_cell->active_fe_index();
 
-    return hyper_reduced_Q;
+        // Current reference element related to this physical cell
+        const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[fe_index_curr_cell];
+        const unsigned int n_dofs_cell = current_fe_ref.n_dofs_per_cell();
+        std::vector<dealii::types::global_dof_index> current_dofs_indices(n_dofs_cell);
+        current_cell->get_dof_indices(current_dofs_indices);
+        const int current_cell_index = current_cell->active_cell_index();
+        const unsigned int poly_degree = current_cell->active_fe_index();
+        const int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
+        for (int iquad = 0; iquad < n_quad_pts; ++iquad) {
+            std::vector<double> global_row(hyper_reduced_Q.NumGlobalCols());
+            std::vector<int> indicies(hyper_reduced_Q.NumGlobalCols());
+            int NumEntries =0;
+            hyper_reduced_Q.ExtractGlobalRowCopy(iquad+current_cell_index*n_quad_pts,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
+            for (int istate = 0; istate < nstate; ++istate) {
+                const int GlobalRowIndex = current_dofs_indices[iquad+istate*n_quad_pts];
+                for (int col = 0 ; col < NumEntries; ++col) {
+                    // int col_cell_index = indicies[col] / n_quad_pts;
+                    // int jquad = indicies[col] % n_quad_pts;
+                    // int global_col_index = col_cell_index*n_quad_pts*nstate+jquad+istate*n_quad_pts;
+                    int global_col_index = quad_to_dof[indicies[col]]+istate*n_quad_pts;
+                    global_hyper_reduced_Q.InsertGlobalValues(GlobalRowIndex,1,&global_row[col],&global_col_index);
+                }
+            }
+        }
+    }
+    global_hyper_reduced_Q.FillComplete(global_map,global_map);
+    return global_hyper_reduced_Q;
 }
 
 
@@ -4047,9 +4163,10 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
     auto all_cells_start = std::chrono::high_resolution_clock::now();
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
         if (!current_cell->is_locally_owned()) continue;
-        if (this->reduced_mesh_weights[current_cell->active_cell_index()] == 0) continue;
+        //if (this->reduced_mesh_weights[current_cell->active_cell_index()] == 0) continue;
         auto this_cells_start = std::chrono::high_resolution_clock::now();
         std::vector<dealii::types::global_dof_index> current_dofs_indices;
+        const int current_cell_index = current_cell->active_cell_index();
         // Current reference element related to this physical cell
         const int i_fele = current_cell->active_fe_index();
         const unsigned int poly_degree = i_fele;
@@ -4106,6 +4223,7 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
         metric_cell->get_dof_indices (metric_dof_indices);
 
         for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad) {
+            if (this->reduced_mesh_weights[current_cell_index*n_quad_pts+iquad] == 0) continue;
             // Copy Metric Cofactor in a way can use for transforming Tensor Blocks to reference space
             // The way it is stored in metric_operators is to use sum-factorization in each direction,
             // but here it is cleaner to apply a reference transformation in each Tensor block returned by physics.
@@ -4134,8 +4252,9 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                     auto flux_cells_start = std::chrono::high_resolution_clock::now();
                     for (auto flux_current_cell = this->dof_handler.begin_active(); flux_current_cell != this->dof_handler.end(); ++flux_current_cell, ++flux_metric_cell) {
                         if (!flux_current_cell->is_locally_owned()) continue; // This approach will not work in MPI
-                        if (this->reduced_mesh_weights[flux_current_cell->active_cell_index()] == 0) continue;
+                        //if (this->reduced_mesh_weights[flux_current_cell->active_cell_index()] == 0) continue;
                         std::vector<dealii::types::global_dof_index> flux_dofs_indices;
+                        const int flux_cell_index = flux_current_cell->active_cell_index();
                         flux_dofs_indices.resize(n_dofs_curr_cell);
                         flux_current_cell->get_dof_indices (flux_dofs_indices);
                         std::vector<dealii::types::global_dof_index> flux_metric_dofs_indices(n_metric_dofs);
@@ -4163,7 +4282,7 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                             mapping_basis, //Will have to remake these later
                             this->all_parameters->use_invariant_curl_form);
                         for(unsigned int flux_quad=0; flux_quad<n_quad_pts; ++flux_quad){
-
+                            if (this->reduced_mesh_weights[flux_cell_index*n_quad_pts+flux_quad] == 0) continue;
 
                             for (int ref_dim =0;ref_dim<dim;ref_dim++){
 
@@ -4213,10 +4332,12 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
     auto this_cells_end = std::chrono::high_resolution_clock::now();
     auto this_cells_duration = std::chrono::duration_cast<std::chrono::microseconds>(this_cells_end - this_cells_start);
     //std::cout << "This cells: " << this_cells_duration.count() << std::endl;
+
     }
     auto all_cells_end = std::chrono::high_resolution_clock::now();
     auto all_cells_duration = std::chrono::duration_cast<std::chrono::microseconds>(all_cells_end - all_cells_start);
-    //std::cout << "All cells: " << all_cells_duration.count() << std::endl;
+    std::cout << "All cells: " << all_cells_duration.count() << std::endl;
+
 }
 
 template<int dim, int nstate, typename real, typename MeshType>
@@ -4306,8 +4427,8 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
         }
         if(skew_symmetric) {
             // Construct chi_v
-            std::cout << "Assembling Volume basis" << std::endl;
-            this->assemble_volume_basis();
+            //std::cout << "Assembling Volume basis" << std::endl;
+            if(this->volume_basis->n_nonzero_elements() == 0) this->assemble_volume_basis();
             flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
                                                               Hadamard_rows_sparsity, Hadamard_columns_sparsity,
                                                               flux_basis_stiffness.oneD_skew_symm_vol_oper,
@@ -4320,25 +4441,42 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                                                    oneD_vol_quad_weights,
                                                    flux_basis_stiffness_skew_symm_oper_sparse);
         }
+        dealii::FullMatrix<double> W(oneD_vol_quad_weights.size());
+        for (unsigned int i =0; i < oneD_vol_quad_weights.size(); i++) {
+            W.set(i,i,oneD_vol_quad_weights[i]);
+        }
         dealii::FullMatrix<double> local_S(n_quad_pts);
-        local_S = flux_basis_stiffness.tensor_product(flux_basis_stiffness.oneD_skew_symm_vol_oper,flux_basis_stiffness.oneD_skew_symm_vol_oper,flux_basis_stiffness.oneD_skew_symm_vol_oper);
 
+        //flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
          const int global_size = this->solution.size();
          Epetra_MpiComm comm(MPI_COMM_WORLD);
          Epetra_Map global_map(global_size,0,comm);
-         for(int idim = 0; idim < dim; idim++){
-             unsigned int id_counter = 0;
-             for (unsigned int row = 0; row < n_quad_pts; ++row) {
-                 for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
-                     double val = flux_basis_stiffness_skew_symm_oper_sparse[idim](row,col);
-                     int indices = current_cell_index+col+n_quad_pts_1D*id_counter;
-                     if(idim == 0) Qx.InsertGlobalValues(current_cell_index+row,1,&val,&indices);
-                     else if (idim == 1) Qy.InsertGlobalValues(current_cell_index+row,1,&val,&indices);
-                     else if (idim == 2) Qz.InsertGlobalValues(current_cell_index+row,1,&val,&indices);
-                 }
-                 if(row == n_quad_pts_1D-1) id_counter++;
-             } // end of row loop
-         } // end of dim loop
+        for(int idim = 0; idim < dim;idim++) {
+            if(idim == 0) local_S = flux_basis_stiffness.tensor_product(flux_basis_stiffness.oneD_skew_symm_vol_oper,W,W);
+            else if (idim == 1) local_S = flux_basis_stiffness.tensor_product(W,flux_basis_stiffness.oneD_skew_symm_vol_oper,W);
+            for (unsigned int row = 0; row < n_quad_pts; ++row) {
+                for (unsigned int col = 0; col < n_quad_pts; ++col) {
+                    const int indices = current_cell_index*n_quad_pts+col;
+                    double val = local_S(row, col);
+                    if(idim == 0) Qx.InsertGlobalValues(current_cell_index*n_quad_pts+row,1,&val,&indices);
+                    else if (idim == 1) Qy.InsertGlobalValues(current_cell_index*n_quad_pts+row,1,&val,&indices);
+                    else if (idim == 2) Qz.InsertGlobalValues(current_cell_index*n_quad_pts+row,1,&val,&indices);
+                }
+            }
+        }
+         // for(int idim = 0; idim < dim; idim++){
+         //     unsigned int id_counter = 0;
+         //     for (unsigned int row = 0; row < n_quad_pts; ++row) {
+         //         for (unsigned int col = 0; col < n_quad_pts_1D; ++col) {
+         //             double val = flux_basis_stiffness_skew_symm_oper_sparse[idim](row,col);
+         //             int indices = current_cell_index*n_quad_pts+col+n_quad_pts_1D*id_counter;
+         //             if(idim == 0) Qx.InsertGlobalValues(current_cell_index*n_quad_pts+row,1,&val,&indices);
+         //             else if (idim == 1) Qy.InsertGlobalValues(current_cell_index*n_quad_pts+row,1,&val,&indices);
+         //             else if (idim == 2) Qz.InsertGlobalValues(current_cell_index*n_quad_pts+row,1,&val,&indices);
+         //         }
+         //         if(row == n_quad_pts_1D-1) id_counter++;
+         //     } // end of row loop
+         // } // end of dim loop
          //Build the face terms
 
         std::vector<std::map<int,int>> tangential_face_mapping(dealii::GeometryInfo<dim>::faces_per_cell);
@@ -4384,7 +4522,7 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                 // const dealii::types::global_dof_index neighbor_cell_index = neighbor_cell->active_cell_index();
 
                 dealii::FullMatrix<double> FaceTerm(n_quad_pts);
-                int starting_quad = iface*(n_quad_pts_1D-1);
+                int starting_quad = iface_1D*(n_quad_pts_1D-1);
                 int quad_point_iter = n_quad_pts_1D;
                 if (iface / 2 == 1) {
                     starting_quad *= n_quad_pts_1D;
@@ -4399,14 +4537,17 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
 
 
                     int neighbour_local_quad = tangential_face_mapping[iface][starting_quad];
-                    int neighbour_global_quad = neighbour_local_quad+neighbor_cell_index;
+                    //int neighbour_global_quad = neighbor_dofs_indices[neighbour_local_quad+istate*n_quad_pts];
+                    int neighbour_global_quad = neighbor_cell_index*n_quad_pts + neighbour_local_quad;
 
                     double value = FaceTerm(0,iface_1D*(n_quad_pts-1));
 
                     if (iface / 2 == 0) {
-                        Qx.InsertGlobalValues(current_dofs_indices[starting_quad+istate*n_quad_pts],1,&value,&neighbour_global_quad);
+                        //Qx.InsertGlobalValues(current_dofs_indices[starting_quad+istate*n_quad_pts],1,&value,&neighbour_global_quad);
+                        Qx.InsertGlobalValues(current_cell_index*n_quad_pts + starting_quad,1,&value,&neighbour_global_quad);
                     } else {
-                        Qy.InsertGlobalValues(current_dofs_indices[starting_quad+istate*n_quad_pts],1,&value,&neighbour_global_quad);
+                        //Qy.InsertGlobalValues(current_dofs_indices[starting_quad+istate*n_quad_pts],1,&value,&neighbour_global_quad);
+                        Qy.InsertGlobalValues(current_cell_index*n_quad_pts + starting_quad,1,&value,&neighbour_global_quad);
                     }
 
                     starting_quad += quad_point_iter;
@@ -4420,6 +4561,9 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
     Qz.FillComplete(global_map,global_map);
     std::ofstream QxFile("Qx_file.txt");
     Qx.Print(QxFile);
+    std::ofstream QyFile("Qy_file.txt");
+    Qy.Print(QyFile);
+
 }
 
 template<int dim, int nstate, typename real, typename MeshType>
@@ -4481,7 +4625,7 @@ bool DGHyper<dim, nstate, real, MeshType>::current_cell_should_do_the_work_hyper
 
 template<int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim, nstate, real, MeshType>::assemble_volume_basis() {
-    std::cout <<"Chi" << std::endl;
+    //std::cout <<"Chi" << std::endl;
     Epetra_Map domain_map = this->global_mass_matrix.trilinos_matrix().DomainMap();
     Epetra_Map row_map = this->global_mass_matrix.trilinos_matrix().RowMap();
     Epetra_Map col_map = this->global_mass_matrix.trilinos_matrix().ColMap();
@@ -4514,12 +4658,10 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_basis() {
 
     Epetra_CrsMatrix chi_v_global(Epetra_DataAccess::Copy,row_map,col_map,this->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
 
-    auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
-    std::cout <<"Chi cell loop" << std::endl;
-    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell, ++metric_cell) {
+    //std::cout <<"Chi cell loop" << std::endl;
+    for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
         if (!current_cell->is_locally_owned()) continue;
         const dealii::types::global_dof_index current_cell_index = current_cell->active_cell_index();
-        if (this->reduced_mesh_weights[current_cell_index] == 0) continue;
         std::vector<dealii::types::global_dof_index> neighbor_dofs_indices;
         const int i_fele = current_cell->active_fe_index();
         const unsigned int poly_degree = i_fele;
@@ -4540,22 +4682,27 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_basis() {
         const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
         const dealii::FESystem<1,1> &oneD_fe_ref = this->oneD_fe_collection_1state[i_fele];
         const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
+        const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
         std::vector<dealii::types::global_dof_index> current_dofs_indices(n_dofs_curr_cell);
         current_dofs_indices.resize(n_dofs_curr_cell);
         current_cell->get_dof_indices (current_dofs_indices);
         soln_basis_int.build_1D_volume_operator(oneD_fe_ref,this->oneD_quadrature_collection[poly_degree]);
         dealii::FullMatrix<double> chi_v(n_dofs_curr_cell);
         chi_v = soln_basis_int.tensor_product_nstate(nstate,soln_basis_int.oneD_vol_operator,soln_basis_int.oneD_vol_operator,soln_basis_int.oneD_vol_operator);
-        for(unsigned int cell_row_idx = 0; cell_row_idx < n_dofs_curr_cell; ++cell_row_idx) {
-            for(unsigned int cell_col_idx = 0; cell_col_idx < n_dofs_curr_cell; ++cell_col_idx) {
-                const int global_row_idx = (int)current_dofs_indices[cell_row_idx];
-                const int global_col_idx = (int)current_dofs_indices[cell_col_idx];
-                const double val = chi_v[cell_row_idx][cell_col_idx];
-                chi_v_global.InsertGlobalValues(global_row_idx,1,&val,&global_col_idx);
+        for(unsigned int i_quad_row = 0; i_quad_row < n_quad_pts; ++i_quad_row) {
+            if(this->reduced_mesh_weights[i_quad_row+current_cell_index*n_quad_pts]) continue;
+            for(unsigned int i_quad_col = 0; i_quad_col < n_quad_pts; ++i_quad_col) {
+                if(this->reduced_mesh_weights[i_quad_col+current_cell_index*n_quad_pts]) continue;
+                for(int istate =0; istate< nstate; istate++) {
+                    const int global_row_idx = (int)current_dofs_indices[i_quad_row+istate*n_quad_pts];
+                    const int global_col_idx = (int)current_dofs_indices[i_quad_col+istate*n_quad_pts];
+                    const double val = chi_v[i_quad_row+istate*n_quad_pts][i_quad_col+istate*n_quad_pts];
+                    chi_v_global.InsertGlobalValues(global_row_idx,1,&val,&global_col_idx);
+                }
             }
         }
     }
-    std::cout <<"Chi made" << std::endl;
+    //std::cout <<"Chi made" << std::endl;
     chi_v_global.FillComplete(domain_map,row_map);
     volume_basis->reinit(chi_v_global);
 }

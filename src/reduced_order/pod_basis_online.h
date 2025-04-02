@@ -30,6 +30,7 @@ public:
     ///Function to get POD basis for all derived classes
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getPODBasis() override;
 
+    void setPODBasis(std::shared_ptr<Epetra_CrsMatrix> input_basis) override;
     ///Function to get POD reference state
     dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() override;
 

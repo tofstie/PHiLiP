@@ -25,7 +25,8 @@ class AssembleGreedyCubature{
         const dealii::ParameterHandler &parameter_handler_input,
         const dealii::LinearAlgebra::ReadWriteVector<double> &initial_weights,
         dealii::LinearAlgebra::ReadWriteVector<double> &b_input,
-        const Eigen::MatrixXd &V_target_input
+        const Eigen::MatrixXd &V_target_input,
+        const double tolerance
         );
     
     /// Destructor
@@ -72,6 +73,8 @@ class AssembleGreedyCubature{
     void epetra_to_dealii(Epetra_Vector &epetra_vector, 
                           dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector,
                           dealii::IndexSet index_set);
+
+    double tolerance;
 };
 
 } // namespace HyperReduction

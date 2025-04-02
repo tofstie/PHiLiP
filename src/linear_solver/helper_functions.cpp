@@ -130,7 +130,7 @@ MatrixXd epetra_to_eig_matrix(Epetra_CrsMatrix A_epetra){
     A_epetra.Comm().Broadcast(indicies,A_epetra.NumGlobalCols(),PIDList[0]);
     A_epetra.Comm().Broadcast(global_num_entries,1,PIDList[0]);
     if (*global_num_entries != 0) {
-      for (int n = 0; n < A_epetra.NumGlobalCols(); n++) {
+      for (int n = 0; n < *global_num_entries; n++) {
         A(m,indicies[n]) = global_row[n];
       }
     }

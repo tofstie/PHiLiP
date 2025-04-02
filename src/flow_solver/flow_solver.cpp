@@ -167,35 +167,44 @@ FlowSolver<dim, nstate>::FlowSolver(
                 ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights);
             } else if (all_param.hyper_reduction_param.hyper_reduction_type == "Cubature") {
                 auto ode_solver_type = ode_param.ode_solver_type;
+                this->dg->evaluate_hyper_mass_matrices(false);
                 HyperReduction::AssembleGreedyRes<dim,nstate> hyper_reduction(&all_param, parameter_handler, this->dg, pod, ode_solver_type);
                 hyper_reduction.build_weights();
-                std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = pod->getPODBasis();
+                std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = pod->getTestBasis();
                 Eigen::MatrixXd basis = epetra_to_eig_matrix(pod_basis->trilinos_matrix());
                 hyper_reduction.build_chan_target(basis);
                 hyper_reduction.build_problem();
                 dealii::LinearAlgebra::distributed::Vector<double> weights = hyper_reduction.final_weights;
                 std::ofstream outfile("Weights_FS_cube.txt");
+                Epetra_Vector weights_epetra(weights.locally_owned_elements().make_trilinos_map());
                 for (unsigned int i = 0;i < weights.size();i++) {
                     outfile << weights[i] << '\n';
+                    weights_epetra[i] = weights[i];
                 }
-                outfile.close();
-            }
 
+                outfile.close();
+                std::ofstream testing_outfile("testing_out.txt");
+                weights_epetra.Print(testing_outfile);
+                ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod, weights_epetra);
+            }
         } else {
             // ONLY WORKS FOR ONE CORE
             Epetra_MpiComm Comm( MPI_COMM_WORLD );
             std::ifstream infile("Weights_FS.txt");
             std::string line;
-            int num_elements_N_e = this->dg->triangulation->n_active_cells(); // Number of elements (equal to N if there is one DOF per cell)
+            int num_elements_N_e = this->dg->solution.size()/nstate;
             int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
-            int length = this->dg->system_matrix.trilinos_matrix().NumMyRows()/(nstate*n_quad_pts);
+            int length = this->dg->system_matrix.trilinos_matrix().NumMyRows()/(nstate);
             int *local_elements = new int[length];
             int ctr = 0;
             for (const auto &cell : this->dg->dof_handler.active_cell_iterators())
             {
                 if (cell->is_locally_owned()){
-                    local_elements[ctr] = cell->active_cell_index();
-                    ctr +=1;
+                    const int cell_index = cell->active_cell_index();
+                    for (int iquad = 0; iquad < n_quad_pts; iquad++) {
+                        local_elements[ctr] = cell_index*n_quad_pts + iquad;
+                        ctr +=1;
+                    }
                 }
             }
             Epetra_Map ColMap(num_elements_N_e, length, local_elements, 0, Comm);
@@ -215,7 +224,7 @@ FlowSolver<dim, nstate>::FlowSolver(
     }
 
     // Set the default ECSW Weights (1 vector)
-    dealii::Vector<float> default_weights(dg->triangulation->n_active_cells());
+    dealii::Vector<float> default_weights(dg->solution.size()/nstate);
     default_weights.add(1.0);
     this->dg->reduced_mesh_weights = default_weights;
     // Allocate ODE solver after initializing DG

@@ -1543,8 +1543,17 @@ void derivative_p<dim,n_faces,real>::build_1D_volume_operator(
        derivative_p_temp.add(1.0, this->oneD_vol_operator);
        diff_oper.oneD_vol_operator.mmult(this->oneD_vol_operator, derivative_p_temp);
     }
-}
 
+
+}
+template <int dim, int n_faces, typename real>
+void derivative_p<dim,n_faces,real>::build_hyper_volume_operator(
+    const dealii::FESystem<1,1> &/*finite_element*/,
+    const dealii::Quadrature<1> &/*quadrature*/,
+    const std::vector<double> &/*weight*/
+    ) {
+
+}
 template <int dim, int n_faces, typename real>  
 local_Flux_Reconstruction_operator<dim,n_faces,real>::local_Flux_Reconstruction_operator(
     const int nstate_input,

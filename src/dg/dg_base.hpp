@@ -245,6 +245,9 @@ public:
     /// Allocates and evaluates the mass matrices for the entire grid
     void evaluate_mass_matrices (bool do_inverse_mass_matrix = false);
 
+    /// Allocates and evaluates the mass matrices for the entire grid
+    void evaluate_hyper_mass_matrices (bool do_inverse_mass_matrix = false, bool custom_weights = false);
+
     /// Evaluates the metric dependent local mass matrices and inverses, then sets them in the global matrices.
     void evaluate_local_metric_dependent_mass_matrix_and_set_in_global_mass_matrix(
         const bool                                                       Cartesian_element,//Flag if cell is Cartesian
@@ -260,15 +263,32 @@ public:
         OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real>     &reference_FR,
         OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
         OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
-    void evaluate_local_volume_basis_function_and_set_in_global_matrix(
-    const bool                                                       Cartesian_element,//Flag if cell is Cartesian
-    const unsigned int                                               poly_degree,
-    const unsigned int                                               curr_grid_degree,
-    const unsigned int                                               n_quad_pts,
-    const unsigned int                                               n_dofs_cell,
-    const std::vector<dealii::types::global_dof_index>               dofs_indices,
-    OPERATOR::basis_functions<dim,2*dim,real>                        &basis
-    );
+
+    void evaluate_local_metric_dependent_mass_matrix_and_set_in_quad_mass_matrix(
+        const bool                                                       Cartesian_element,//Flag if cell is Cartesian
+        const bool                                                       do_inverse_mass_matrix,
+        const unsigned int                                               poly_degree,
+        const unsigned int                                               current_cell_index,
+        const unsigned int                                               n_quad_pts,
+        const unsigned int                                               n_dofs_cell,
+        const std::vector<dealii::types::global_dof_index>               dofs_indices,
+        OPERATOR::metric_operators<real,dim,2*dim>                       &metric_oper,
+        OPERATOR::basis_functions<dim,2*dim,real>                        &basis,
+        OPERATOR::local_mass<dim,2*dim,real>                             &reference_mass_matrix,
+        OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real>     &reference_FR,
+        OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
+        OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
+
+    void evaluate_local_metric_dependent_hyper_quad_mass_matrix_and_set_in_quad_mass_matrix(
+    const unsigned int current_cell_index,
+    const unsigned int n_quad_pts,
+    const unsigned int poly_degree,
+    OPERATOR::metric_operators<real,dim,2*dim> &metric_oper,
+    OPERATOR::basis_functions<dim,2*dim,real> &basis,
+    OPERATOR::local_mass<dim,2*dim,real> &reference_mass_matrix,
+    OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real> &reference_FR,
+    OPERATOR::derivative_p<dim,2*dim,real> &deriv_p);
+
     /// Applies the inverse of the local metric dependent mass matrices when the global is not stored.
     /** We use matrix-free methods to apply the inverse of the local mass matrix on-the-fly 
     *   in each cell using sum-factorization techniques.
@@ -329,6 +349,8 @@ public:
     /** Not sure we need to store it.  */
     dealii::SparsityPattern mass_sparsity_pattern;
 
+    dealii::SparsityPattern quad_mass_sparsity_pattern;
+
     /// Global mass matrix divided by the time scales.
     /** Should be block diagonal where each block contains the scaled mass matrix of each cell.  */
     dealii::TrilinosWrappers::SparseMatrix time_scaled_global_mass_matrix;
@@ -336,6 +358,11 @@ public:
     /// Global mass matrix
     /** Should be block diagonal where each block contains the mass matrix of each cell.  */
     dealii::TrilinosWrappers::SparseMatrix global_mass_matrix;
+
+
+
+    dealii::TrilinosWrappers::SparseMatrix global_quad_mass_matrix;
+
     /// Global inverser mass matrix
     /** Should be block diagonal where each block contains the inverse mass matrix of each cell.  */
     dealii::TrilinosWrappers::SparseMatrix global_inverse_mass_matrix;
@@ -403,6 +430,8 @@ public:
      *
      */
     dealii::LinearAlgebra::distributed::Vector<double> right_hand_side;
+
+    dealii::IndexSet locally_owned_quads_dist;
 
     dealii::IndexSet locally_owned_dofs; ///< Locally own degrees of freedom
     dealii::IndexSet ghost_dofs; ///< Locally relevant ghost degrees of freedom
@@ -967,10 +996,10 @@ public:
     /// Sets the galerkin basis
     void set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis, bool compute_test_basis);
     /// Calculates the test projection matrix
-    void set_test_projection_matrix(std::shared_ptr<Epetra_CrsMatrix> lhs_matrix, int idim);
+    void set_test_projection_matrix(std::shared_ptr<Epetra_CrsMatrix> lhs_matrix, std::shared_ptr<Epetra_CrsMatrix> hyper_reduced_vt, int idim);
 
     virtual void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz, bool skew_symmetric) = 0 ;
-    virtual Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, const int idim) = 0;
+    virtual Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &hyper_Vt, const int idim) = 0;
 
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;

@@ -78,11 +78,16 @@ private:
     /// Generate test basis
     std::shared_ptr<Epetra_CrsMatrix> generate_test_basis(const Epetra_CrsMatrix &pod_basis, const bool trial_basis);
 
+    std::shared_ptr<Epetra_CrsMatrix> generate_hyper_test_basis(const Epetra_CrsMatrix &pod_basis);
+
      /// Generate hyper-reduced residual
     std::shared_ptr<Epetra_Vector> generate_hyper_reduced_residual(Epetra_Vector epetra_right_hand_side, const Epetra_CrsMatrix &test_basis);
 
     /// Generate reduced LHS
     std::shared_ptr<Epetra_CrsMatrix> generate_reduced_lhs(const Epetra_CrsMatrix &system_matrix, const Epetra_CrsMatrix &test_basis, const Epetra_CrsMatrix &trial_basis);
+
+    /// Generate a reduced LHS from quadrature
+    std::shared_ptr<Epetra_CrsMatrix> generate_hyper_reduced_lhs(const Epetra_CrsMatrix &system_matrix, const Epetra_CrsMatrix &test_basis, const Epetra_CrsMatrix &trial_basis);
 
     /// Function to multiply a dealii vector by an Epetra Matrix
     int multiply(Epetra_CrsMatrix &epetra_matrix,

@@ -24,6 +24,8 @@ public:
     /// Function to return basis
     virtual std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getPODBasis() = 0;
 
+    virtual void setPODBasis(std::shared_ptr<Epetra_CrsMatrix> input_basis) = 0;
+
     /// Function to return reference state
     virtual dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() = 0;
 
@@ -41,7 +43,10 @@ public:
                    Physics::Euler<dim,dim+2,double> euler_physics_double,
                    double current_time,
                    int iteration) = 0;
+    double hyper_reduction_tolerance;
 };
+
+
 
 }
 }

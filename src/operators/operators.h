@@ -475,6 +475,12 @@ public:
         basis_functions<dim,n_faces,real> &basis,
         const std::vector<double> &det_Jac,
         const std::vector<double> &quad_weights);
+
+    void build_hyper_volume_operator(
+        const dealii::FESystem<1,1> &finite_element,
+        const dealii::Quadrature<1> &quadrature,
+        const std::vector<double> &weight
+        );
 };
 
 ///Local stiffness matrix without jacobian dependence.
@@ -505,6 +511,12 @@ public:
             const dealii::FESystem<1,1> &finite_element,
             const dealii::Quadrature<1> &quadrature);
 
+    void build_hyper_volume_operator(
+        const dealii::FESystem<1,1> &finite_element,
+        const dealii::Quadrature<1> &quadrature,
+        const std::vector<double> &weight
+        );
+
     /// Skew-symmetric volume operator \f$S-S^T\f$.
     dealii::FullMatrix<double> oneD_skew_symm_vol_oper;
 };
@@ -527,6 +539,12 @@ public:
     void build_1D_volume_operator(
             const dealii::FESystem<1,1> &finite_element,
             const dealii::Quadrature<1> &quadrature);
+
+    void build_hyper_volume_operator(
+        const dealii::FESystem<1,1> &finite_element,
+        const dealii::Quadrature<1> &quadrature,
+        const std::vector<double> &weight
+        );
 };
 
 ///\f$ p\f$ -th order modal derivative of basis fuctions, ie/\f$ [D_\xi^p, D_\eta^p, D_\zeta^p]\f$
@@ -547,6 +565,12 @@ public:
     void build_1D_volume_operator(
             const dealii::FESystem<1,1> &finite_element,
             const dealii::Quadrature<1> &quadrature);
+
+    void build_hyper_volume_operator(
+        const dealii::FESystem<1,1> &finite_element,
+        const dealii::Quadrature<1> &quadrature,
+        const std::vector<double> &weight
+        );
 };
 
 /// ESFR correction matrix without jac dependence

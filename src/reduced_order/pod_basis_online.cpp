@@ -131,7 +131,10 @@ template <int dim>
 std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> OnlinePOD<dim>::getPODBasis() {
     return basis;
 }
-
+template<int dim>
+void OnlinePOD<dim>::setPODBasis(std::shared_ptr<Epetra_CrsMatrix> input_basis) {
+    this->basis->reinit(*input_basis);
+}
 template <int dim>
 dealii::LinearAlgebra::ReadWriteVector<double> OnlinePOD<dim>::getReferenceState() {
     return referenceState;
