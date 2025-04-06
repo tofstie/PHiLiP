@@ -163,7 +163,9 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     this->dg->reduced_mesh_weights = weights_dealii;
     // If using ESROM, create projection operator
     if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
-        this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_trial_basis);
+        dealii::TrilinosWrappers::SparseMatrix pod_basis;
+        pod_basis.reinit(*epetra_trial_basis);
+        this->dg->calculate_projection_matrix(pod_basis);//(*epetra_reduced_lhs,*epetra_trial_basis);
         this->dg->set_galerkin_basis(epetra_trial_basis,false);
         std::cout << "Setting Vt" << std::endl;
         this->dg->set_galerkin_basis(epetra_quad_basis,true);

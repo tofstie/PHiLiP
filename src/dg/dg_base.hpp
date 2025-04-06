@@ -700,6 +700,9 @@ public:
     /// Computational time for assembling residual.
     double assemble_residual_time;
 
+    std::map<int,int> quad_to_dof;
+    std::map<int,int> dofs_to_quad;
+
 protected:
     /// The current time set in set_current_time()
     real current_time;

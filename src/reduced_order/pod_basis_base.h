@@ -44,6 +44,7 @@ public:
                    double current_time,
                    int iteration) = 0;
     double hyper_reduction_tolerance;
+
 };
 
 

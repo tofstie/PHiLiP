@@ -26,6 +26,7 @@ void RungeKuttaBase<dim, real, n_rk_stages, MeshType>::step_in_time(real dt, con
         this->calculate_stage_solution(istage, dt, pseudotime); // u_n + dt * sum(a_ij * k_j) <explicit> + dt * a_ii * u^(istage) <implicit>
         this->apply_limiter();
         this->calculate_stage_derivative(istage, dt); //rk_stage[istage] = IMM*RHS = F(u_n + dt*sum(a_ij*k_j))
+        std::cout << "rhs norm " + std::to_string(this->dg->right_hand_side.l2_norm()) << std::endl;
     }
     dt = this->adjust_time_step(dt);
     this->sum_stages(dt, pseudotime); // u_np1 = u_n + dt* sum(k_i * b_i)

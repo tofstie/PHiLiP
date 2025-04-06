@@ -2883,7 +2883,7 @@ void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_hyper_quad_mass_
     const unsigned int current_cell_index,
     const unsigned int n_quad_pts,
     const unsigned int poly_degree,
-    OPERATOR::metric_operators<real,dim,2*dim> &/*metric_oper*/,
+    OPERATOR::metric_operators<real,dim,2*dim> &metric_oper,
     OPERATOR::basis_functions<dim,2*dim,real> &basis,
     OPERATOR::local_mass<dim,2*dim,real> &reference_mass_matrix,
     OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real> &reference_FR,
@@ -2908,7 +2908,7 @@ void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_hyper_quad_mass_
     basis_matrix.Tmmult(intermediate_step,local_hyper_weights);
     intermediate_step.mmult(local_mass_matrix_state,basis_matrix);
     dealii::FullMatrix<double> local_mass_matrix(n_quad_pts);
-    local_mass_matrix.add(1.,local_mass_matrix_state); // Removing metric_oper.det_Jac_vol[0] for now
+    local_mass_matrix.add(metric_oper.det_Jac_vol[0],local_mass_matrix_state); // Removing metric_oper.det_Jac_vol[0] for now
     reference_mass_matrix.oneD_vol_operator.add(1.,basis.oneD_vol_operator);
     if(FR_Type != FR_enum::cDG){
         dealii::FullMatrix<double> pth_derivative(n_quad_pts);
@@ -3652,7 +3652,7 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     Epetra_Map row_map = hyper_reduced_vt->RowMap();
     Epetra_Map domain_map = hyper_reduced_vt->DomainMap();
     Epetra_Map col_map = hyper_reduced_vt->ColMap();
-    Epetra_CrsMatrix chi_v(Epetra_DataAccess::Copy,row_map,row_map,16);
+    /*Epetra_CrsMatrix chi_v(Epetra_DataAccess::Copy,row_map,row_map,16);
     Epetra_CrsMatrix W(Epetra_DataAccess::Copy,row_map,1);
     Epetra_Vector W_vector(row_map);
     std::vector<int> indices(row_map.NumGlobalElements());
@@ -3699,6 +3699,7 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     std::ofstream fileio("file_happy.txt");
     chi_v.Print(fileio);
     std::cout << "Build WChiV" << std::endl;
+    */
     Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(*lhs_matrix);
     //dealii::LAPACKFullMatrix<double> LHS_LAPACK = eig_to_lapack_matrix(LHS_eigen);
     //LHS_LAPACK.print_formatted(lhs_file,16,true,0,"0");
@@ -3716,6 +3717,7 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     double min_eigenvalue2 = eigenvalues2.minCoeff(); /// The eigen values are strictly greater than 0
     double max_eigenvalue2 = eigenvalues2.maxCoeff();
     double condition_number2;
+    Epetra_CrsMatrix quad_mass_matrix = this->global_quad_mass_matrix.trilinos_matrix();
     condition_number2 = abs(max_eigenvalue2)/abs(min_eigenvalue2);
     std::cout << "Condition Number " << std::to_string(idim) << ": " << condition_number2 << std::endl;
     Epetra_CrsMatrix LHS_inverse_epetra = eig_to_epetra_matrix(LHS_inverse,LHS_eigen.cols(),LHS_eigen.rows(),comm);
@@ -3728,10 +3730,12 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,*hyper_reduced_vt,true,LHSVt);
     std::cout << "Second MM" << std::endl;
     std::cout << "LHSVt: " + std::to_string(LHSVt.NumGlobalRows()) +"x"+std::to_string(LHSVt.NumGlobalCols()) << std::endl;
-    Epetra_CrsMatrix LHSVtChiV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),chi_v.NumGlobalRows());
-    EpetraExt::MatrixMatrix::Multiply(LHSVt,false,chi_v,true,LHSVtChiV);
-    Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),W.NumGlobalRows());
-    EpetraExt::MatrixMatrix::Multiply(LHSVtChiV,false,W,false,projection_matrix);
+    //Epetra_CrsMatrix LHSVtChiV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),quad_mass_matrix.NumGlobalRows());
+    //EpetraExt::MatrixMatrix::Multiply(LHSVt,false,chi_v,true,LHSVtChiV);
+
+    Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),quad_mass_matrix.NumGlobalRows());
+    //EpetraExt::MatrixMatrix::Multiply(LHSVtChiV,false,W,false,projection_matrix);
+    EpetraExt::MatrixMatrix::Multiply(LHSVt, false, quad_mass_matrix,false,projection_matrix);
     this->test_projection_matrix[idim] = std::make_shared<Epetra_CrsMatrix>(projection_matrix);
 }
 #if PHILIP_DIM!=1
