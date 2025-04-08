@@ -264,6 +264,21 @@ public:
         OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
         OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
 
+    void evaluate_no_jacobian_mass_matrix(
+        const bool                                                       Cartesian_element,//Flag if cell is Cartesian
+        const bool                                                       do_inverse_mass_matrix, 
+        const unsigned int                                               poly_degree, 
+        const unsigned int                                               curr_grid_degree, 
+        const unsigned int                                               n_quad_pts, 
+        const unsigned int                                               n_dofs_cell, 
+        const std::vector<dealii::types::global_dof_index>               dofs_indices, 
+        OPERATOR::metric_operators<real,dim,2*dim>                       &metric_oper,
+        OPERATOR::basis_functions<dim,2*dim,real>                        &basis,
+        OPERATOR::local_mass<dim,2*dim,real>                             &reference_mass_matrix,
+        OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real>     &reference_FR,
+        OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
+        OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
+        
     void evaluate_local_metric_dependent_mass_matrix_and_set_in_quad_mass_matrix(
         const bool                                                       Cartesian_element,//Flag if cell is Cartesian
         const bool                                                       do_inverse_mass_matrix,
@@ -359,7 +374,7 @@ public:
     /** Should be block diagonal where each block contains the mass matrix of each cell.  */
     dealii::TrilinosWrappers::SparseMatrix global_mass_matrix;
 
-
+    dealii::TrilinosWrappers::SparseMatrix global_inverse_no_jac_mass_matrix;
 
     dealii::TrilinosWrappers::SparseMatrix global_quad_mass_matrix;
 

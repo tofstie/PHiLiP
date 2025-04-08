@@ -3909,6 +3909,8 @@ Epetra_MpiComm comm( MPI_COMM_WORLD );
     Epetra_Map col_map = LeV.ColMap();
     Epetra_CrsMatrix chi_v(Epetra_DataAccess::Copy,row_map,row_map,16);
     Epetra_CrsMatrix W(Epetra_DataAccess::Copy,row_map,row_map,1);
+    Epetra_CrsMatrix M_inv_nojac = this->global_inverse_no_jac_mass_matrix.trilinos_matrix();
+    Epetra_CrsMatrix M = this->global_mass_matrix.trilinos_matrix();
     Epetra_Vector W_vector(row_map);
     std::vector<int> indices(row_map.NumGlobalElements());
 
@@ -3976,10 +3978,14 @@ Epetra_MpiComm comm( MPI_COMM_WORLD );
     std::cout << "First MM: " << mult1 << std::endl;
     LHSVt.Print(LHSVt_file);
     std::cout << "LHSVt: " + std::to_string(LHSVt.NumGlobalRows()) +"x"+std::to_string(LHSVt.NumGlobalCols()) << std::endl;
+    Epetra_CrsMatrix LHSVtM(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),chi_v.NumGlobalRows());
+    EpetraExt::MatrixMatrix::Multiply(LHSVt,false,M,false,LHSVtM);
+    Epetra_CrsMatrix LHSVtMMinv(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),chi_v.NumGlobalRows());
+    EpetraExt::MatrixMatrix::Multiply(LHSVtM,false,M_inv_nojac,false,LHSVtMMinv);
     Epetra_CrsMatrix LHSVtChiV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),chi_v.NumGlobalRows());
     int mult2;
     std::ofstream LHSVtChiV_file("mult2.txt");
-    mult2 = EpetraExt::MatrixMatrix::Multiply(LHSVt,false,chi_v,true,LHSVtChiV);
+    mult2 = EpetraExt::MatrixMatrix::Multiply(LHSVtMMinv,false,chi_v,true,LHSVtChiV);
     LHSVtChiV.Print(LHSVtChiV_file);
     std::cout << "Second MM: "<< mult2 << std::endl;
     Epetra_CrsMatrix epetra_projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),W.NumGlobalRows());
@@ -4064,6 +4070,7 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
     hyper_reduced_Q.Print(Qtfile);
     Epetra_Map global_map((int)this->solution.size(),0,comm);
     Epetra_CrsMatrix global_hyper_reduced_Q(Epetra_DataAccess::Copy, global_map,global_map,hyper_reduced_Q.NumGlobalCols());
+    /*
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
         if (!current_cell->is_locally_owned()) continue;
         // Set up for cell
@@ -4088,9 +4095,31 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
                     // int col_cell_index = indicies[col] / n_quad_pts;
                     // int jquad = indicies[col] % n_quad_pts;
                     // int global_col_index = col_cell_index*n_quad_pts*nstate+jquad+istate*n_quad_pts;
-                    int global_col_index = this->quad_to_dof[indicies[col]]+istate*n_quad_pts;
+                    int global_col_index = this->quad_to_dof[indicies[col]]+(nstate-istate)*n_quad_pts;
                     global_hyper_reduced_Q.InsertGlobalValues(GlobalRowIndex,1,&global_row[col],&global_col_index);
                 }
+            }
+        }
+    }
+    */
+    std::vector<double> global_row(hyper_reduced_Q.NumGlobalCols());
+    std::vector<int> indicies(hyper_reduced_Q.NumGlobalCols());
+    int NumEntries =0;
+    const int n_quad_pts = this->volume_quadrature_collection[this->all_parameters->flow_solver_param.poly_degree].size();
+    for(int i_quad = 0; i_quad < hyper_reduced_Q.NumGlobalRows();i_quad++)
+    {
+        hyper_reduced_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
+        const int dof_row = this->quad_to_dof[i_quad];
+        for(int entry = 0; entry < NumEntries;entry++)
+        {
+            const int dof_col = this->quad_to_dof[indicies[entry]];
+            const double val = global_row[entry];
+            for(int istate = 0; istate < nstate; istate++)
+            {
+                const int dof_row_istate = dof_row + (nstate-1-istate)*n_quad_pts;
+                const int dof_col_istate = dof_col + (nstate-1-istate)*n_quad_pts;
+
+                global_hyper_reduced_Q.InsertGlobalValues(dof_row_istate,1,&val,&dof_col_istate);
             }
         }
     }

@@ -291,8 +291,8 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
 
     std::ofstream out_file("POD_basis_" + reference_type + ".txt");
     unsigned int precision = 16;
-    char zero = 48;
-    fullBasis.print_formatted(out_file, precision, true, 0,&zero);
+    //char zero = 48;
+    fullBasis.print_formatted(out_file, precision, true, 0,"0");
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
     Epetra_Map system_matrix_map((int)pod_basis.rows(),0,epetra_comm);
@@ -657,9 +657,9 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
         const int current_cell_index = current_cell->active_cell_index();
         const int n_quad_pts_inner = this->dg->volume_quadrature_collection[fe_index_curr_cell].size();
         for(int iquad = 0; iquad < n_quad_pts_inner; ++iquad) {
-            this->dg->quad_to_dof.insert({iquad+current_cell_index*n_quad_pts_inner,current_dofs_indices[iquad]});
+            this->dg->quad_to_dof.insert({iquad+current_cell_index*n_quad_pts_inner,current_dofs_indices[n_quad_pts_inner*4-iquad-1]});
             for(int istate = 0; istate < nstate; istate++){
-                this->dg->dofs_to_quad.insert({current_dofs_indices[iquad+istate*n_quad_pts_inner],iquad+current_cell_index*n_quad_pts_inner});
+                this->dg->dofs_to_quad.insert({current_dofs_indices[n_quad_pts_inner*4-iquad-1-istate*n_quad_pts_inner],iquad+current_cell_index*n_quad_pts_inner});
             }
         }
     }
@@ -782,16 +782,17 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
             double val  = 0;
             switch(istate){
                 case energy_case:
-                    val = energy(this->dg->dofs_to_quad[quad_num*istate+i_quad],col);
-                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*istate+i_quad],col) = val;
+                    val = energy(quad_num+i_quad,col);
+
+                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col) = val;
                     break;
                 case density_case:
-                    val = density(this->dg->dofs_to_quad[quad_num*istate+i_quad],col);
-                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*istate+i_quad],col+num_of_snapshots*(istate)) = val;
+                    val = density(quad_num+i_quad,col);
+                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(istate)) = val;
                     break;
                 default:
-                    val = momentum[istate-1](this->dg->dofs_to_quad[quad_num*istate+i_quad],col);
-                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*istate+i_quad],col+num_of_snapshots*(istate)) = val;
+                    val = momentum[istate-1](quad_num+i_quad,col);
+                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(istate)) = val;
                     break;
             }
             if(dg->solution.in_local_range(solution_num+istate*n_quad_pts+i_quad)){
@@ -839,13 +840,13 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
                     double val = entropy_vectors[m_proc][row-front_vector[m_proc]];
                     switch(istate){
                         case energy_case:
-                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*istate+i_quad],col+num_of_snapshots*nstate) = val;
+                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*nstate) = val;
                             break;
                         case density_case:
-                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*istate+i_quad],col+num_of_snapshots*(nstate+istate)) = val;
+                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(nstate+istate)) = val;
                             break;
                         default:
-                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*istate+i_quad],col+num_of_snapshots*(nstate+istate)) = val;
+                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(nstate+istate)) = val;
                             break;
                     }
                 }

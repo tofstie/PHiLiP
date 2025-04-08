@@ -44,7 +44,7 @@ subsection flow_solver
   subsection grid
     set grid_left_bound = -1
     set grid_right_bound = 1
-    set number_of_grid_elements_per_dimension = 32
+    set number_of_grid_elements_per_dimension = 16
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end
@@ -52,7 +52,7 @@ end
 subsection reduced order
     set output_snapshot_every_x_timesteps = 3
     #set singular_value_threshold = 0.9999999
-    set number_modes = 200
+    set number_modes = 100
     set path_to_search = .
     set adaptation_tolerance = 0.0015
 end

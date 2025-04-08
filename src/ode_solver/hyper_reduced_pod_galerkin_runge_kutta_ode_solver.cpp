@@ -210,6 +210,12 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
             Qtz = std::make_shared<Epetra_CrsMatrix>(this->dg->calculate_hyper_reduced_Q(Qz,*this->dg->galerkin_test_basis[idim],idim));
         }
         }
+    Eigen::MatrixXd Qtx_eig = epetra_to_eig_matrix(*Qtx);
+    std::ofstream tfile("Qtx_eig.txt");
+    if (tfile.is_open()){
+        tfile << Qtx_eig.format(CSVFormat);
+    }
+    tfile.close();
     std::cout << "Construction Qt" << std::endl;
     // Construct Qt
 
