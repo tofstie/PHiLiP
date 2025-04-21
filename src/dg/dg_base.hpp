@@ -1035,7 +1035,10 @@ public:
     void set_test_projection_matrix(std::shared_ptr<Epetra_CrsMatrix> lhs_matrix, std::shared_ptr<Epetra_CrsMatrix> hyper_reduced_vt, int idim);
 
     virtual void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz, bool skew_symmetric) = 0 ;
+
     virtual Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &hyper_Vt, const int idim) = 0;
+
+    virtual void calculate_off_diagonals_1D() = 0;
 
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;
@@ -1057,6 +1060,7 @@ public:
     /// ROM Projected Face Entropy
     dealii::LinearAlgebra::distributed::Vector<double> projected_face_entropy;
     /// Hyper-Reduction ECSW Nodal Projection
+
 }; // end of DGBase class
 
 } // PHiLiP namespace

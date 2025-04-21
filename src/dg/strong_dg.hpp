@@ -376,6 +376,7 @@ protected:
     dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
     void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz, bool skew_symmetric) override;
     Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &hyper_Vt, const int idim) override;
+    void calculate_off_diagonals_1D() override;
     
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
     

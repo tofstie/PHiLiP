@@ -4134,6 +4134,7 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
         const unsigned int n_quad_pts_1D  = this->oneD_quadrature_collection[poly_degree].size();
         const std::vector<double> &oneD_vol_quad_weights = this->oneD_quadrature_collection[poly_degree].get_weights();
         const std::vector<double> &surf_quad_weights = this->face_quadrature_collection[poly_degree].get_weights();
+        const unsigned int n_quad_pts_face = this->face_quadrature_collection[poly_degree].size();
         const dealii::FESystem<dim> &fe_metric = this->high_order_grid->fe_system;
         const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
         //const unsigned int n_grid_nodes  = n_metric_dofs / dim;
@@ -4257,24 +4258,27 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                 // const int i_fele_n = neighbor_cell->active_fe_index();
                 // const dealii::types::global_dof_index neighbor_cell_index = neighbor_cell->active_cell_index();
 
-                dealii::FullMatrix<double> FaceTerm(n_quad_pts);
+                dealii::FullMatrix<double> FaceTerm(n_quad_pts_face,n_quad_pts);
                 int starting_quad = iface_1D*(n_quad_pts_1D-1);
                 int quad_point_iter = n_quad_pts_1D;
                 if (iface / 2 == 1) {
                     starting_quad *= n_quad_pts_1D;
                     quad_point_iter /= n_quad_pts_1D;
                 }
-
-                for (unsigned int i_quad_1d = 0; i_quad_1d < n_quad_pts_1D; ++i_quad_1d) {
-                    FaceTerm = soln_basis_int.tensor_product(soln_basis_int.oneD_surf_operator[iface_1D],soln_basis_int.oneD_surf_operator[iface_1D],soln_basis_int.oneD_surf_operator[iface_1D]);
-
-                    FaceTerm *= surf_quad_weights[i_quad_1d] * pow(-1.,iface_1D+1);
-                    dealii::FullMatrix<double> halfEB(n_quad_pts);
-                    FaceTerm.mmult(halfEB,PiV);
-                    FaceTerm.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
-                    halfEB.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
-                    int test;
-                    std::cin >> test;
+                for (unsigned int i_quad_face = 0; i_quad_face < n_quad_pts_face; ++i_quad_face) {
+                    dealii::FullMatrix<double> temp_FaceTerm(1,n_quad_pts);
+                    temp_FaceTerm = soln_basis_int.tensor_product(soln_basis_int.oneD_surf_operator[iface_1D],soln_basis_int.oneD_surf_operator[iface_1D],soln_basis_int.oneD_surf_operator[iface_1D]);
+                    temp_FaceTerm *= surf_quad_weights[i_quad_face] * pow(-1.,iface_1D+1);
+                    for (unsigned int j_quad = 0; j_quad < n_quad_pts; ++j_quad) {
+                        FaceTerm.set(i_quad_face,j_quad,temp_FaceTerm(0,j_quad));
+                    }
+                }
+                dealii::FullMatrix<double> halfEB(n_quad_pts_face,n_quad_pts);
+                FaceTerm.mmult(halfEB,PiV);
+                FaceTerm.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+                halfEB.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
+                int test;
+                std::cin >> test;
 
                     int neighbour_local_quad = tangential_face_mapping[iface][starting_quad];
                     //int neighbour_global_quad = neighbor_dofs_indices[neighbour_local_quad+istate*n_quad_pts];
@@ -4291,7 +4295,6 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                     }
 
                     starting_quad += quad_point_iter;
-                }
 
             } // end of if statement for faces
         } // end of face loop
@@ -4455,7 +4458,17 @@ void DGHyper<dim, nstate, real, MeshType>::assemble_volume_basis() {
     chi_v_global.Print(file);
     volume_basis->reinit(chi_v_global);
 }
+template <int dim, int nstate, typename real, typename MeshType>
+void  DGHyper<dim,nstate,real,MeshType>::calculate_off_diagonals_1D() {
+    // Build Global B
 
+    // Build Subselected Vt
+
+    // Build Global Volume Projection Operator (custom weights)?
+
+    // Matrix Multiplication
+
+};
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;
 // Otherwise: dealii::parallel::distributed::Triangulation<dim>;
