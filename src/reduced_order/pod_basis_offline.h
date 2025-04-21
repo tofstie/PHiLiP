@@ -96,11 +96,14 @@ public:
 
     bool getHyperEntropyPODBasisFromSnapshots();
 
+    void quadToDofPOD();
+
     bool enrichPOD();
 
     void matchQuadratureLocation();
 
     void debugMatrix(dealii::FullMatrix<double> M);
+
 
     std::array<std::vector<double>,4> compute_quantities(DGBase<dim, double> &dg, Physics::Euler<dim,dim+2,double> euler_physics) const;
     void PrintMapInfo(const Epetra_Map &map);

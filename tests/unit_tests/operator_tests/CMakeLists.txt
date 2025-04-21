@@ -933,3 +933,39 @@ foreach(dim RANGE 2 3)
     unset(OperatorsLib)
     unset(GridsLib)
 endforeach()
+
+set(TEST_SRC
+    epetra_Hadamard_test.cpp)
+foreach (dim RANGE 1 1)
+    string(CONCAT TEST_TARGET EPETRA_HADAMARD_TEST)
+    add_executable(${TEST_TARGET} ${TEST_SRC})
+    target_compile_definitions(${TEST_TARGET} PRIVATE PHILIP_DIM=${dim})
+
+    # Compile this executable when 'make unit_tests'
+    add_dependencies(unit_tests ${TEST_TARGET})
+    add_dependencies(${dim}D ${TEST_TARGET})
+
+    # Library dependency
+    target_link_libraries(${TEST_TARGET} ParametersLibrary)
+    string(CONCAT OperatorsLib Operator_Lib_${dim}D)
+    string(CONCAT GridsLib Grids_${dim}D)
+    target_link_libraries(${TEST_TARGET} ${OperatorsLib})
+    target_link_libraries(${TEST_TARGET} DiscontinuousGalerkin_${dim}D)
+    target_link_libraries(${TEST_TARGET} ${GridsLib})
+    # Setup target with deal.II
+    if (NOT DOC_ONLY)
+        DEAL_II_SETUP_TARGET(${TEST_TARGET})
+    endif()
+
+    add_test(
+            NAME ${TEST_TARGET}
+            COMMAND ${EXECUTABLE_OUTPUT_PATH}/${TEST_TARGET}
+            WORKING_DIRECTORY ${TEST_OUTPUT_DIR})
+    set_tests_labels(${TEST_TARGET} OPERATOR
+            ${dim}D
+            QUICK
+            UNIT_TEST)
+    unset(TEST_TARGET)
+    unset(OperatorsLib)
+    unset(GridsLib)
+endforeach ()

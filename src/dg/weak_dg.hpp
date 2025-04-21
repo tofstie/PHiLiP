@@ -441,7 +441,7 @@ private:
         dealii::Vector<real> &current_cell_rhs,
         const dealii::FEValues<dim,dim> &fe_values_lagrange);
     
-    void calculate_global_entropy() override;
+    void calculate_global_entropy(bool use_quad_entropy = false) override;
     void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) override;
     void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V) override;
     void calculate_projection_matrix(Epetra_CrsMatrix &LHS, Epetra_CrsMatrix &LeV) override;

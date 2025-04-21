@@ -298,7 +298,7 @@ void AssembleGreedyRes<dim, nstate>::build_chan_target(Eigen::MatrixXd &Input_Ma
         weights_eigen(i) = this->initial_weights(i);
     }
     std::ofstream file("weights_target.txt");
-    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file.is_open()){
         file << weights_eigen.format(CSVFormat);
     }

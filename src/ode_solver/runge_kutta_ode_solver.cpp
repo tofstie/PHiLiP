@@ -75,7 +75,12 @@ void RungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_stage_derivat
 
     //solve the system's right hand side
     this->dg->assemble_residual(); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*k_j) + dt * a_ii * u^(istage)))
-
+    std::ofstream rhs_file("strong_rhs.txt");
+    for(unsigned int i = 0; i < this->dg->right_hand_side.size(); i++) {
+        rhs_file << this->dg->right_hand_side[i] << std::endl;
+    }
+    rhs_file.close();
+    //this->dg->right_hand_side.print(rhs_file);
     if(this->all_parameters->use_inverse_mass_on_the_fly){
         this->dg->apply_inverse_global_mass_matrix(this->dg->right_hand_side, this->rk_stage[istage]); //rk_stage[istage] = IMM*RHS = F(u_n + dt*sum(a_ij*k_j))
     } else{

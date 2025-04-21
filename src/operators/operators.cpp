@@ -863,68 +863,94 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
     assert(row_map.SameAs(input_mat2.RowMap()));
     assert(domain_map.SameAs(input_mat2.DomainMap()));
     assert(row_map.SameAs(output_mat.RowMap()));
-    //output_mat.ColMap().Print(std::cout);
+    //input_mat1.Print(std::cout);
     // Pointers for data extraction
-    double *values1 = new double [row_map.MaxElementSize()];
-    int *indices1 = new int [row_map.MaxElementSize()];
+    const int length = input_mat1.GlobalMaxNumEntries();
+    std::vector<double> values1(length);
+    std::vector<int> indices1(length);
 
-    double *values2= new double [row_map.MaxElementSize()];
-    int *indices2= new int [row_map.MaxElementSize()];
+    std::vector<double> values2(length);
+    std::vector<int> indices2(length);
 
     int NumEntries1;
     int NumEntries2;
-    int error = 0;
+    //int error = 0;
     for (int local_row_idx = 0; local_row_idx < row_map.NumMyElements(); local_row_idx++) {
-        // Extracts row from Matrix
-        input_mat1.ExtractMyRowView(local_row_idx,NumEntries1,values1,indices1);
-        input_mat2.ExtractMyRowView(local_row_idx,NumEntries2,values2,indices2);
-        // Create a map (python dict) to get the indices that appear twice
-        int new_Size = 0;
-        std::map<int,int> shared_index_map;
-        std::map<int,int> index_map1;
-        std::map<int,int> index_map2;
-        // Add all of indicies from input_mat1
-        //std::cout << "1nd Index: " << std::endl;
-        for(int i=0;i<NumEntries1;i++) {
-            //std::cout << "Index: " << indices1[i] << " Value: " << values1[i] << std::endl;
-            shared_index_map.insert({indices1[i],1});
-            index_map1.insert({indices1[i],i});
-        }
-        // Add all of indices from input_mat2, if they already exist, the value will take 2
-        //std::cout << "2nd Index: " << std::endl;
-        for(int i=0;i<NumEntries2;i++) {
-            //std::cout << "Index: " << indices2[i] << " Value: " << values2[i] << std::endl;
-            shared_index_map.try_emplace(indices2[i],0);
-            shared_index_map[indices2[i]]++;
-            index_map2.insert({indices2[i],i});
-            if (shared_index_map[indices2[i]] == 2) new_Size++;
-        }
-        // Create new pointers to insert into output_mat
-        double *new_values = new double [new_Size];
-        int *new_indices = new int [new_Size];
-        int new_values_counter = 0;
-
-        // Go through the map, if the value is 2 at the index, then add the multiplication to the pointers
-        for(auto it = shared_index_map.begin(); it != shared_index_map.end(); it++) {
-            if (it->second == 2) {
-                new_values[new_values_counter] = values1[index_map1[it->first]]*values2[index_map2[it->first]];
-                new_indices[new_values_counter] = it->first;
-                //std::cout << "Index: " << new_indices[new_values_counter] << " Value: " << new_values[new_values_counter] << std::endl;
-                new_values_counter++;
+        //     // Extracts row from Matrix
+        //     input_mat1.ExtractGlobalRowCopy(local_row_idx,length,NumEntries1,values1,indices1);
+        //     input_mat2.ExtractGlobalRowCopy(local_row_idx,length,NumEntries2,values2,indices2);
+        //     // Create a map (python dict) to get the indices that appear twice
+        //     int new_Size = 0;
+        //     std::map<int,int> shared_index_map;
+        //     std::map<int,int> index_map1;
+        //     std::map<int,int> index_map2;
+        //     // Add all of indicies from input_mat1
+        //     //std::cout << "1nd Index: " << std::endl;
+        //     for(int i=0;i<NumEntries1;i++) {
+        //         //std::cout << "Index: " << indices1[i] << " Value: " << values1[i] << std::endl;
+        //         shared_index_map.insert({indices1[i],1});
+        //         index_map1.insert({indices1[i],i});
+        //     }
+        //     // Add all of indices from input_mat2, if they already exist, the value will take 2
+        //     //std::cout << "2nd Index: " << std::endl;
+        //     for(int i=0;i<NumEntries2;i++) {
+        //         //std::cout << "Index: " << indices2[i] << " Value: " << values2[i] << std::endl;
+        //         shared_index_map.try_emplace(indices2[i],0);
+        //         shared_index_map[indices2[i]]++;
+        //         index_map2.insert({indices2[i],i});
+        //         if (shared_index_map[indices2[i]] == 2) new_Size++;
+        //     }
+        //     // Create new pointers to insert into output_mat
+        //     double *new_values = new double [new_Size];
+        //     int *new_indices = new int [new_Size];
+        //     int new_values_counter = 0;
+        //
+        //     // Go through the map, if the value is 2 at the index, then add the multiplication to the pointers
+        //     for(auto it = shared_index_map.begin(); it != shared_index_map.end(); it++) {
+        //         if (it->second == 2) {
+        //             new_values[new_values_counter] = values1[index_map1[it->first]]*values2[index_map2[it->first]];
+        //             new_indices[new_values_counter] = it->first;
+        //             //std::cout << "Index: " << new_indices[new_values_counter] << " Value: " << new_values[new_values_counter] << std::endl;
+        //             new_values_counter++;
+        //         }
+        //     }
+        //     error += output_mat.InsertGlobalValues(local_row_idx,new_Size,new_values,new_indices);
+        //
+        //     //std::cout << error << std::endl;
+        //     //delete [] new_values;
+        //     //delete [] new_indices;
+        //
+        // }
+        // // Delete raw pointers
+        // // delete[] values1;
+        // // delete[] indices1;
+        // // delete[] values2;
+        // // delete[] indices2;
+        input_mat1.ExtractGlobalRowCopy(local_row_idx,length,NumEntries1,values1.data(),indices1.data());
+        input_mat2.ExtractGlobalRowCopy(local_row_idx,length,NumEntries2,values2.data(),indices2.data());
+        const int lower_entries = std::min(NumEntries1,NumEntries2);
+        int idx1 = 0;
+        int idx2 = 0;
+        int new_value_length = 0;
+        std::vector<double> new_values(lower_entries);
+        std::vector<int> new_indices(lower_entries);
+        while(idx1 < NumEntries1 && idx2 < NumEntries2){
+            if (indices1[idx1] == indices2[idx2]) {
+                new_values[new_value_length] = values1[idx1] * values2[idx2];
+                new_indices[new_value_length] = indices1[idx1];
+                new_value_length++;
+                idx1++;
+                idx2++;
+            } else if (indices1[idx1] < indices2[idx2]) {
+                idx1++;
+            } else {
+                idx2++;
             }
         }
-        error += output_mat.InsertGlobalValues(local_row_idx,new_Size,new_values,new_indices);
+        output_mat.InsertGlobalValues(local_row_idx,new_value_length,new_values.data(),new_indices.data());
 
-        //std::cout << error << std::endl;
-        //delete [] new_values;
-        //delete [] new_indices;
 
     }
-    // Delete raw pointers
-    // delete[] values1;
-    // delete[] indices1;
-    // delete[] values2;
-    // delete[] indices2;
     output_mat.FillComplete(domain_map,row_map);
 
 }
@@ -1427,6 +1453,26 @@ dealii::FullMatrix<double> local_mass<dim,n_faces,real>::build_dim_mass_matrix(
         }
     }
     return mass_matrix_dim;
+}
+
+template <int dim, int n_faces, typename real>
+dealii::FullMatrix<double> local_mass<dim,n_faces,real>::build_hyper_volume_operator(
+        const basis_functions<dim,n_faces,real> &basis_1D,
+        const dealii::Quadrature<dim> &quadrature,
+        const std::vector<double> &weight)
+{
+    const unsigned int n_quad_pts = quadrature.size();
+    dealii::FullMatrix<double>  basis(n_quad_pts);
+    basis = this->tensor_product(basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
+    dealii::FullMatrix<double> W(weight.size());
+    for (unsigned int i =0; i < weight.size(); i++) {
+        W.set(i,i,weight[i]);
+    }
+    dealii::FullMatrix<double> int_step(weight.size());
+    dealii::FullMatrix<double> mass_no_tensor(weight.size());
+    basis.Tmmult(int_step,W);
+    int_step.mmult(mass_no_tensor,basis);
+    return mass_no_tensor;
 }
 
 template <int dim, int n_faces, typename real>  

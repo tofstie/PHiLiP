@@ -1254,7 +1254,10 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
                 dealii::FullMatrix<real> divergence_ref_flux_Hadamard_product(n_quad_pts, n_quad_pts_1D);
                 flux_basis.Hadamard_product(flux_basis_stiffness_skew_symm_oper_sparse[ref_dim], conv_ref_2pt_flux_at_q[istate][ref_dim], divergence_ref_flux_Hadamard_product); 
                 //char zero = '0';
-                //divergence_ref_flux_Hadamard_product.print_formatted(std::cout, 3, true, 0, &zero ,1.,0.);
+                // conv_ref_2pt_flux_at_q[istate][ref_dim].print_formatted(std::cout, 3, true, 0, &zero ,1.,0.);
+                // flux_basis_stiffness_skew_symm_oper_sparse[0].print_formatted(std::cout, 3,true, 0, &zero,1.,0.);
+                // divergence_ref_flux_Hadamard_product.print_formatted(std::cout, 3, true, 0, &zero ,1.,0.);
+
                 //Hadamard product times the vector of ones.
                 for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
                     if(ref_dim == 0){
@@ -2432,6 +2435,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
             flux_basis_int.Hadamard_product(surf_oper_sparse_int, 
                                             surface_ref_2pt_flux_int[istate], 
                                             surface_ref_2pt_flux_int_Hadamard_with_surf_oper);
+
             dealii::FullMatrix<real> surface_ref_2pt_flux_ext_Hadamard_with_surf_oper(n_face_quad_pts, n_quad_pts_1D_ext);
             flux_basis_ext.Hadamard_product(surf_oper_sparse_ext, 
                                             surface_ref_2pt_flux_ext[istate], 
@@ -3182,7 +3186,7 @@ void DGStrong<dim,nstate,real,MeshType>::allocate_dual_vector()
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy()
+void DGStrong<dim,nstate,real,MeshType>::calculate_global_entropy(bool /*use_quad_entropy*/)
 {
     this->global_entropy.reinit(this->solution);
     std::array<dealii::LinearAlgebra::distributed::Vector<double>,dim> location;

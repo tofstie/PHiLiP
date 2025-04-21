@@ -84,12 +84,12 @@ int main (int argc, char * argv[])
     for(unsigned int poly_degree=1; poly_degree<4; poly_degree++){
 
         const unsigned int n_dofs = nstate * pow(poly_degree+1,dim);
-        dealii::QGauss<dim> vol_quad_dim (poly_degree+1);
+        dealii::QGaussLobatto<dim> vol_quad_dim (poly_degree+1);
         const dealii::FE_DGQ<dim> fe_dim(poly_degree);
         const dealii::FESystem<dim,dim> fe_system_dim(fe_dim, nstate);
 
-        dealii::QGauss<dim> quad_dimD (poly_degree+1);
-        dealii::QGauss<1> quad_1D (poly_degree+1);
+        dealii::QGaussLobatto<dim> quad_dimD (poly_degree+1);
+        dealii::QGaussLobatto<1> quad_1D (poly_degree+1);
         dealii::QGauss<0> face_quad1D (poly_degree+1);
         const dealii::FE_DGQ<1> fe(poly_degree);
         const dealii::FESystem<1,1> fe_system(fe, nstate);
@@ -97,12 +97,14 @@ int main (int argc, char * argv[])
         PHiLiP::OPERATOR::vol_integral_basis<dim,2*dim,real> vol_int_1D(nstate, poly_degree, 1);
         PHiLiP::OPERATOR::local_basis_stiffness<dim,2*dim,real> stiffess_1D(nstate, poly_degree, 1,true);
         PHiLiP::OPERATOR::local_mass<dim,2*dim,real> mass_1D(nstate,poly_degree,1);
+        PHiLiP::OPERATOR::face_integral_basis<dim,2*dim,real> face_integral_1D(nstate, poly_degree,1);
         mass_1D.build_1D_volume_operator(fe,quad_1D);
         basis_1D.build_1D_volume_operator(fe, quad_1D);
         basis_1D.build_1D_surface_operator(fe, face_quad1D);
         basis_1D.build_1D_gradient_operator(fe, quad_1D);
         vol_int_1D.build_1D_volume_operator(fe, quad_1D);
         stiffess_1D.build_1D_volume_operator(fe, quad_1D);
+        face_integral_1D.build_1D_surface_operator(fe, face_quad1D);
         dealii::FullMatrix<double> basis_dim(n_dofs);
         basis_dim = basis_1D.tensor_product(basis_1D.oneD_grad_operator, basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
         dealii::FullMatrix<double>  basis(n_dofs/nstate);
@@ -130,16 +132,16 @@ int main (int argc, char * argv[])
         dealii::FullMatrix<double> Qy(n_dofs/nstate);
 
         Qx = stiffess_1D.tensor_product(stiffess_1D.oneD_skew_symm_vol_oper,W_1d,W_1d);
-        Qy = stiffess_1D.tensor_product(W_1d,stiffess_1D.oneD_skew_symm_vol_oper,W_1d);
+        Qy = stiffess_1D.tensor_product(W_1d,stiffess_1D.oneD_vol_operator,W_1d);
         dealii::FullMatrix<double> QxminusQxt(Qx);
         QxminusQxt.Tadd(-1,Qx);
         dealii::FullMatrix<double> QyminusQyt(Qx);
         QyminusQyt.Tadd(-1,Qy);
-        dealii::FullMatrix<double> FaceTerm(n_dofs/nstate);
+        dealii::FullMatrix<double> FaceTerm(n_dofs/nstate,n_dofs/nstate);
         for (unsigned int j =0; j < weights_1D.size(); j++) {
             for (unsigned int i =0; i < 2; i++) {
                 std::cout << " Face i: " << i << std::endl;
-                FaceTerm = basis_1D.tensor_product(basis_1D.oneD_surf_operator[i],basis_1D.oneD_surf_operator[i],basis_1D.oneD_surf_operator[i]);
+                FaceTerm = basis_1D.tensor_product(face_integral_1D.oneD_surf_operator[i],face_integral_1D.oneD_surf_operator[i],face_integral_1D.oneD_surf_operator[i]);
                 FaceTerm *= weights_1D[j] * pow(-1.,i+1);
                 FaceTerm.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
             }

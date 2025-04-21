@@ -476,11 +476,10 @@ public:
         const std::vector<double> &det_Jac,
         const std::vector<double> &quad_weights);
 
-    void build_hyper_volume_operator(
-        const dealii::FESystem<1,1> &finite_element,
-        const dealii::Quadrature<1> &quadrature,
-        const std::vector<double> &weight
-        );
+    dealii::FullMatrix<double> build_hyper_volume_operator(
+        const basis_functions<dim,n_faces,real> &basis_1D,
+        const dealii::Quadrature<dim> &quadrature,
+        const std::vector<double> &weight);
 };
 
 ///Local stiffness matrix without jacobian dependence.

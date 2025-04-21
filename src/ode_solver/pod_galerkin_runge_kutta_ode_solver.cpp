@@ -66,15 +66,15 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
 
         Epetra_Vector epetra_rhs(Epetra_DataAccess::Copy, epetra_test_basis->RowMap(), this->dg->right_hand_side.begin()); // Flip to range map?
         //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
-        //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
+        std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(istage)+ ".txt");
         dealii::LinearAlgebra::distributed::Vector<double> rhs = this->dg->right_hand_side;
-        //print_dealii(dealii_rhs,rhs);
+        print_dealii(dealii_rhs,rhs);
         //std::ofstream rhs_file("rhs_file_"+ std::to_string(rank)+ ".txt");
         //epetra_rhs.Print(rhs_file);
         Epetra_Vector epetra_reduced_rhs(epetra_test_basis->DomainMap());
         epetra_test_basis->Multiply(true,epetra_rhs,epetra_reduced_rhs);
-        //std::ofstream reduced_rhs_file("reduced_rhs_file_"+ std::to_string(rank)+ ".txt");
-        //epetra_reduced_rhs.Print(reduced_rhs_file);
+        std::ofstream reduced_rhs_file("reduced_rhs_file_"+ std::to_string(istage)+ ".txt");
+        epetra_reduced_rhs.Print(reduced_rhs_file);
         // Creating Linear Problem to find stage
         Epetra_Vector epetra_rk_stage_i(epetra_reduced_lhs->DomainMap()); // Ensure this is correct as well, since LHS is not transpose might need to be rangeMap
         Epetra_LinearProblem linearProblem(epetra_reduced_lhs.get(), &epetra_rk_stage_i, &epetra_reduced_rhs);
@@ -87,9 +87,8 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
         epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, this->reduced_rk_stage[istage]);
         this->reduced_rk_stage[istage] = dealii_reduced_stage_i;
     }
-    //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
-    //std::ofstream reduced_file("reduced_file_"+ std::to_string(rank)+ "_stage_"+std::to_string(istage)+".txt");
-    //print_dealii(reduced_file,this->reduced_rk_stage[istage]);
+    std::ofstream reduced_file("reduced_file_"+ std::to_string(istage)+ "_stage_"+std::to_string(istage)+".txt");
+    print_dealii(reduced_file,this->reduced_rk_stage[istage]);
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>

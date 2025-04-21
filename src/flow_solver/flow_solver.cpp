@@ -168,11 +168,15 @@ FlowSolver<dim, nstate>::FlowSolver(
             } else if (all_param.hyper_reduction_param.hyper_reduction_type == "Cubature") {
                 auto ode_solver_type = ode_param.ode_solver_type;
                 this->dg->evaluate_hyper_mass_matrices(false);
+
                 HyperReduction::AssembleGreedyRes<dim,nstate> hyper_reduction(&all_param, parameter_handler, this->dg, pod, ode_solver_type);
                 hyper_reduction.build_weights();
                 std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> pod_basis = pod->getTestBasis();
                 Eigen::MatrixXd basis = epetra_to_eig_matrix(pod_basis->trilinos_matrix());
                 hyper_reduction.build_chan_target(basis);
+                std::cout << "Tolerance : " << pod->hyper_reduction_tolerance << std::endl;
+                int temp_int;
+                std::cin >> temp_int;
                 hyper_reduction.build_problem();
                 dealii::LinearAlgebra::distributed::Vector<double> weights = hyper_reduction.final_weights;
                 std::ofstream outfile("Weights_FS_cube.txt");

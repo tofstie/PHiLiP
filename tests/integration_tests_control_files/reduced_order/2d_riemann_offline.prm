@@ -5,7 +5,7 @@
 set dimension = 2
 set run_type = integration_test
 set pde_type = euler
-set test_type = pod_unsteady
+set test_type = unsteady_reduced_order
 
 # DG formulation
 set use_weak_form = false
@@ -28,7 +28,7 @@ set two_point_num_flux_type = CH
 subsection ODE solver
   set ode_output = verbose
   set print_iteration_modulo = 5
-  set ode_solver_type = pod_galerkin_rk_solver 
+  set ode_solver_type = pod_galerkin_runge_kutta
   set runge_kutta_method = rk4_ex
   set output_solution_every_x_steps = 1
 end
@@ -40,14 +40,14 @@ end
 
 subsection flow_solver
   set flow_case_type = riemann_problem
-  set poly_degree = 0
+  set poly_degree = 1
   set final_time = 0.25
-  set courant_friedrichs_lewy_number = 0.03125
+  set courant_friedrichs_lewy_number = 0.125
   set unsteady_data_table_filename = riemann_problem_time_table
   subsection grid
     set grid_left_bound = -1
     set grid_right_bound = 1
-    set number_of_grid_elements_per_dimension = 128
+    set number_of_grid_elements_per_dimension = 32
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
   #set output_restart_files = true
@@ -60,9 +60,9 @@ end
 
 # Reduced Order Model
 subsection reduced order
-    set output_snapshot_every_x_timesteps = 4
+    set output_snapshot_every_x_timesteps = 1
     set path_to_search = /home/tyson/Codes/PHiLiP/build_release
     set entropy_variables_in_snapshots = true
     set adaptation_tolerance = 0.000003
-    set number_nodal_modes = 100
+    set number_modes = 50
 end

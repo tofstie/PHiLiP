@@ -36,6 +36,8 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
     pcout << "Searching files..." << std::endl;
     if(dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
         //getPODBasisFromSnapshots();
+
+
         if(dg->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver) {
             getHyperEntropyPODBasisFromSnapshots();
         }
@@ -615,10 +617,10 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     calculatePODBasis(snapshotMatrix, reference_type);
     //loadPOD();
     //enrichPOD();
-
+    quadToDofPOD();
     const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(mpi_comm);
     std::ofstream file("Entropy_snapshot_"+std::to_string(rank)+".txt");
-    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file.is_open()){
         file << snapshotMatrix.format(CSVFormat);
     }
@@ -657,9 +659,9 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
         const int current_cell_index = current_cell->active_cell_index();
         const int n_quad_pts_inner = this->dg->volume_quadrature_collection[fe_index_curr_cell].size();
         for(int iquad = 0; iquad < n_quad_pts_inner; ++iquad) {
-            this->dg->quad_to_dof.insert({iquad+current_cell_index*n_quad_pts_inner,current_dofs_indices[n_quad_pts_inner*4-iquad-1]});
+            this->dg->quad_to_dof.insert({iquad+current_cell_index*n_quad_pts_inner,current_dofs_indices[n_quad_pts_inner*nstate+iquad-n_quad_pts_inner]});
             for(int istate = 0; istate < nstate; istate++){
-                this->dg->dofs_to_quad.insert({current_dofs_indices[n_quad_pts_inner*4-iquad-1-istate*n_quad_pts_inner],iquad+current_cell_index*n_quad_pts_inner});
+                this->dg->dofs_to_quad.insert({current_dofs_indices[n_quad_pts_inner*nstate+iquad-n_quad_pts_inner-istate*n_quad_pts_inner],iquad+current_cell_index*n_quad_pts_inner});
             }
         }
     }
@@ -870,9 +872,46 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
     calculatePODBasis(HypersnapshotMatrix, reference_type);
     //loadPOD();
     //enrichPOD();
-
-
     return !file_found;
+}
+
+template<int dim>
+void OfflinePOD<dim>::quadToDofPOD() {
+    const Epetra_MpiComm comm (MPI_COMM_WORLD);
+    const Epetra_Map row_map = this->basis->trilinos_matrix().RowMap();
+    const Epetra_Map col_map = this->basis->trilinos_matrix().ColMap();
+    const Epetra_Map domain_map = this->basis->trilinos_matrix().DomainMap();
+
+    //const int rows_dofs = this->basis->m();
+    const int cols_dofs = this->basis->n();
+    const int rows_quads = this->Vq->m();
+    const int cols_quads = this->Vq->n();
+    const Epetra_Map new_domain_map(cols_dofs*this->dg->nstate,0,comm);
+    Epetra_CrsMatrix Vdof(Epetra_DataAccess::Copy,row_map,new_domain_map,cols_dofs*this->dg->nstate);
+    const int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
+    std::vector<double> values(cols_quads);
+    std::vector<int> indices(cols_quads);
+    int NumEntries = 0;
+    for(int row = 0; row < rows_quads; row++) {
+        this->Vq->trilinos_matrix().ExtractGlobalRowCopy(row,cols_quads,NumEntries,values.data(),indices.data());
+        const int dof_row = this->dg->quad_to_dof[row];
+        std::vector<int> istate_indices(indices);
+        for(int istate = 0; istate < dim+2;istate++) {
+            const int dof_row_istate = dof_row + (istate)*n_quad_pts;
+            Vdof.InsertGlobalValues(dof_row_istate,NumEntries,values.data(),istate_indices.data());
+            std::for_each(istate_indices.begin(),istate_indices.end(),[cols_quads](int &i){i+=cols_quads;});
+
+        }
+    }
+    Vdof.FillComplete(new_domain_map,row_map);
+    Eigen::MatrixXd vdof_eigen = epetra_to_eig_matrix(Vdof);
+    std::ofstream vdof_file("Vdof.txt");
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    if (vdof_file.is_open()){
+        vdof_file << vdof_eigen.format(CSVFormat);
+    }
+    vdof_file.close();
+    this->basis->reinit(Vdof);
 }
 
 template<int dim>

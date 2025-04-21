@@ -66,7 +66,7 @@ int HyperReductionDG<dim,nstate>::run_test() const {
     Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,dg->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
     Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,dg->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
     Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,dg->global_mass_matrix.trilinos_matrix().ColMap().MaxElementSize());
-    dg->construct_global_Q(Qx,Qy,Qz,true);
+    dg->construct_global_Q(Qx,Qy,Qz,false);
     Qx.FillComplete(domain_map,global_map);
     Qy.FillComplete(domain_map,global_map);
     Qz.FillComplete(domain_map,global_map);

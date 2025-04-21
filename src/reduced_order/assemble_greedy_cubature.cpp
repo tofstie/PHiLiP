@@ -45,7 +45,7 @@ AssembleGreedyCubature<dim,nstate>::AssembleGreedyCubature(const PHiLiP::Paramet
 {
     b = b_input;
     std::ofstream file("V_target.txt");
-    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file.is_open()){
         file << V_target.format(CSVFormat);
     }

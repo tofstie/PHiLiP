@@ -1,5 +1,6 @@
 #include<limits>
 #include<fstream>
+#include <filesystem>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/tensor.h>
 
@@ -2178,7 +2179,6 @@ void DGBase<dim,real,MeshType>::evaluate_mass_matrices (bool do_inverse_mass_mat
         if (!cell->is_locally_owned()) continue;
 
         const bool Cartesian_element = (cell->manifold_id() == dealii::numbers::flat_manifold_id);
-
         const unsigned int fe_index_curr_cell = cell->active_fe_index();
         const unsigned int curr_grid_degree   = high_order_grid->fe_system.tensor_degree();//in the future the metric cell's should store a local grid degree. currently high_order_grid dof_handler_grid doesn't have that capability
 
@@ -2220,7 +2220,7 @@ void DGBase<dim,real,MeshType>::evaluate_mass_matrices (bool do_inverse_mass_mat
             const unsigned int igrid_node = index_renumbering[ishape];
             mapping_support_points[istate][igrid_node] = val; 
         }
-
+        basis.build_1D_volume_operator(oneD_fe_collection_1state[fe_index_curr_cell], oneD_quadrature_collection[fe_index_curr_cell]);
         //get determinant of Jacobian
         OPERATOR::metric_operators<real, dim, 2*dim> metric_oper(nstate, fe_index_curr_cell, curr_grid_degree);
         metric_oper.build_determinant_volume_metric_Jacobian(
@@ -2248,17 +2248,17 @@ void DGBase<dim,real,MeshType>::evaluate_mass_matrices (bool do_inverse_mass_mat
             deriv_p);
         evaluate_no_jacobian_mass_matrix(
             Cartesian_element,
-            do_inverse_mass_matrix, 
-            fe_index_curr_cell, 
+            true,
+            fe_index_curr_cell,
             curr_grid_degree,
-            n_quad_pts, 
-            n_dofs_cell, 
+            n_quad_pts,
+            n_dofs_cell,
             dofs_indices,
-            metric_oper, 
-            basis, 
-            reference_mass_matrix, 
-            reference_FR, 
-            reference_FR_aux, 
+            metric_oper,
+            basis,
+            reference_mass_matrix,
+            reference_FR,
+            reference_FR_aux,
             deriv_p);
     }//end of cell loop
 
@@ -2291,9 +2291,6 @@ void DGBase<dim,real,MeshType>::evaluate_hyper_mass_matrices (bool do_inverse_ma
 
     using FR_Aux_enum = Parameters::AllParameters::Flux_Reconstruction_Aux;
     const FR_Aux_enum FR_Type_Aux = this->all_parameters->flux_reconstruction_aux_type;
-
-    // flag for energy tests
-    const bool use_energy = this->all_parameters->use_energy;
 
     // Mass matrix sparsity pattern
     locally_owned_quads_dist.clear();
@@ -2413,6 +2410,21 @@ void DGBase<dim,real,MeshType>::evaluate_hyper_mass_matrices (bool do_inverse_ma
                 reference_mass_matrix,
                 reference_FR,
                 deriv_p);
+            evaluate_local_metric_dependent_hyper_mass_matrix_and_set_in_global_mass_matrix(
+                Cartesian_element,
+                do_inverse_mass_matrix,
+                fe_index_curr_cell,
+                current_cell_index,
+                n_quad_pts,
+                n_dofs_cell,
+                dofs_indices,
+                metric_oper,
+                basis,
+                reference_mass_matrix,
+                reference_FR,
+                reference_FR_aux,
+                deriv_p);
+
         }else {
             evaluate_local_metric_dependent_mass_matrix_and_set_in_quad_mass_matrix(
                 Cartesian_element,
@@ -2431,23 +2443,14 @@ void DGBase<dim,real,MeshType>::evaluate_hyper_mass_matrices (bool do_inverse_ma
         }
     }//end of cell loop
     //Compress global matrices.
+
+    global_quad_mass_matrix.compress(dealii::VectorOperation::insert);
     if (do_inverse_mass_matrix) {
-        global_quad_mass_matrix.compress(dealii::VectorOperation::insert);
-        if (use_auxiliary_eq){
-            global_inverse_mass_matrix_auxiliary.compress(dealii::VectorOperation::insert);
-        }
-        if (use_energy){//for split form energy
-            global_mass_matrix.compress(dealii::VectorOperation::insert);
-            if (use_auxiliary_eq){
-                global_mass_matrix_auxiliary.compress(dealii::VectorOperation::insert);
-            }
-        }
+        global_inverse_mass_matrix.compress(dealii::VectorOperation::insert);
     } else {
-        global_quad_mass_matrix.compress(dealii::VectorOperation::insert);
-        if (use_auxiliary_eq){
-            global_mass_matrix_auxiliary.compress(dealii::VectorOperation::insert);
-        }
+        global_mass_matrix.compress(dealii::VectorOperation::insert);
     }
+
     std::ofstream mass_file("quad_mass_matrix.txt");
     pcout << "Final size of POD: " << global_quad_mass_matrix.n() << std::endl;
     dealii::LAPACKFullMatrix<double> fullMatrix;
@@ -2472,7 +2475,7 @@ template<int dim, typename real, typename MeshType>
 void DGBase<dim,real,MeshType>::evaluate_no_jacobian_mass_matrix(const bool Cartesian_element,
     const bool do_inverse_mass_matrix, 
     const unsigned int poly_degree, 
-    const unsigned int /*curr_grid_degree*/, 
+    const unsigned int /*curr_cell_index*/,
     const unsigned int n_quad_pts, 
     const unsigned int n_dofs_cell, 
     const std::vector<dealii::types::global_dof_index> dofs_indices, 
@@ -2483,9 +2486,9 @@ void DGBase<dim,real,MeshType>::evaluate_no_jacobian_mass_matrix(const bool Cart
     OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
     OPERATOR::derivative_p<dim,2*dim,real> &deriv_p){
 
-    using FR_enum = Parameters::AllParameters::Flux_Reconstruction;
+ using FR_enum = Parameters::AllParameters::Flux_Reconstruction;
     const FR_enum FR_Type = this->all_parameters->flux_reconstruction_type;
-    
+
     using FR_Aux_enum = Parameters::AllParameters::Flux_Reconstruction_Aux;
     const FR_Aux_enum FR_Type_Aux = this->all_parameters->flux_reconstruction_aux_type;
 
@@ -2504,7 +2507,7 @@ void DGBase<dim,real,MeshType>::evaluate_no_jacobian_mass_matrix(const bool Cart
         if(this->all_parameters->use_weight_adjusted_mass == false){
             //check if Cartesian grid because we can factor out determinant of Jacobian
             if(Cartesian_element){
-                local_mass_matrix_state.add(1.,
+                local_mass_matrix_state.add(metric_oper.det_Jac_vol[0],
                                             reference_mass_matrix.tensor_product_state(
                                             1,
                                             reference_mass_matrix.oneD_vol_operator,
@@ -2514,7 +2517,7 @@ void DGBase<dim,real,MeshType>::evaluate_no_jacobian_mass_matrix(const bool Cart
                     local_mass_matrix_aux_state.add(1.0, local_mass_matrix_state);
                 }
                 if(FR_Type != FR_enum::cDG){
-                    local_mass_matrix_state.add(1.0,
+                    local_mass_matrix_state.add(metric_oper.det_Jac_vol[0],
                                                 reference_FR.build_dim_Flux_Reconstruction_operator(
                                                 reference_mass_matrix.oneD_vol_operator,
                                                 1,
@@ -2522,7 +2525,7 @@ void DGBase<dim,real,MeshType>::evaluate_no_jacobian_mass_matrix(const bool Cart
                 }
                 if(use_auxiliary_eq){
                     if(FR_Type_Aux != FR_Aux_enum::kDG){
-                        local_mass_matrix_aux_state.add(1.0,
+                        local_mass_matrix_aux_state.add(metric_oper.det_Jac_vol[0],
                                                         reference_FR_aux.build_dim_Flux_Reconstruction_operator(
                                                         reference_mass_matrix.oneD_vol_operator,
                                                         1,
@@ -2667,15 +2670,239 @@ void DGBase<dim,real,MeshType>::evaluate_no_jacobian_mass_matrix(const bool Cart
     }
 
     //set in global matrices
+
+    //set the global inverse mass matrix
+    global_inverse_no_jac_mass_matrix.set(dofs_indices, local_mass_matrix_inv);
+    //set the global inverse mass matrix for auxiliary equations
+    if(use_auxiliary_eq){
+        global_inverse_mass_matrix_auxiliary.set(dofs_indices, local_mass_matrix_aux_inv);
+    }
+
+}
+
+template <int dim, typename real, typename MeshType>
+void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_hyper_mass_matrix_and_set_in_global_mass_matrix(
+     const bool                                                       Cartesian_element,//Flag if cell is Cartesian
+     const bool                                                       do_inverse_mass_matrix,
+     const unsigned int                                               poly_degree,
+     const unsigned int                                               curr_cell_index,
+     const unsigned int                                               n_quad_pts,
+     const unsigned int                                               n_dofs_cell,
+     const std::vector<dealii::types::global_dof_index>               dofs_indices,
+     OPERATOR::metric_operators<real,dim,2*dim>                       &metric_oper,
+     OPERATOR::basis_functions<dim,2*dim,real>                        &basis,
+     OPERATOR::local_mass<dim,2*dim,real>                             &reference_mass_matrix,
+     OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real>     &reference_FR,
+     OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
+     OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p) {
+using FR_enum = Parameters::AllParameters::Flux_Reconstruction;
+    const FR_enum FR_Type = this->all_parameters->flux_reconstruction_type;
+
+    using FR_Aux_enum = Parameters::AllParameters::Flux_Reconstruction_Aux;
+    const FR_Aux_enum FR_Type_Aux = this->all_parameters->flux_reconstruction_aux_type;
+
+    dealii::FullMatrix<real> local_mass_matrix(n_dofs_cell);
+    dealii::FullMatrix<real> local_mass_matrix_inv(n_dofs_cell);
+    dealii::FullMatrix<real> local_mass_matrix_aux(n_dofs_cell);
+    dealii::FullMatrix<real> local_mass_matrix_aux_inv(n_dofs_cell);
+
+    const dealii::Quadrature<dim> &volume_quadrature = this->volume_quadrature_collection[poly_degree];
+    std::vector<double> weights(n_quad_pts);
+    for(unsigned int i = 0; i < n_quad_pts; i++) {
+        weights[i] = this->reduced_mesh_weights[curr_cell_index*n_quad_pts+i];
+    }
+    for(int istate=0; istate<nstate; istate++){
+        const unsigned int n_shape_fns = n_dofs_cell / nstate;
+        dealii::FullMatrix<real> local_mass_matrix_state(n_shape_fns);
+        dealii::FullMatrix<real> local_mass_matrix_inv_state(n_shape_fns);
+        dealii::FullMatrix<real> local_mass_matrix_aux_state(n_shape_fns);
+        dealii::FullMatrix<real> local_mass_matrix_aux_inv_state(n_shape_fns);
+        // compute mass matrix and inverse the standard way
+        if(this->all_parameters->use_weight_adjusted_mass == false){
+            //check if Cartesian grid because we can factor out determinant of Jacobian
+            if(Cartesian_element){
+                local_mass_matrix_state.add(metric_oper.det_Jac_vol[0],
+                                            reference_mass_matrix.build_hyper_volume_operator(basis,volume_quadrature,weights));
+                if(use_auxiliary_eq){
+                    local_mass_matrix_aux_state.add(1.0, local_mass_matrix_state);
+                }
+                if(FR_Type != FR_enum::cDG){
+                    local_mass_matrix_state.add(metric_oper.det_Jac_vol[0],
+                                                reference_FR.build_dim_Flux_Reconstruction_operator(
+                                                reference_mass_matrix.oneD_vol_operator,
+                                                1,
+                                                n_shape_fns));
+                }
+                if(use_auxiliary_eq){
+                    if(FR_Type_Aux != FR_Aux_enum::kDG){
+                        local_mass_matrix_aux_state.add(metric_oper.det_Jac_vol[0],
+                                                        reference_FR_aux.build_dim_Flux_Reconstruction_operator(
+                                                        reference_mass_matrix.oneD_vol_operator,
+                                                        1,
+                                                        n_shape_fns));
+                    }
+                }
+                if(do_inverse_mass_matrix){
+                    local_mass_matrix_inv_state.invert(local_mass_matrix_state);
+                    if(use_auxiliary_eq)
+                        local_mass_matrix_aux_inv_state.invert(local_mass_matrix_aux_state);
+                }
+            }
+            //if not a linear grid, we have to build the dim matrices on the fly
+            else{
+                //quadrature weights
+                const std::vector<real> &quad_weights = volume_quadrature_collection[poly_degree].get_weights();
+                local_mass_matrix_state = reference_mass_matrix.build_dim_mass_matrix(
+                                            1,
+                                            n_shape_fns, n_quad_pts,
+                                            basis,
+                                            metric_oper.det_Jac_vol,
+                                            quad_weights);
+
+                if(use_auxiliary_eq) local_mass_matrix_aux_state.add(1.0, local_mass_matrix_state);
+
+                if(FR_Type != FR_enum::cDG){
+                    dealii::FullMatrix<real> local_FR(n_shape_fns);
+                    local_FR = reference_FR.build_dim_Flux_Reconstruction_operator_directly(
+                                    1,
+                                    n_shape_fns,
+                                    deriv_p.oneD_vol_operator,
+                                    local_mass_matrix_state);
+                    local_mass_matrix_state.add(1.0, local_FR);
+                }
+                if(use_auxiliary_eq){
+                    if(FR_Type_Aux != FR_Aux_enum::kDG){
+                        dealii::FullMatrix<real> local_FR_aux(n_shape_fns);
+                        local_FR_aux = reference_FR_aux.build_dim_Flux_Reconstruction_operator_directly(
+                                        1,
+                                        n_shape_fns,
+                                        deriv_p.oneD_vol_operator,
+                                        local_mass_matrix_aux_state);
+                        local_mass_matrix_aux_state.add(1.0, local_FR_aux);
+                    }
+                }
+            }
+            if(do_inverse_mass_matrix){
+                local_mass_matrix_inv_state.invert(local_mass_matrix_state);
+                if(use_auxiliary_eq)
+                    local_mass_matrix_aux_inv_state.invert(local_mass_matrix_aux_state);
+            }
+        }
+        else{//do weight adjusted inverse
+        //Weight-adjusted framework based off Cicchino, Alexander, and Sivakumaran Nadarajah. "Nonlinearly Stable Split Forms for the Weight-Adjusted Flux Reconstruction High-Order Method: Curvilinear Numerical Validation." AIAA SCITECH 2022 Forum. 2022 for FR. For a DG background please refer to Chan, Jesse, and Lucas C. Wilcox. "On discretely entropy stable weight-adjusted discontinuous Galerkin methods: curvilinear meshes." Journal of Computational Physics 378 (2019): 366-393. Section 4.1.
+            //quadrature weights
+            const std::vector<real> &quad_weights = volume_quadrature_collection[poly_degree].get_weights();
+            std::vector<real> J_inv(n_quad_pts);
+            for(unsigned int iquad=0; iquad<n_quad_pts; iquad++){
+                J_inv[iquad] = 1.0 / metric_oper.det_Jac_vol[iquad];
+            }
+            dealii::FullMatrix<real> local_weighted_mass_matrix(n_shape_fns);
+            dealii::FullMatrix<real> local_weighted_mass_matrix_aux(n_shape_fns);
+            local_weighted_mass_matrix = reference_mass_matrix.build_dim_mass_matrix(
+                                                                    1,
+                                                                    n_shape_fns, n_quad_pts,
+                                                                    basis,
+                                                                    J_inv,
+                                                                    quad_weights);
+            if(use_auxiliary_eq)
+                local_weighted_mass_matrix_aux.add(1.0, local_weighted_mass_matrix);
+
+            if(FR_Type != FR_enum::cDG){
+                dealii::FullMatrix<real> local_FR(n_shape_fns);
+                local_FR = reference_FR.build_dim_Flux_Reconstruction_operator_directly(
+                                            1,
+                                            n_shape_fns,
+                                            deriv_p.oneD_vol_operator,
+                                            local_weighted_mass_matrix);
+                local_weighted_mass_matrix.add(1.0, local_FR);
+            }
+            //auxiliary weighted not correct and not yet implemented properly...
+            if(use_auxiliary_eq){
+                if(FR_Type_Aux != FR_Aux_enum::kDG){
+                    dealii::FullMatrix<real> local_FR_aux(n_shape_fns);
+                    local_FR_aux = reference_FR_aux.build_dim_Flux_Reconstruction_operator_directly(
+                                        1,
+                                        n_shape_fns,
+                                        deriv_p.oneD_vol_operator,
+                                        local_mass_matrix);
+                    local_weighted_mass_matrix_aux.add(1.0, local_FR_aux);
+                }
+            }
+            dealii::FullMatrix<real> ref_mass_dim(n_shape_fns);
+            ref_mass_dim = reference_mass_matrix.tensor_product_state(
+                                1,
+                                reference_mass_matrix.oneD_vol_operator,
+                                reference_mass_matrix.oneD_vol_operator,
+                                reference_mass_matrix.oneD_vol_operator);
+            if(FR_Type != FR_enum::cDG){
+                dealii::FullMatrix<real> local_FR(n_shape_fns);
+                local_FR = reference_FR.build_dim_Flux_Reconstruction_operator(
+                                reference_mass_matrix.oneD_vol_operator,
+                                1,
+                                n_shape_fns);
+                ref_mass_dim.add(1.0, local_FR);
+            }
+            dealii::FullMatrix<real> ref_mass_dim_inv(n_shape_fns);
+            ref_mass_dim_inv.invert(ref_mass_dim);
+            dealii::FullMatrix<real> temp(n_shape_fns);
+            ref_mass_dim_inv.mmult(temp, local_weighted_mass_matrix);
+            temp.mmult(local_mass_matrix_inv_state, ref_mass_dim_inv);
+            local_mass_matrix_state.invert(local_mass_matrix_inv_state);
+            if(use_auxiliary_eq){
+                dealii::FullMatrix<real> temp2(n_shape_fns);
+                ref_mass_dim_inv.mmult(temp2, local_weighted_mass_matrix_aux);
+                temp2.mmult(local_mass_matrix_aux_inv_state, ref_mass_dim_inv);
+                local_mass_matrix_aux_state.invert(local_mass_matrix_aux_inv_state);
+            }
+        }
+        //write the ONE state, dim sized mass matrices using symmetry into nstate, dim sized mass matrices.
+        for(unsigned int test_shape=0; test_shape<n_shape_fns; test_shape++){
+
+            const unsigned int test_index = istate * n_shape_fns + test_shape;
+
+            for(unsigned int trial_shape=test_shape; trial_shape<n_shape_fns; trial_shape++){
+                const unsigned int trial_index = istate * n_shape_fns + trial_shape;
+                local_mass_matrix[test_index][trial_index] = local_mass_matrix_state[test_shape][trial_shape];
+                local_mass_matrix[trial_index][test_index] = local_mass_matrix_state[test_shape][trial_shape];
+
+                local_mass_matrix_inv[test_index][trial_index] = local_mass_matrix_inv_state[test_shape][trial_shape];
+                local_mass_matrix_inv[trial_index][test_index] = local_mass_matrix_inv_state[test_shape][trial_shape];
+
+                if(use_auxiliary_eq){
+                    local_mass_matrix_aux[test_index][trial_index] = local_mass_matrix_aux_state[test_shape][trial_shape];
+                    local_mass_matrix_aux[trial_index][test_index] = local_mass_matrix_aux_state[test_shape][trial_shape];
+
+                    local_mass_matrix_aux_inv[test_index][trial_index] = local_mass_matrix_aux_inv_state[test_shape][trial_shape];
+                    local_mass_matrix_aux_inv[trial_index][test_index] = local_mass_matrix_aux_inv_state[test_shape][trial_shape];
+                }
+            }
+        }
+    }
+
+    //set in global matrices
     if (do_inverse_mass_matrix) {
         //set the global inverse mass matrix
-        global_inverse_no_jac_mass_matrix.set(dofs_indices, local_mass_matrix_inv);
+        global_inverse_mass_matrix.set(dofs_indices, local_mass_matrix_inv);
         //set the global inverse mass matrix for auxiliary equations
         if(use_auxiliary_eq){
             global_inverse_mass_matrix_auxiliary.set(dofs_indices, local_mass_matrix_aux_inv);
         }
+        //If an energy test, we also need to store the mass matrix to compute energy/entropy and conservation.
+        if (this->all_parameters->use_energy){//for split form energy
+            global_mass_matrix.set(dofs_indices, local_mass_matrix);
+            if(use_auxiliary_eq){
+                global_mass_matrix_auxiliary.set(dofs_indices, local_mass_matrix_aux);
+            }
+        }
+    } else {
+        //only store global mass matrix
+        //local_mass_matrix.print_formatted(std::cout,5,true,10,"0");
+        global_mass_matrix.set(dofs_indices, local_mass_matrix);
+        if(use_auxiliary_eq){
+            global_mass_matrix_auxiliary.set(dofs_indices, local_mass_matrix_aux);
+        }
     }
-    }
+}
 
 template<int dim, typename real, typename MeshType>
 void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_mass_matrix_and_set_in_global_mass_matrix(
@@ -3734,13 +3961,22 @@ void DGBase<dim, real, MeshType>::set_galerkin_basis(std::shared_ptr<Epetra_CrsM
     const int modes = basis->NumGlobalCols();
     Epetra_MpiComm comm(MPI_COMM_WORLD);
     Epetra_Map global_map(global_size,0,comm);
+    Epetra_Map domain_map = basis->DomainMap();
+    const int n_quad_pts = this->volume_quadrature_collection[this->all_parameters->flow_solver_param.poly_degree].size();
     // Construct Q
-    Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,inverse_mass_matrix.ColMap().MaxElementSize());
-    Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,inverse_mass_matrix.ColMap().MaxElementSize());
-    Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,inverse_mass_matrix.ColMap().MaxElementSize());
+    Epetra_CrsMatrix Qx(Epetra_DataAccess::Copy,global_map,n_quad_pts);
+    Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,n_quad_pts);
+    Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,n_quad_pts);
     // const unsigned int n_dofs_cell_estimate = this->fe_collection[this->all_parameters->flow_solver_param.poly_degree].dofs_per_cell;
     construct_global_Q(Qx,Qy,Qz,false);
     std::cout << "Constructed Global_Q" << std::endl;
+    Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Qx);
+    std::ofstream file("Qx_eig.txt");
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    if (file.is_open()){
+        file << Qx_eig.format(CSVFormat);
+    }
+    file.close();
     // Eigen::MatrixXd Qx_eigen = epetra_to_eig_matrix(Qx);
     // std::ofstream file("Qx_eigen.txt");
     // const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
@@ -3765,45 +4001,55 @@ void DGBase<dim, real, MeshType>::set_galerkin_basis(std::shared_ptr<Epetra_CrsM
         std::cout << "Next Matrix Mult" << std::endl;
         Epetra_CrsMatrix right_hand_test(Epetra_DataAccess::Copy,inverse_mass_matrix.RowMap(),modes);
         EpetraExt::MatrixMatrix::Multiply(inverse_mass_matrix,false,int_step,false,right_hand_test);
+        right_hand_test.FillComplete(domain_map, global_map);
         //Epetra_CrsMatrix
-        Epetra_Map input_domain_map(modes*2+1,0,comm);
-        Epetra_CrsMatrix input_into_svd_epetra(Epetra_DataAccess::Copy,basis->RowMap(),input_domain_map,modes*2+1);
+        Epetra_Map input_domain_map(modes*2,0,comm);
+        Epetra_CrsMatrix input_into_svd_epetra(Epetra_DataAccess::Copy,basis->RowMap(),input_domain_map,modes*2);
         std::cout << "Adding all this shit into the matrix" << std::endl;
-        double one = 1;
-        int zero = 0;
+        //double one = 1;
+        //int zero = 0;
         int num_entries;
-        double *values = new double[modes];
-        int *indices = new int[modes];
-
-
+        std::vector<double> values (modes);
+        std::vector<int> indices (modes);
         for (int i = 0; i < input_into_svd_epetra.NumGlobalRows(); i++) {
-
-
-            input_into_svd_epetra.InsertGlobalValues(i,1,&one,&zero);
-            basis->ExtractGlobalRowCopy(i,modes,num_entries,values,indices);
-            for (int j = 0; j < modes; j++) {
-                indices[j] += 1;
+            //input_into_svd_epetra.InsertGlobalValues(i,1,&one,&zero);
+            basis->ExtractGlobalRowCopy(i,modes,num_entries,values.data(),indices.data());
+            for (int j = 0; j < num_entries; j++) {
+                indices[j] += 0;
             }
-            input_into_svd_epetra.InsertGlobalValues(i,num_entries,values,indices);
-            right_hand_test.ExtractGlobalRowCopy(i,modes,num_entries,values,indices);
-            for (int j = 0; j < modes; j++) {
-                indices[j] += 1+modes;
+            input_into_svd_epetra.InsertGlobalValues(i,num_entries,values.data(),indices.data());
+            right_hand_test.ExtractGlobalRowCopy(i,modes,num_entries,values.data(),indices.data());
+            for (int j = 0; j < num_entries; j++) {
+                indices[j] += 0+modes;
             }
-            input_into_svd_epetra.InsertGlobalValues(i,num_entries,values,indices);
-
-
+            input_into_svd_epetra.InsertGlobalValues(i,num_entries,values.data(),indices.data());
         }
-        std::ofstream file2("Matrix_to_svd.txt");
-        input_into_svd_epetra.Print(file2);
-        file2.close();
+        const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
         input_into_svd_epetra.FillComplete(input_domain_map,basis->RowMap());
 
         std::cout << "SVD Matrix" << std::endl;
         Eigen::MatrixXd input_into_svd_eigen = epetra_to_eig_matrix(input_into_svd_epetra);
         std::cout << "SVD for real" << std::endl;
+        std::ofstream file2("Matrix_to_svd.txt");
+        if (file2.is_open()){
+            file2 << input_into_svd_eigen.format(CSVFormat);
+        }
+        file2.close();
         Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(input_into_svd_eigen);
-        MatrixXd test_basis = svd_one.matrixU();
-
+        VectorXd sing_values = svd_one.singularValues();
+        MatrixXd old_test_basis = svd_one.matrixU();
+        old_test_basis.conservativeResize(old_test_basis.rows(),old_test_basis.cols()+1);
+        old_test_basis.col(old_test_basis.cols()-1) = Eigen::VectorXd::Ones(old_test_basis.rows());
+        std::ofstream first_sing_file("first_singular_values.txt");
+        first_sing_file << sing_values.format(CSVFormat);
+        first_sing_file.close();
+        std::ofstream second_svd_matrix("second_matrix_to_svd.txt");
+        if (second_svd_matrix.is_open()){
+            second_svd_matrix << old_test_basis.format(CSVFormat);
+        }
+        second_svd_matrix.close();
+        Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_two(old_test_basis);
+        MatrixXd test_basis = svd_two.matrixU();
         Epetra_Map row_map = basis->RowMap();
         //Epetra_Map col_map((int)pod_basis.cols(),(int)pod_basis.cols(), 0, epetra_comm);
         Epetra_Map domain_map((int)test_basis.cols(), 0, comm);
@@ -3839,6 +4085,83 @@ void DGBase<dim, real, MeshType>::set_galerkin_basis(std::shared_ptr<Epetra_CrsM
         unsigned int precision = 16;
         char zero_test = 48;
         fullMatrix.print_formatted(mass_file, precision, true, 0,&zero_test);
+    }
+    //this->read_galerkin_basis();
+}
+
+template<int dim, typename real, typename MeshType>
+void DGBase<dim,real,MeshType>::read_galerkin_basis() {
+    std::string path = this->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
+    for(int idim = 0; idim < dim; idim++ ){
+        Eigen::MatrixXd vt_eigen;
+        std::vector<std::filesystem::path> files_in_directory;
+        std::copy(std::filesystem::directory_iterator(path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
+        std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
+
+        for (const auto & entry : files_in_directory) {
+            if(std::string(entry.filename()).std::string::find("vt_matlab_"+std::to_string(idim)) != std::string::npos){
+                pcout << "Processing " << entry << std::endl;
+                std::ifstream myfile(entry);
+                if(!myfile)
+                {
+                    pcout << "Error opening file." << std::endl;
+                    std::abort();
+                }
+                std::string line;
+                int rows = 0;
+                int cols = 0;
+                //First loop set to count rows and columns
+                while(std::getline(myfile, line)){ //for each line
+                    std::istringstream stream(line);
+                    std::string field;
+                    cols = 0;
+                    while (getline(stream, field,' ')){ //parse data values on each line
+                        if (field.empty()){ //due to whitespace
+                            continue;
+                        } else {
+                            cols++;
+                        }
+                    }
+                    rows++;
+                }
+
+                vt_eigen.conservativeResize(rows, vt_eigen.cols()+cols);
+
+                int row = 0;
+                myfile.clear();
+                myfile.seekg(0); //Bring back to beginning of file
+                //Second loop set to build solutions matrix
+                while(std::getline(myfile, line)){ //for each line
+                    std::istringstream stream(line);
+                    std::string field;
+                    int col = 0;
+                    while (getline(stream, field,' ')) { //parse data values on each line
+                        if (field.empty()) {
+                            continue;
+                        } else {
+                            vt_eigen(row, vt_eigen.cols()-cols+col) = std::stod(field); //This will work for however many solutions in each file
+                            col++;
+                        }
+                    }
+                    row++;
+                }
+                myfile.close();
+            }
+        }
+        Epetra_MpiComm comm(MPI_COMM_WORLD);
+        Epetra_Map row_map(this->galerkin_test_basis[idim]->RowMap());
+        Epetra_Map domain_map(this->galerkin_test_basis[idim]->DomainMap());
+        Epetra_CrsMatrix matlab_Vt(Epetra_DataAccess::Copy,row_map,vt_eigen.cols());
+        const int numMyElements = row_map.NumMyElements(); //Number of elements on the calling processor
+        for (int localRow = 0; localRow < numMyElements; ++localRow){
+            const int globalRow = row_map.GID(localRow);
+            for(int n = 0 ; n < vt_eigen.cols() ; n++){
+                double value = vt_eigen(globalRow, n);
+                matlab_Vt.InsertGlobalValues(globalRow, 1, &value, &n);
+            }
+        }
+        matlab_Vt.FillComplete(domain_map,row_map);
+        galerkin_test_basis[idim] = std::make_shared<Epetra_CrsMatrix>(matlab_Vt);
     }
 }
 template<int dim, typename real, typename MeshType>
@@ -3932,7 +4255,7 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     Eigen::VectorXd eigenvalues2 = eigensolver2.eigenvalues().real();
     //Eigen::MatrixXd eigenvectors2 = eigensolver2.eigenvectors().real();
     std::ofstream file("eigen_lhs"+std::to_string(idim)+".txt");
-    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file.is_open()){
         file << LHS_eigen.format(CSVFormat);
     }

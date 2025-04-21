@@ -264,11 +264,26 @@ public:
         OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
         OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
 
+    void evaluate_local_metric_dependent_hyper_mass_matrix_and_set_in_global_mass_matrix(
+         const bool                                                       Cartesian_element,//Flag if cell is Cartesian
+         const bool                                                       do_inverse_mass_matrix,
+         const unsigned int                                               poly_degree,
+         const unsigned int                                               curr_cell_index,
+         const unsigned int                                               n_quad_pts,
+         const unsigned int                                               n_dofs_cell,
+         const std::vector<dealii::types::global_dof_index>               dofs_indices,
+         OPERATOR::metric_operators<real,dim,2*dim>                       &metric_oper,
+         OPERATOR::basis_functions<dim,2*dim,real>                        &basis,
+         OPERATOR::local_mass<dim,2*dim,real>                             &reference_mass_matrix,
+         OPERATOR::local_Flux_Reconstruction_operator<dim,2*dim,real>     &reference_FR,
+         OPERATOR::local_Flux_Reconstruction_operator_aux<dim,2*dim,real> &reference_FR_aux,
+         OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
+
     void evaluate_no_jacobian_mass_matrix(
         const bool                                                       Cartesian_element,//Flag if cell is Cartesian
         const bool                                                       do_inverse_mass_matrix, 
         const unsigned int                                               poly_degree, 
-        const unsigned int                                               curr_grid_degree, 
+        const unsigned int                                               curr_cell_index,
         const unsigned int                                               n_quad_pts, 
         const unsigned int                                               n_dofs_cell, 
         const std::vector<dealii::types::global_dof_index>               dofs_indices, 
@@ -998,7 +1013,7 @@ public:
     virtual void set_use_auxiliary_eq() = 0;
 
     /// Calculates global entropy at quadrature nodes
-    virtual void calculate_global_entropy() = 0;
+    virtual void calculate_global_entropy(bool use_quad_entropy = false) = 0;
 
     /// Calculates Projection Matrix from POD for the ESROM
     virtual void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) = 0;
@@ -1013,6 +1028,9 @@ public:
     virtual void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x, dealii::LinearAlgebra::distributed::Vector<double> &location_y) = 0;
     /// Sets the galerkin basis
     void set_galerkin_basis(std::shared_ptr<Epetra_CrsMatrix> basis, bool compute_test_basis);
+
+    void read_galerkin_basis();
+
     /// Calculates the test projection matrix
     void set_test_projection_matrix(std::shared_ptr<Epetra_CrsMatrix> lhs_matrix, std::shared_ptr<Epetra_CrsMatrix> hyper_reduced_vt, int idim);
 
