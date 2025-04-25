@@ -865,17 +865,21 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
     assert(row_map.SameAs(output_mat.RowMap()));
     //input_mat1.Print(std::cout);
     // Pointers for data extraction
-    const int length = input_mat1.GlobalMaxNumEntries();
-    std::vector<double> values1(length);
-    std::vector<int> indices1(length);
+    const int length1 = input_mat1.GlobalMaxNumEntries();
+    std::vector<double> values1(length1);
+    std::vector<int> indices1(length1);
 
-    std::vector<double> values2(length);
-    std::vector<int> indices2(length);
+    const int length2 = input_mat2.GlobalMaxNumEntries();
+    std::vector<double> values2(length2);
+    std::vector<int> indices2(length2);
 
+    const int lower_entries = std::min(length1,length2);
+    std::vector<double> new_values(lower_entries);
+    std::vector<int> new_indices(lower_entries);
     int NumEntries1;
     int NumEntries2;
-    //int error = 0;
-    for (int local_row_idx = 0; local_row_idx < row_map.NumMyElements(); local_row_idx++) {
+    int error = 0;
+    for (int local_row_idx = 0; local_row_idx < row_map.NumGlobalPoints(); local_row_idx++) {
         //     // Extracts row from Matrix
         //     input_mat1.ExtractGlobalRowCopy(local_row_idx,length,NumEntries1,values1,indices1);
         //     input_mat2.ExtractGlobalRowCopy(local_row_idx,length,NumEntries2,values2,indices2);
@@ -926,14 +930,14 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
         // // delete[] indices1;
         // // delete[] values2;
         // // delete[] indices2;
-        input_mat1.ExtractGlobalRowCopy(local_row_idx,length,NumEntries1,values1.data(),indices1.data());
-        input_mat2.ExtractGlobalRowCopy(local_row_idx,length,NumEntries2,values2.data(),indices2.data());
-        const int lower_entries = std::min(NumEntries1,NumEntries2);
+
+        input_mat1.ExtractGlobalRowCopy(local_row_idx,length1,NumEntries1,values1.data(),indices1.data());
+        input_mat2.ExtractGlobalRowCopy(local_row_idx,length2,NumEntries2,values2.data(),indices2.data());
+
         int idx1 = 0;
         int idx2 = 0;
         int new_value_length = 0;
-        std::vector<double> new_values(lower_entries);
-        std::vector<int> new_indices(lower_entries);
+
         while(idx1 < NumEntries1 && idx2 < NumEntries2){
             if (indices1[idx1] == indices2[idx2]) {
                 new_values[new_value_length] = values1[idx1] * values2[idx2];
@@ -947,12 +951,13 @@ void SumFactorizedOperators<dim,n_faces,real>::Hadamard_product(
                 idx2++;
             }
         }
-        output_mat.InsertGlobalValues(local_row_idx,new_value_length,new_values.data(),new_indices.data());
-
+        if (new_value_length > 0) {
+            error += output_mat.InsertGlobalValues(local_row_idx,new_value_length,new_values.data(),new_indices.data());
+        }
 
     }
     output_mat.FillComplete(domain_map,row_map);
-
+    std::cout << "Insert Error: " << error << std::endl;
 }
 
 template <int dim, int n_faces, typename real>  

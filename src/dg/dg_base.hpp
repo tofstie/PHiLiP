@@ -310,7 +310,7 @@ public:
         OPERATOR::derivative_p<dim,2*dim,real>                           &deriv_p);
 
     void evaluate_local_metric_dependent_hyper_quad_mass_matrix_and_set_in_quad_mass_matrix(
-    const unsigned int current_cell_index,
+    const std::vector<dealii::types::global_dof_index> dofs_indices,
     const unsigned int n_quad_pts,
     const unsigned int poly_degree,
     OPERATOR::metric_operators<real,dim,2*dim> &metric_oper,
@@ -639,7 +639,7 @@ public:
      *  All the active cells must be traversed to ensure that the right hand side is correct.
      */
 
-    void virtual assemble_hyper_reduced_residual (Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) = 0;
+    void virtual assemble_hyper_reduced_residual (Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz, Epetra_CrsMatrix &BEtx) = 0;
     template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
     void assemble_cell_residual (
         const DoFCellAccessorType1 &current_cell,
@@ -1038,7 +1038,9 @@ public:
 
     virtual Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &hyper_Vt, const int idim) = 0;
 
-    virtual void calculate_off_diagonals_1D() = 0;
+
+
+    virtual Epetra_CrsMatrix calculate_hyper_reduced_Bx(Epetra_CrsMatrix &Vt, const int idim) = 0;
 
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;
@@ -1060,7 +1062,9 @@ public:
     /// ROM Projected Face Entropy
     dealii::LinearAlgebra::distributed::Vector<double> projected_face_entropy;
     /// Hyper-Reduction ECSW Nodal Projection
+    unsigned int number_global_boundaries;
 
+    dealii::LinearAlgebra::distributed::Vector<double> BExFB_term;
 }; // end of DGBase class
 
 } // PHiLiP namespace

@@ -647,7 +647,7 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
     int num_of_snapshots = 0;
     int global_quad_points = 0;
     int n_quad_pts = dg->volume_quadrature_collection[dg->all_parameters->flow_solver_param.poly_degree].size();
-
+    int total_quad_pts = this->dg->solution.size()/nstate;
     for (auto current_cell = this->dg->dof_handler.begin_active(); current_cell != this->dg->dof_handler.end(); ++current_cell) {
         if (!current_cell->is_locally_owned()) continue;
         const unsigned int fe_index_curr_cell = current_cell->active_fe_index();
@@ -659,9 +659,10 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
         const int current_cell_index = current_cell->active_cell_index();
         const int n_quad_pts_inner = this->dg->volume_quadrature_collection[fe_index_curr_cell].size();
         for(int iquad = 0; iquad < n_quad_pts_inner; ++iquad) {
-            this->dg->quad_to_dof.insert({iquad+current_cell_index*n_quad_pts_inner,current_dofs_indices[n_quad_pts_inner*nstate+iquad-n_quad_pts_inner]});
+            int current_quad_pt = total_quad_pts - (iquad+current_cell_index*n_quad_pts_inner) - 1;
+            this->dg->quad_to_dof.insert({current_quad_pt,current_dofs_indices[n_quad_pts_inner*nstate+iquad-n_quad_pts_inner]});
             for(int istate = 0; istate < nstate; istate++){
-                this->dg->dofs_to_quad.insert({current_dofs_indices[n_quad_pts_inner*nstate+iquad-n_quad_pts_inner-istate*n_quad_pts_inner],iquad+current_cell_index*n_quad_pts_inner});
+                this->dg->dofs_to_quad.insert({current_dofs_indices[n_quad_pts_inner*nstate+iquad-n_quad_pts_inner-istate*n_quad_pts_inner],current_quad_pt});
             }
         }
     }
@@ -786,15 +787,15 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
                 case energy_case:
                     val = energy(quad_num+i_quad,col);
 
-                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col) = val;
+                    HypersnapshotMatrix(quad_num+i_quad,col) = val;
                     break;
                 case density_case:
                     val = density(quad_num+i_quad,col);
-                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(istate)) = val;
+                    HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(istate)) = val;
                     break;
                 default:
                     val = momentum[istate-1](quad_num+i_quad,col);
-                    HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(istate)) = val;
+                    HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(istate)) = val;
                     break;
             }
             if(dg->solution.in_local_range(solution_num+istate*n_quad_pts+i_quad)){
@@ -842,13 +843,13 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
                     double val = entropy_vectors[m_proc][row-front_vector[m_proc]];
                     switch(istate){
                         case energy_case:
-                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*nstate) = val;
+                            HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*nstate) = val;
                             break;
                         case density_case:
-                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(nstate+istate)) = val;
+                            HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(nstate+istate)) = val;
                             break;
                         default:
-                            HypersnapshotMatrix(this->dg->dofs_to_quad[quad_num*nstate+i_quad],col+num_of_snapshots*(nstate+istate)) = val;
+                            HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(nstate+istate)) = val;
                             break;
                     }
                 }

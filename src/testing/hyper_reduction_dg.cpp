@@ -109,7 +109,7 @@ int HyperReductionDG<dim,nstate>::run_test() const {
 #endif
     dg->calculate_global_entropy();
     dg->projected_entropy = dg->global_entropy;
-    dg->calculate_convective_flux_matrix(Fx,Fy,Fz);
+    dg->calculate_convective_flux_matrix(Fx,Fy,Fz,Fx);
     Fx.FillComplete(Qx.DomainMap(),Qx.RowMap());
     Fy.FillComplete(Qy.DomainMap(),Qy.RowMap());
     Fz.FillComplete(Qz.DomainMap(),Qz.RowMap());

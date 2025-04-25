@@ -32,7 +32,7 @@ public:
     /// Allocate the dual vector for optimization.
     void allocate_dual_vector ();
 
-    void assemble_hyper_reduced_residual (Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz) override;
+    void assemble_hyper_reduced_residual (Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &Qtz, Epetra_CrsMatrix &BEtx) override;
 private:
     /** Evaluate the average penalty term at the face.
  *  For a cell with solution of degree p, and Hausdorff measure h,
@@ -382,10 +382,10 @@ public:
 
     void location2D(dealii::LinearAlgebra::distributed::Vector<double> &location_x,
     dealii::LinearAlgebra::distributed::Vector<double> &location_y) override;
-    void calculate_convective_flux_matrix(Epetra_CrsMatrix &Fx,Epetra_CrsMatrix &Fy,Epetra_CrsMatrix &Fz);
+    void calculate_convective_flux_matrix(Epetra_CrsMatrix &Fx,Epetra_CrsMatrix &Fy,Epetra_CrsMatrix &Fz, Epetra_CrsMatrix &FBx);
     void construct_global_Q(Epetra_CrsMatrix &Qx,Epetra_CrsMatrix &Qy,Epetra_CrsMatrix &Qz, bool skew_symmetric) override;
     Epetra_CrsMatrix calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &hyper_Vt, const int idim) override;
-    void calculate_off_diagonals_1D() override;
+    Epetra_CrsMatrix calculate_hyper_reduced_Bx(Epetra_CrsMatrix &Vt, const int idim) override;
 
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
     void assemble_volume_basis();

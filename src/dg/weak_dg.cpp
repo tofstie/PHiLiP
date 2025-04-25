@@ -457,7 +457,7 @@ DGWeak<dim,nstate,real,MeshType>::DGWeak(
 { }
 template <int dim, int nstate, typename real, typename MeshType>
 void DGWeak<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
-    Epetra_CrsMatrix &/*Qtx*/,Epetra_CrsMatrix &/*Qty*/,Epetra_CrsMatrix &/*Qtz*/) {
+    Epetra_CrsMatrix &/*Qtx*/,Epetra_CrsMatrix &/*Qty*/,Epetra_CrsMatrix &/*Qtz*/, Epetra_CrsMatrix &/*BEtx*/) {
     // Do nothing
 }
 template <int dim, int nstate, typename real, typename MeshType>
@@ -3962,8 +3962,8 @@ void DGWeak<dim,nstate,real,MeshType>::construct_global_Q(Epetra_CrsMatrix &/*Qx
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void  DGWeak<dim,nstate,real,MeshType>::calculate_off_diagonals_1D() {
-
+Epetra_CrsMatrix  DGWeak<dim,nstate,real,MeshType>::calculate_hyper_reduced_Bx(Epetra_CrsMatrix &Vt, const int /*idim*/) {
+return Vt;
 };
 template <int dim, int nstate, typename real, typename MeshType>
 Epetra_CrsMatrix DGWeak<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &/*hyper_Vt*/, const int /*idim*/) {

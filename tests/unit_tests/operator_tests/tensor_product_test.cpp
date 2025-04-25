@@ -84,14 +84,14 @@ int main (int argc, char * argv[])
     for(unsigned int poly_degree=1; poly_degree<4; poly_degree++){
         const unsigned int n_faces = dim*2;
         const unsigned int n_dofs = nstate * pow(poly_degree+1,dim);
-        dealii::QGauss<dim> vol_quad_dim (poly_degree+1);
+        dealii::QGaussLobatto<dim> vol_quad_dim (poly_degree+1);
         const dealii::FE_DGQ<dim> fe_dim(poly_degree);
         const dealii::FESystem<dim,dim> fe_system_dim(fe_dim, nstate);
 
-        dealii::QGauss<dim> quad_dimD (poly_degree+1);
-        dealii::QGauss<dim-1> face_quad(poly_degree+1);
-        dealii::QGauss<1> quad_1D (poly_degree+1);
-        dealii::QGauss<0> face_quad1D (poly_degree+1);
+        dealii::QGaussLobatto<dim> quad_dimD (poly_degree+1);
+        dealii::QGaussLobatto<dim-1> face_quad(poly_degree+1);
+        dealii::QGaussLobatto<1> quad_1D (poly_degree+1);
+        dealii::QGaussLobatto<0> face_quad1D (poly_degree+1);
         const dealii::FE_DGQ<1> fe(poly_degree);
         const dealii::FESystem<1,1> fe_system(fe, nstate);
         PHiLiP::OPERATOR::basis_functions<dim,2*dim,real> basis_1D(nstate, poly_degree, 1);
@@ -125,6 +125,7 @@ int main (int argc, char * argv[])
         dealii::FullMatrix<double> W_1d(weights_1D.size());
 
         const unsigned int n_quad_1D = weights_1D.size();
+        const unsigned int n_quad_face = face_weights.size();
         for (unsigned int i =0; i < weights_1D.size(); i++) {
             W_1d.set(i,i,weights_1D[i]);
         }
@@ -137,7 +138,7 @@ int main (int argc, char * argv[])
             Wf_1d.set(i,i,face_weights_1D[i]);
         }
         dealii::FullMatrix<double> testing(n_dofs/nstate);
-        testing = face_integral_1D.tensor_product(face_integral_1D.oneD_surf_operator[1],basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
+        testing = face_integral_1D.tensor_product(basis_1D.oneD_surf_operator[1],basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
         testing.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
         dealii::FullMatrix<double> int_step(weights.size());
         dealii::FullMatrix<double> mass_no_tensor(weights.size());
@@ -152,19 +153,19 @@ int main (int argc, char * argv[])
         QxminusQxt.Tadd(-1,Qx);
         dealii::FullMatrix<double> QyminusQyt(Qx);
         QyminusQyt.Tadd(-1,Qy);
-        dealii::FullMatrix<double> chi_fx(n_dofs/nstate,n_dofs/nstate);
-        dealii::FullMatrix<double> chi_fy(n_dofs/nstate,n_dofs/nstate);
+        dealii::FullMatrix<double> chi_fx(n_quad_face*n_faces/dim,n_dofs/nstate);
+        dealii::FullMatrix<double> chi_fy(n_quad_face*n_faces/dim,n_dofs/nstate);
         dealii::FullMatrix<double> Bx(n_faces);
         dealii::FullMatrix<double> By(n_faces);
         dealii::FullMatrix<double> Ex(n_faces,n_dofs/nstate);
         dealii::FullMatrix<double> Ey(n_faces,n_dofs/nstate);
-        for(unsigned int i_quad_oneD = 0; i_quad_oneD < n_quad_1D; i_quad_oneD++) {
+        for(unsigned int i_quad_oneD = 0; i_quad_oneD < n_quad_face; i_quad_oneD++) {
             for(unsigned int i_face = 0; i_face < n_faces; i_face++) {
                 const int i_face_1D = i_face % 2;
                 const int i_dim = i_face / 2;
                 const dealii::Tensor<1,dim,double> unit_ref_normal_int = dealii::GeometryInfo<dim>::unit_normal_vector[i_face];
                 if(i_dim == 0) {
-                    Bx.set(i_quad_oneD*n_quad_1D+i_face_1D,i_quad_oneD*n_quad_1D+i_face_1D,face_weights[i_quad_oneD]*unit_ref_normal_int[i_dim]);
+                    Bx.set(i_quad_oneD+n_quad_1D*i_face_1D,i_quad_oneD+n_quad_1D*i_face_1D,face_weights[i_quad_oneD]*unit_ref_normal_int[i_dim]);
                 } else {
                     By.set(i_quad_oneD+n_quad_1D*i_face_1D,i_quad_oneD+n_quad_1D*i_face_1D,face_weights[i_quad_oneD]*unit_ref_normal_int[i_dim]);
                 }
@@ -179,15 +180,17 @@ int main (int argc, char * argv[])
             unsigned int face_dim = iface / 2;
             unsigned int face_1d = iface % 2;
             if (face_dim == 0) {
-                chi_small = basis_1D.tensor_product(face_integral_1D.oneD_surf_operator[face_1d],basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
-                chi_fx.add(chi_small,1.,face_1d*2);
+                chi_small = basis_1D.tensor_product(basis_1D.oneD_surf_operator[face_1d],basis_1D.oneD_vol_operator,basis_1D.oneD_vol_operator);
+                chi_fx.add(chi_small,1.,face_1d*n_quad_face);
             } else {
-                chi_small = basis_1D.tensor_product(basis_1D.oneD_vol_operator,face_integral_1D.oneD_surf_operator[face_1d],basis_1D.oneD_vol_operator);
-                chi_fy.add(chi_small,1.,face_1d*2);
+                chi_small = basis_1D.tensor_product(basis_1D.oneD_vol_operator,basis_1D.oneD_surf_operator[face_1d],basis_1D.oneD_vol_operator);
+                chi_fy.add(chi_small,1.,face_1d*n_quad_face);
             }
         }
         chi_fx.mmult(Ex,projection_op);
         chi_fy.mmult(Ey,projection_op);
+        //Ex = chi_fx;
+        //Ey = chi_fy;
         std::cout << " Ex: " << std::endl;
         Ex.print_formatted(std::cout, 14, true, 10, "0", 1., 0.);
         std::cout << " Ey: " << std::endl;
@@ -197,22 +200,24 @@ int main (int argc, char * argv[])
         vol_termx.triple_product(Bx,Ex,Ex,true,false);
         vol_termx *= -0.5;
         vol_termx.print_formatted(std::cout, 14, true, 16, "0", 1., 0.);
-        dealii::FullMatrix<double> off_diagx(n_dofs/nstate);
+        dealii::FullMatrix<double> off_diagx(n_quad_face*n_faces/dim,n_dofs/nstate);
         Bx.mmult(off_diagx,Ex);
         std::cout << " off_diagx: " << std::endl;
+        off_diagx *= 0.5;
         off_diagx.print_formatted(std::cout, 14, true, 16, "0", 1., 0.);
+
 //Y
         dealii::FullMatrix<double> vol_termy(n_dofs/nstate);
         std::cout << " vol_termy: " << std::endl;
         vol_termy.triple_product(By,Ey,Ey,true,false);
-        vol_termy *= 0.5;
+        vol_termy *= -0.5;
         vol_termy.print_formatted(std::cout, 14, true, 16, "0", 1., 0.);
-        dealii::FullMatrix<double> off_diagy(n_dofs/nstate);
+        dealii::FullMatrix<double> off_diagy(n_quad_face*n_faces/dim,n_dofs/nstate);
         By.mmult(off_diagy,Ey);
         std::cout << " off_diag: " << std::endl;
         off_diagy.print_formatted(std::cout, 14, true, 16, "0", 1., 0.);
-        Qx.add(0.5,vol_termx);
-        Qy.add(0.5,vol_termy);
+        Qx.add(1,vol_termx);
+        Qy.add(1,vol_termy);
         std::cout << "Basis _ not tensored" << std::endl;
         basis_1D.oneD_vol_operator.print_formatted(std::cout, 14, true, 16, "0", 1., 0.);
         std::cout << "Qx" << std::endl;

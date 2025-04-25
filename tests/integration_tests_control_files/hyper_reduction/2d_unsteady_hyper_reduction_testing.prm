@@ -52,7 +52,7 @@ end
 subsection reduced order
     set output_snapshot_every_x_timesteps = 1
     #set singular_value_threshold = 0.9999999
-    set number_modes = 150
+    set number_modes = 100
     set path_to_search = .
     set adaptation_tolerance = 0.0015
     set entropy_variables_in_snapshots = false

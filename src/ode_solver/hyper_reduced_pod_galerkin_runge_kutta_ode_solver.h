@@ -65,6 +65,8 @@ private:
     std::shared_ptr<Epetra_CrsMatrix> Qty;
     /// Pointer to Qtz
     std::shared_ptr<Epetra_CrsMatrix> Qtz;
+    /// Pointer to BEtx
+    std::shared_ptr<Epetra_CrsMatrix> BEtx;
 
     /// dealII indexset for FO solution
     dealii::IndexSet solution_index;

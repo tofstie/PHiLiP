@@ -93,7 +93,7 @@ FlowSolver<dim, nstate>::FlowSolver(
     }
     dg->solution.update_ghost_values();
     constexpr bool oneDoneNstate = dim == 1 && nstate == 1;
-    constexpr bool oneDthreeNState = dim+2 == nstate && dim != 1;
+    constexpr bool oneDthreeNState = dim+2 == nstate;
     if( ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_solver ||
         ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver ||
         ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver)
@@ -206,7 +206,7 @@ FlowSolver<dim, nstate>::FlowSolver(
                 if (cell->is_locally_owned()){
                     const int cell_index = cell->active_cell_index();
                     for (int iquad = 0; iquad < n_quad_pts; iquad++) {
-                        local_elements[ctr] = cell_index*n_quad_pts + iquad;
+                        local_elements[ctr] = num_elements_N_e - (cell_index*n_quad_pts + iquad);
                         ctr +=1;
                     }
                 }

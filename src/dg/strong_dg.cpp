@@ -40,7 +40,7 @@ DGStrong<dim,nstate,real,MeshType>::DGStrong(
 
 template <int dim, int nstate, typename real, typename MeshType>
 void DGStrong<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
-    Epetra_CrsMatrix &/*Qtx*/,Epetra_CrsMatrix &/*Qty*/,Epetra_CrsMatrix &/*Qtz*/) {
+    Epetra_CrsMatrix &/*Qtx*/,Epetra_CrsMatrix &/*Qty*/,Epetra_CrsMatrix &/*Qtz*/, Epetra_CrsMatrix &/*BEtx*/) {
     // Do nothing
 }
 /***********************************************************
@@ -3582,8 +3582,8 @@ Epetra_CrsMatrix DGStrong<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(E
     return Global_Q;
 }
 template <int dim, int nstate, typename real, typename MeshType>
-void  DGStrong<dim,nstate,real,MeshType>::calculate_off_diagonals_1D() {
-
+Epetra_CrsMatrix  DGStrong<dim,nstate,real,MeshType>::calculate_hyper_reduced_Bx(Epetra_CrsMatrix &Vt, const int /*idim*/) {
+return Vt;
 };
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;

@@ -512,7 +512,7 @@ void DGBase<dim,real,MeshType>::assemble_cell_residual (
     const bool store_vol_flux_nodes = all_parameters->manufactured_convergence_study_param.manufactured_solution_param.use_manufactured_source_term;
     //for boundary conditions not periodic we need surface flux nodes
     //should change this flag to something like if have face on boundary not periodic in the future
-    const bool store_surf_flux_nodes = (all_parameters->use_periodic_bc) ? false : true;
+    const bool store_surf_flux_nodes = true;
     OPERATOR::metric_operators<real,dim,2*dim> metric_oper_int(nstate, poly_degree, grid_degree,
                                                                store_vol_flux_nodes,
                                                                store_surf_flux_nodes);
@@ -1785,7 +1785,6 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
         data_out.add_data_vector(artificial_dissipation_se, "artificial_dissipation_se", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
         data_out.add_data_vector(dof_handler_artificial_dissipation, artificial_dissipation_c0, "artificial_dissipation_c0");
     }
-
     data_out.add_data_vector(max_dt_cell, "max_dt_cell", dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim>::DataVectorType::type_cell_data);
     dealii::Vector<double> dof_reduced_mesh_weights(reduced_mesh_weights.size()*nstate);
     for (auto current_cell = this->dof_handler.begin_active(); current_cell != this->dof_handler.end(); ++current_cell) {
@@ -1797,13 +1796,13 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
         const unsigned int n_dofs_cell = current_fe_ref.n_dofs_per_cell();
         std::vector<dealii::types::global_dof_index> current_dofs_indices(n_dofs_cell);
         current_cell->get_dof_indices(current_dofs_indices);
-        const int current_cell_index = current_cell->active_cell_index();
+        //const int current_cell_index = current_cell->active_cell_index();
         const unsigned int poly_degree = current_cell->active_fe_index();
         const int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
+
         for (int iquad = 0; iquad < n_quad_pts; ++iquad) {
-            int global_quad_point = iquad+current_cell_index*n_quad_pts;
             for (int istate = 0; istate < nstate; ++istate) {
-                dof_reduced_mesh_weights[current_dofs_indices[iquad+istate*n_quad_pts]] = reduced_mesh_weights[global_quad_point];
+                dof_reduced_mesh_weights[current_dofs_indices[iquad+istate*n_quad_pts]] = reduced_mesh_weights[this->dofs_to_quad[current_dofs_indices[iquad+istate*n_quad_pts]]];
             }
         }
     }
@@ -2301,17 +2300,20 @@ void DGBase<dim,real,MeshType>::evaluate_hyper_mass_matrices (bool do_inverse_ma
     for (auto cell = dof_handler.begin_active(); cell!=dof_handler.end(); ++cell) {
 
         if (!cell->is_locally_owned()) continue;
+        std::vector<dealii::types::global_dof_index> current_dofs_indices;
 
         const unsigned int fe_index_curr_cell = cell->active_fe_index();
 
         // Current reference element related to this physical cell
         const dealii::FESystem<dim,dim> &current_fe_ref = fe_collection[fe_index_curr_cell];
+        const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
         const unsigned int n_quad_pts  = volume_quadrature_collection[fe_index_curr_cell].size();
-        const int active_cell_index  = cell->active_cell_index();
+        current_dofs_indices.resize(n_dofs_curr_cell);
+        cell->get_dof_indices (current_dofs_indices);
         quads_indices.resize(n_quad_pts);
         for (unsigned int q=0; q<n_quad_pts; ++q) {
-            quads_indices[q] = active_cell_index*n_quad_pts + q;
-            locally_owned_quads.add_index(active_cell_index*n_quad_pts + q);
+            quads_indices[q] = this->dofs_to_quad[current_dofs_indices[q]];
+            locally_owned_quads.add_index(this->dofs_to_quad[current_dofs_indices[q]]);
         }
         for (unsigned int itest=0; itest<n_quad_pts; ++itest) {
             for (unsigned int itrial=0; itrial<n_quad_pts; ++itrial) {
@@ -2402,7 +2404,7 @@ void DGBase<dim,real,MeshType>::evaluate_hyper_mass_matrices (bool do_inverse_ma
         //Compute local matrices and set them in the global system.
         if(custom_weights) {
             evaluate_local_metric_dependent_hyper_quad_mass_matrix_and_set_in_quad_mass_matrix(
-                current_cell_index,
+                dofs_indices,
                 n_quad_pts,
                 fe_index_curr_cell,
                 metric_oper,
@@ -2685,7 +2687,7 @@ void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_hyper_mass_matri
      const bool                                                       Cartesian_element,//Flag if cell is Cartesian
      const bool                                                       do_inverse_mass_matrix,
      const unsigned int                                               poly_degree,
-     const unsigned int                                               curr_cell_index,
+     const unsigned int                                               /*curr_cell_index*/,
      const unsigned int                                               n_quad_pts,
      const unsigned int                                               n_dofs_cell,
      const std::vector<dealii::types::global_dof_index>               dofs_indices,
@@ -2709,7 +2711,7 @@ using FR_enum = Parameters::AllParameters::Flux_Reconstruction;
     const dealii::Quadrature<dim> &volume_quadrature = this->volume_quadrature_collection[poly_degree];
     std::vector<double> weights(n_quad_pts);
     for(unsigned int i = 0; i < n_quad_pts; i++) {
-        weights[i] = this->reduced_mesh_weights[curr_cell_index*n_quad_pts+i];
+        weights[i] = this->reduced_mesh_weights[this->dofs_to_quad[dofs_indices[i]]];
     }
     for(int istate=0; istate<nstate; istate++){
         const unsigned int n_shape_fns = n_dofs_cell / nstate;
@@ -3131,10 +3133,10 @@ void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_mass_matrix_and_
     const bool Cartesian_element,
     const bool do_inverse_mass_matrix,
     const unsigned int poly_degree,
-    const unsigned int current_cell_index,
+    const unsigned int /*current_cell_index*/,
     const unsigned int n_quad_pts,
     const unsigned int n_dofs_cell,
-    const std::vector<dealii::types::global_dof_index> /*dofs_indices*/,
+    const std::vector<dealii::types::global_dof_index> dofs_indices,
     OPERATOR::metric_operators<real,dim,2*dim> &metric_oper,
     OPERATOR::basis_functions<dim,2*dim,real> &basis,
     OPERATOR::local_mass<dim,2*dim,real> &reference_mass_matrix,
@@ -3152,7 +3154,7 @@ void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_mass_matrix_and_
 
     std::vector<unsigned int> quad_indices(n_quad_pts);
     for( int i = 0; i < (int)quad_indices.size(); ++i) {
-        quad_indices[i] = i+current_cell_index*n_quad_pts;
+        quad_indices[i] = this->dofs_to_quad[dofs_indices[i]];
     }
     const unsigned int n_shape_fns = n_dofs_cell / nstate;
     dealii::FullMatrix<real> local_mass_matrix(n_shape_fns);
@@ -3330,7 +3332,7 @@ void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_mass_matrix_and_
 }
 template<int dim, typename real, typename MeshType>
 void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_hyper_quad_mass_matrix_and_set_in_quad_mass_matrix(
-    const unsigned int current_cell_index,
+    const std::vector<dealii::types::global_dof_index> dofs_indices,
     const unsigned int n_quad_pts,
     const unsigned int poly_degree,
     OPERATOR::metric_operators<real,dim,2*dim> &metric_oper,
@@ -3345,10 +3347,9 @@ void DGBase<dim,real,MeshType>::evaluate_local_metric_dependent_hyper_quad_mass_
     basis.build_1D_volume_operator(oneD_fe_collection_1state[poly_degree], oneD_quadrature_collection[poly_degree]);
     dealii::FullMatrix<double> local_hyper_weights(n_quad_pts);
     std::vector<unsigned int> quad_indices(n_quad_pts);
-
     for(unsigned int iquad = 0; iquad<n_quad_pts; iquad++) {
-        quad_indices[iquad] = iquad+current_cell_index*n_quad_pts;
-        local_hyper_weights.set(iquad,iquad,this->reduced_mesh_weights[iquad+current_cell_index*n_quad_pts]);
+        quad_indices[iquad] = this->dofs_to_quad[dofs_indices[iquad]];
+        local_hyper_weights.set(iquad,iquad,this->reduced_mesh_weights[this->dofs_to_quad[dofs_indices[iquad]]]);
     }
     dealii::FullMatrix<double> basis_matrix(n_quad_pts);
     basis_matrix = basis.tensor_product(basis.oneD_vol_operator,basis.oneD_vol_operator,basis.oneD_vol_operator);

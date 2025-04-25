@@ -209,6 +209,7 @@ void AssembleECSWRes<dim,nstate>::build_problem(){
 
 #if PHILIP_DIM==1
     template class AssembleECSWRes<PHILIP_DIM, PHILIP_DIM>;
+template class AssembleECSWRes<PHILIP_DIM, PHILIP_DIM+2>;
 #endif
 
 #if PHILIP_DIM!=1
