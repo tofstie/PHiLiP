@@ -98,6 +98,8 @@ public:
 
     void quadToDofPOD();
 
+    void IndentityPOD();
+
     bool enrichPOD();
 
     void matchQuadratureLocation();

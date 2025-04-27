@@ -389,6 +389,7 @@ public:
 
     using DGBase<dim,real,MeshType>::pcout; ///< Parallel std::cout that only outputs on mpi_rank==0
     void assemble_volume_basis();
+    void calculate_boundary_flux();
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> volume_basis;
 
 };

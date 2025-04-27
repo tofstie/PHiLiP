@@ -169,6 +169,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         weights_dealii[i] = ECSW_weights[i];
     }
     this->dg->reduced_mesh_weights = weights_dealii;
+    //this->dg->reduced_mesh_weights = 0.5;
     // Initialize the Mass Matrix
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
     std::ofstream global_mass_matrix_file("global_mass_matrix_file.txt");
@@ -253,7 +254,8 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         }
         this->dg->galerkin_test_basis[idim] = nullptr;
         this->dg->test_projection_matrix[idim] = nullptr;
-        }
+    }
+    this->dg->boundary_term = std::make_shared<Epetra_Vector>(BEtx->RowMap());
     Eigen::MatrixXd Qtx_eig = epetra_to_eig_matrix(*Qtx);
     std::ofstream tfile("Qtx_eig.txt");
     if (tfile.is_open()){
@@ -434,8 +436,10 @@ std::shared_ptr<Epetra_Vector> HyperReducedPODGalerkinRungeKuttaODESolver<dim, r
         }
         Vb.FillComplete(test_basis.DomainMap(),boundary_map);
         Epetra_Vector hyper_reduced_boundary_residual(test_basis_colmap);
+        Epetra_Vector hyper_reduced_numerical_boundary_flux(test_basis_colmap);
         Vb.Multiply(true,boundary_rhs,hyper_reduced_boundary_residual);
-        hyper_reduced_residual.Update(1.,hyper_reduced_boundary_residual,1.);
+        Vb.Multiply(true,*this->dg->boundary_term,hyper_reduced_numerical_boundary_flux);
+        hyper_reduced_residual.Update(1.,hyper_reduced_boundary_residual,-1.,hyper_reduced_numerical_boundary_flux,1.);
     }
     //  /* Refer to Equation (10) in:
     // https://onlinelibrary.wiley.com/doi/10.1002/nme.6603 (includes definitions of matrices used below such as L_e and L_e_PLUS)

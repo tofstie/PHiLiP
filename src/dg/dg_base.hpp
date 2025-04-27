@@ -1065,6 +1065,8 @@ public:
     unsigned int number_global_boundaries;
 
     dealii::LinearAlgebra::distributed::Vector<double> BExFB_term;
+
+    std::shared_ptr<Epetra_Vector> boundary_term;
 }; // end of DGBase class
 
 } // PHiLiP namespace

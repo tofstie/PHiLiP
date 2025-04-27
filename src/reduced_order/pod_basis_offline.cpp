@@ -618,6 +618,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     //loadPOD();
     //enrichPOD();
     quadToDofPOD();
+    //IndentityPOD();
     const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(mpi_comm);
     std::ofstream file("Entropy_snapshot_"+std::to_string(rank)+".txt");
     const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
@@ -774,32 +775,52 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
     }
 
     for(int col = 0; col < num_of_snapshots; col++){
-        int quad_num = 0;
         int i_quad = -1;
-        int solution_num = 0;
         int istate = 0;
         for(int row = 0; row < global_quad_points; row++){
+            // i_quad++;
+            // if(i_quad == n_quad_pts){i_quad = 0; istate++;}
+            // if(istate == nstate){istate = 0; solution_num += n_quad_pts*nstate;quad_num += n_quad_pts;}
+            // double val  = 0;
+            // switch(istate){
+            //     case energy_case:
+            //         val = energy(quad_num+i_quad,col);
+            //
+            //         HypersnapshotMatrix(quad_num+i_quad,col) = val;
+            //         break;
+            //     case density_case:
+            //         val = density(quad_num+i_quad,col);
+            //         HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(istate)) = val;
+            //         break;
+            //     default:
+            //         val = momentum[istate-1](quad_num+i_quad,col);
+            //         HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(istate)) = val;
+            //         break;
+            // }
+            // if(dg->solution.in_local_range(solution_num+istate*n_quad_pts+i_quad)){
+            //     dg->solution[solution_num+istate*n_quad_pts+i_quad] = val;
+            // }
+            const int quad_row = this->dg->dofs_to_quad[row];
             i_quad++;
             if(i_quad == n_quad_pts){i_quad = 0; istate++;}
-            if(istate == nstate){istate = 0; solution_num += n_quad_pts*nstate;quad_num += n_quad_pts;}
-            double val  = 0;
-            switch(istate){
+            if(istate == nstate){istate = 0;}
+            double val = 0.0;
+            switch(istate) {
                 case energy_case:
-                    val = energy(quad_num+i_quad,col);
-
-                    HypersnapshotMatrix(quad_num+i_quad,col) = val;
+                    val = energy(quad_row, col);
+                    HypersnapshotMatrix(quad_row, col+num_of_snapshots*istate) = val;
                     break;
                 case density_case:
-                    val = density(quad_num+i_quad,col);
-                    HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(istate)) = val;
+                    val = density(quad_row,col);
+                    HypersnapshotMatrix(quad_row,col+num_of_snapshots*(istate)) = val;
                     break;
                 default:
-                    val = momentum[istate-1](quad_num+i_quad,col);
-                    HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(istate)) = val;
+                    val = momentum[istate-1](quad_row,col);
+                    HypersnapshotMatrix(quad_row,col+num_of_snapshots*(istate)) = val;
                     break;
             }
-            if(dg->solution.in_local_range(solution_num+istate*n_quad_pts+i_quad)){
-                dg->solution[solution_num+istate*n_quad_pts+i_quad] = val;
+            if(dg->solution.in_local_range(row) > 0) {
+                dg->solution[row] = val;
             }
         }
         dg->calculate_global_entropy();
@@ -832,24 +853,23 @@ bool OfflinePOD<dim>::getHyperEntropyPODBasisFromSnapshots() {
 
         for(unsigned int m_proc = 0; m_proc < n_procs; m_proc++) {
             i_quad = -1;
-            quad_num = 0;
-            solution_num = 0;
             istate = 0;
             for(int row = 0; row < global_quad_points; row++){
                 i_quad++;
                 if(i_quad == n_quad_pts){i_quad = 0; istate++;}
-                if(istate == nstate){istate = 0; solution_num += n_quad_pts*nstate;quad_num += n_quad_pts;}
+                if(istate == nstate){istate = 0;}
                 if(row >= front_vector[m_proc] && row <= back_vector[m_proc]){
                     double val = entropy_vectors[m_proc][row-front_vector[m_proc]];
+                    int quad_row = this->dg->dofs_to_quad[row];
                     switch(istate){
                         case energy_case:
-                            HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*nstate) = val;
+                            HypersnapshotMatrix(quad_row,col+num_of_snapshots*nstate) = val;
                             break;
                         case density_case:
-                            HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(nstate+istate)) = val;
+                            HypersnapshotMatrix(quad_row,col+num_of_snapshots*(nstate+istate)) = val;
                             break;
                         default:
-                            HypersnapshotMatrix(quad_num+i_quad,col+num_of_snapshots*(nstate+istate)) = val;
+                            HypersnapshotMatrix(quad_row,col+num_of_snapshots*(nstate+istate)) = val;
                             break;
                     }
                 }
@@ -915,6 +935,23 @@ void OfflinePOD<dim>::quadToDofPOD() {
     this->basis->reinit(Vdof);
 }
 
+template<int dim>
+void OfflinePOD<dim>::IndentityPOD() {
+    const Epetra_MpiComm comm (MPI_COMM_WORLD);
+    const Epetra_Map row_map = this->basis->trilinos_matrix().RowMap();
+    const int rows_quads =  this->basis->m();
+    Epetra_CrsMatrix Vdof(Epetra_DataAccess::Copy,row_map,row_map,1);
+    std::vector<double> values(1);
+    values[0] = 1;
+    std::vector<int> indices(1);
+    int NumEntries = 1;
+    for(int row = 0; row < rows_quads; row++) {
+        indices[0] = row;
+        Vdof.InsertGlobalValues(row,NumEntries,values.data(),indices.data());
+    }
+    Vdof.FillComplete(row_map,row_map);
+    this->basis->reinit(Vdof);
+}
 template<int dim>
 bool OfflinePOD<dim>::getEntropyProjPODBasisFromSnapshots(){
         //const bool compute_dRdW = true;
