@@ -3899,8 +3899,8 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
         for(int entry = 0; entry < NumEntries;entry++)
         {
             const int dof_col = this->quad_to_dof[indicies[entry]];
-            const double val = global_row[entry];
-            //const double neg_val = -1.0*val;
+            const double val = global_row[entry]/2;
+            const double neg_val = -1.0*val;
             for(int istate = 0; istate < nstate; istate++)
             {
                 const int dof_row_istate = dof_row + (istate)*n_quad_pts;
@@ -3908,7 +3908,7 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
                 pos_Q.set(dof_row_istate,1,istate);
                 pos_Q.set(dof_row_istate,0,i_quad);
                 global_hyper_reduced_Q.InsertGlobalValues(dof_row_istate,1,&val,&dof_col_istate);
-                //global_hyper_reduced_Q.InsertGlobalValues(dof_col_istate,1,&neg_val,&dof_row_istate);
+                global_hyper_reduced_Q.InsertGlobalValues(dof_col_istate,1,&neg_val,&dof_row_istate);
             }
         }
     }

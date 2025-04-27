@@ -419,7 +419,7 @@ std::shared_ptr<Epetra_Vector> HyperReducedPODGalerkinRungeKuttaODESolver<dim, r
     test_basis.Multiply(true,epetra_right_hand_side,hyper_reduced_residual);
     if(this->dg->number_global_boundaries != 0) {
         Epetra_MpiComm comm( MPI_COMM_WORLD );
-        Epetra_Map boundary_map((int)this->dg->number_global_boundaries,0,comm);
+        Epetra_Map boundary_map((int)this->dg->number_global_boundaries*this->dg->nstate,0,comm);
         Epetra_Vector boundary_rhs(Epetra_DataAccess::View, boundary_map,this->dg->BExFB_term.begin());
         Epetra_CrsMatrix Vb(Epetra_DataAccess::Copy,boundary_map,test_basis.NumGlobalCols());
         const int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
@@ -430,16 +430,18 @@ std::shared_ptr<Epetra_Vector> HyperReducedPODGalerkinRungeKuttaODESolver<dim, r
         int NumEntries;
         for (int istate = 0; istate < this->dg->nstate; istate++) {
             test_basis.ExtractGlobalRowCopy(0+istate*n_quad_pts,length,NumEntries,V_row.data(),V_indices.data());
-            Vb.InsertGlobalValues(0+istate,NumEntries,V_row.data(),V_indices.data());
-            test_basis.ExtractGlobalRowCopy(last_row_istate_zero+istate*n_quad_pts,length,NumEntries,V_row.data(),V_indices.data());
             Vb.InsertGlobalValues(1*this->dg->nstate+istate,NumEntries,V_row.data(),V_indices.data());
+            test_basis.ExtractGlobalRowCopy(last_row_istate_zero+istate*n_quad_pts,length,NumEntries,V_row.data(),V_indices.data());
+            Vb.InsertGlobalValues(0*this->dg->nstate+istate,NumEntries,V_row.data(),V_indices.data());
         }
         Vb.FillComplete(test_basis.DomainMap(),boundary_map);
+        std::ofstream file("TestBoundaries.txt");
+        Vb.Print(file);
         Epetra_Vector hyper_reduced_boundary_residual(test_basis_colmap);
         Epetra_Vector hyper_reduced_numerical_boundary_flux(test_basis_colmap);
         Vb.Multiply(true,boundary_rhs,hyper_reduced_boundary_residual);
         Vb.Multiply(true,*this->dg->boundary_term,hyper_reduced_numerical_boundary_flux);
-        hyper_reduced_residual.Update(1.,hyper_reduced_boundary_residual,-1.,hyper_reduced_numerical_boundary_flux,1.);
+        hyper_reduced_residual.Update(1.,hyper_reduced_boundary_residual,1.,hyper_reduced_numerical_boundary_flux,1.);
     }
     //  /* Refer to Equation (10) in:
     // https://onlinelibrary.wiley.com/doi/10.1002/nme.6603 (includes definitions of matrices used below such as L_e and L_e_PLUS)
