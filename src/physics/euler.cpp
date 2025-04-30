@@ -500,20 +500,22 @@ template <int dim, int nstate, typename real>
 real Euler<dim, nstate, real>
 ::compute_ismail_roe_logarithmic_mean(const real val1, const real val2) const
 {
-    // See Appendix B [Ismail and Roe, 2009, Entropy-Consistent Euler Flux Functions II]
-    // -- Numerically stable algorithm for computing the logarithmic mean
+    // // See Appendix B [Ismail and Roe, 2009, Entropy-Consistent Euler Flux Functions II]
+    // // -- Numerically stable algorithm for computing the logarithmic mean
     const real zeta = val1/val2;
     const real f = (zeta-1.0)/(zeta+1.0);
     const real u = f*f;
-    
-    real F;
-    if(u<1.0e-2){ F = 1.0 + u/3.0 + u*u/5.0 + u*u*u/7.0; } 
-    else { 
-        if constexpr(std::is_same<real,double>::value) F = std::log(zeta)/2.0/f; 
-    }
-    
-    const real log_mean_val = (val1+val2)/(2.0*F);
 
+    real F;
+    if(u<1.0e-2){ F = 1.0 + u/3.0 + u*u/5.0 + u*u*u/7.0+u*u*u*u/9.0; }
+    else {
+        if constexpr(std::is_same<real,double>::value) F = std::log(zeta)/2.0/f;
+    }
+    const real log_mean_val = (val1+val2)/(2.0*F);
+    // const real val_diff = val1-val2;
+    // real log_diff;
+    // if constexpr(std::is_same<real,double>::value) log_diff = std::log(val1) - std::log(val2);
+    // const real log_mean_val = val_diff/log_diff;
     return log_mean_val;
 }
 

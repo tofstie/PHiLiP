@@ -30,6 +30,14 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         if(this->butcher_tableau->get_a(istage,j) != 0){
             dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_j;
             multiply(*epetra_test_basis,this->reduced_rk_stage[j],dealii_rk_stage_j,this->dg->solution,false);
+            std::ofstream dealii_rk_stage_j_file("dealii_rk_stage_j_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) + ".txt");
+            for(unsigned int i = 0 ; i < dealii_rk_stage_j.size(); i++){
+                if (dealii_rk_stage_j.in_local_range(i)){
+                    dealii_rk_stage_j_file << dealii_rk_stage_j[i] << '\n';
+                }
+                MPI_Barrier(MPI_COMM_WORLD);
+            }
+            dealii_rk_stage_j_file.close();
             this->rk_stage[istage].add(this->butcher_tableau->get_a(istage,j),dealii_rk_stage_j);
         }
     } //sum(a_ij*V*k_j), explicit part
@@ -41,9 +49,18 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->solver.solve(dt*this->butcher_tableau->get_a(istage,istage), this->rk_stage[istage]);
         this->rk_stage[istage] = this->solver.current_solution_estimate;
     }
-    std::ofstream rk_stage_file("rk_stage_file_stage_" + std::to_string(istage) + ".txt");
-    this->rk_stage[istage].print(rk_stage_file);
+    std::ofstream rk_stage_file("rk_stage_file_stage_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) + ".txt");
+    for(unsigned int i = 0 ; i < this->rk_stage[istage].size(); i++){
+        if (this->rk_stage[istage].in_local_range(i)){
+            rk_stage_file << this->rk_stage[istage][i] << '\n';
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+    rk_stage_file.close();
+    std::cout << "Stage: " << istage << '\n';
     this->dg->solution = this->rk_stage[istage];
+    // int num;
+    // std::cin >> num;
 }
 
 template <int dim, typename real, int n_rk_stages, typename MeshType>
@@ -59,7 +76,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->dg->assemble_residual();
     }
      //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
-    std::ofstream rhs_file("rhs_before_hyper_"+ std::to_string(istage) +".txt");
+    std::ofstream rhs_file("rhs_before_hyper_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
     for(unsigned int i = 0 ; i < this->dg->right_hand_side.size(); i++){
         if (this->dg->right_hand_side.in_local_range(i)){
             rhs_file << this->dg->right_hand_side[i] << '\n';
@@ -72,7 +89,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     epetra_right_hand_side.Print(epetra_right_hand_side_file);
     std::shared_ptr<Epetra_Vector> hyper_reduced_rhs = generate_hyper_reduced_residual(epetra_right_hand_side, *epetra_trial_basis);
     hyper_reduced_rhs->Scale(1.0);
-    std::ofstream hyper_reduced_rhs_file("hyper_reduced_rhs"+std::to_string(istage)+".txt");
+    std::ofstream hyper_reduced_rhs_file("hyper_reduced_rhs"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
     hyper_reduced_rhs->Print(hyper_reduced_rhs_file);
     if(this->all_parameters->use_inverse_mass_on_the_fly){
         assert(1 == 0 && "Not Implemented: use_inverse_mass_on_the_fly=true && ode_solver_type=pod_galerkin_rk_solver\n Please set use_inverse_mass_on_the_fly=false and try again");
@@ -80,7 +97,9 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         // Creating Reduced RHS
         dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
 
-        Epetra_Vector epetra_reduced_rhs(*hyper_reduced_rhs); // Flip to range map?
+        //Epetra_Vector epetra_reduced_rhs(*hyper_reduced_rhs); // Flip to range map?
+        Epetra_Vector epetra_reduced_rhs(epetra_right_hand_side);
+
         //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
         //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
         //print_dealii(dealii_rhs,rhs);
@@ -103,8 +122,14 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         Solver.Solve();
         epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, this->reduced_rk_stage[istage]);
         this->reduced_rk_stage[istage] = dealii_reduced_stage_i;
-        std::ofstream reduced_stages_file("reduced_stages"+std::to_string(istage)+".txt");
-        this->reduced_rk_stage[istage].print(reduced_stages_file);
+        std::ofstream reduced_stages_file("reduced_stages"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
+        for(unsigned int i = 0 ; i < this->reduced_rk_stage[istage].size(); i++){
+            if (this->reduced_rk_stage[istage].in_local_range(i)){
+                reduced_stages_file << this->reduced_rk_stage[istage][i] << '\n';
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+        reduced_stages_file.close();
     }
     return;
 }
@@ -169,7 +194,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         weights_dealii[i] = ECSW_weights[i];
     }
     this->dg->reduced_mesh_weights = weights_dealii;
-    //this->dg->reduced_mesh_weights = 0.5;
+    this->dg->reduced_mesh_weights = 0.5;
     // Initialize the Mass Matrix
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
     std::ofstream global_mass_matrix_file("global_mass_matrix_file.txt");
@@ -417,32 +442,32 @@ std::shared_ptr<Epetra_Vector> HyperReducedPODGalerkinRungeKuttaODESolver<dim, r
 
     Epetra_Vector hyper_reduced_residual(test_basis_colmap);
     test_basis.Multiply(true,epetra_right_hand_side,hyper_reduced_residual);
-    if(this->dg->number_global_boundaries != 0) {
-        Epetra_MpiComm comm( MPI_COMM_WORLD );
-        Epetra_Map boundary_map((int)this->dg->number_global_boundaries*this->dg->nstate,0,comm);
-        Epetra_Vector boundary_rhs(Epetra_DataAccess::View, boundary_map,this->dg->BExFB_term.begin());
-        Epetra_CrsMatrix Vb(Epetra_DataAccess::Copy,boundary_map,test_basis.NumGlobalCols());
-        const int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
-        const int last_row_istate_zero = test_basis.NumGlobalRows()-1-n_quad_pts*(this->dg->nstate-1);
-        const int length = test_basis.NumGlobalCols();
-        std::vector<double> V_row(length);
-        std::vector<int> V_indices(length);
-        int NumEntries;
-        for (int istate = 0; istate < this->dg->nstate; istate++) {
-            test_basis.ExtractGlobalRowCopy(0+istate*n_quad_pts,length,NumEntries,V_row.data(),V_indices.data());
-            Vb.InsertGlobalValues(1*this->dg->nstate+istate,NumEntries,V_row.data(),V_indices.data());
-            test_basis.ExtractGlobalRowCopy(last_row_istate_zero+istate*n_quad_pts,length,NumEntries,V_row.data(),V_indices.data());
-            Vb.InsertGlobalValues(0*this->dg->nstate+istate,NumEntries,V_row.data(),V_indices.data());
-        }
-        Vb.FillComplete(test_basis.DomainMap(),boundary_map);
-        std::ofstream file("TestBoundaries.txt");
-        Vb.Print(file);
-        Epetra_Vector hyper_reduced_boundary_residual(test_basis_colmap);
-        Epetra_Vector hyper_reduced_numerical_boundary_flux(test_basis_colmap);
-        Vb.Multiply(true,boundary_rhs,hyper_reduced_boundary_residual);
-        Vb.Multiply(true,*this->dg->boundary_term,hyper_reduced_numerical_boundary_flux);
-        hyper_reduced_residual.Update(1.,hyper_reduced_boundary_residual,1.,hyper_reduced_numerical_boundary_flux,1.);
-    }
+    // if(this->dg->number_global_boundaries != 0) {
+    //     Epetra_MpiComm comm( MPI_COMM_WORLD );
+    //     Epetra_Map boundary_map((int)this->dg->number_global_boundaries*this->dg->nstate,0,comm);
+    //     Epetra_Vector boundary_rhs(Epetra_DataAccess::View, boundary_map,this->dg->BExFB_term.begin());
+    //     Epetra_CrsMatrix Vb(Epetra_DataAccess::Copy,boundary_map,test_basis.NumGlobalCols());
+    //     const int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
+    //     const int last_row_istate_zero = test_basis.NumGlobalRows()-1-n_quad_pts*(this->dg->nstate-1);
+    //     const int length = test_basis.NumGlobalCols();
+    //     std::vector<double> V_row(length);
+    //     std::vector<int> V_indices(length);
+    //     int NumEntries;
+    //     for (int istate = 0; istate < this->dg->nstate; istate++) {
+    //         test_basis.ExtractGlobalRowCopy(0+istate*n_quad_pts,length,NumEntries,V_row.data(),V_indices.data());
+    //         Vb.InsertGlobalValues(1*this->dg->nstate+istate,NumEntries,V_row.data(),V_indices.data());
+    //         test_basis.ExtractGlobalRowCopy(last_row_istate_zero+istate*n_quad_pts,length,NumEntries,V_row.data(),V_indices.data());
+    //         Vb.InsertGlobalValues(0*this->dg->nstate+istate,NumEntries,V_row.data(),V_indices.data());
+    //     }
+    //     Vb.FillComplete(test_basis.DomainMap(),boundary_map);
+    //     std::ofstream file("TestBoundaries.txt");
+    //     Vb.Print(file);
+    //     Epetra_Vector hyper_reduced_boundary_residual(test_basis_colmap);
+    //     //Epetra_Vector hyper_reduced_numerical_boundary_flux(test_basis_colmap);
+    //     Vb.Multiply(true,boundary_rhs,hyper_reduced_boundary_residual);
+    //     //Vb.Multiply(true,*this->dg->boundary_term,hyper_reduced_numerical_boundary_flux);
+    //     hyper_reduced_residual.Update(1.,hyper_reduced_boundary_residual,1.);
+    // }
     //  /* Refer to Equation (10) in:
     // https://onlinelibrary.wiley.com/doi/10.1002/nme.6603 (includes definitions of matrices used below such as L_e and L_e_PLUS)
     // Create empty Hyper-reduced residual Epetra structure */

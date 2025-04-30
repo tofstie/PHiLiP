@@ -1067,6 +1067,8 @@ public:
     dealii::LinearAlgebra::distributed::Vector<double> BExFB_term;
 
     std::shared_ptr<Epetra_Vector> boundary_term;
+
+    std::map<int,int> boundary_term_map;
 }; // end of DGBase class
 
 } // PHiLiP namespace

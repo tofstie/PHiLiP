@@ -52,7 +52,7 @@ end
 subsection reduced order
     set output_snapshot_every_x_timesteps = 10
     #set singular_value_threshold = 0.999999
-    set number_modes = 50
+    set number_modes = 100
     set path_to_search = .
 end
 
