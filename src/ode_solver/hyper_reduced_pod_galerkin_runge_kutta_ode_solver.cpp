@@ -97,8 +97,8 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         // Creating Reduced RHS
         dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
 
-        //Epetra_Vector epetra_reduced_rhs(*hyper_reduced_rhs); // Flip to range map?
-        Epetra_Vector epetra_reduced_rhs(epetra_right_hand_side);
+        Epetra_Vector epetra_reduced_rhs(*hyper_reduced_rhs); // Flip to range map?
+        //Epetra_Vector epetra_reduced_rhs(epetra_right_hand_side);
 
         //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
         //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
@@ -194,7 +194,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         weights_dealii[i] = ECSW_weights[i];
     }
     this->dg->reduced_mesh_weights = weights_dealii;
-    this->dg->reduced_mesh_weights = 0.5;
+    //this->dg->reduced_mesh_weights = 0.5;
     // Initialize the Mass Matrix
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
     std::ofstream global_mass_matrix_file("global_mass_matrix_file.txt");
