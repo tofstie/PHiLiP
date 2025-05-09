@@ -1042,6 +1042,8 @@ public:
 
     virtual Epetra_CrsMatrix calculate_hyper_reduced_Bx(Epetra_CrsMatrix &Vt, const int idim) = 0;
 
+    void set_default_weights();
+
     /// Global Entropy
     dealii::LinearAlgebra::distributed::Vector<double> global_entropy;
     /// Global Face Entropy

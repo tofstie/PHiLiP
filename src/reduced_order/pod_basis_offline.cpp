@@ -618,7 +618,7 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     //loadPOD();
     //enrichPOD();
     quadToDofPOD();
-    //IndentityPOD();
+    IndentityPOD();
     const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(mpi_comm);
     std::ofstream file("Entropy_snapshot_"+std::to_string(rank)+".txt");
     const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");

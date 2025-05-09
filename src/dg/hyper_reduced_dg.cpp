@@ -3901,8 +3901,8 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
     const int n_quad_pts = this->volume_quadrature_collection[this->all_parameters->flow_solver_param.poly_degree].size();
     for(int i_quad = 0; i_quad < hyper_reduced_Q.NumGlobalRows();i_quad++)
     {
-        hyper_reduced_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
-        //Global_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
+        //hyper_reduced_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
+        Global_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
         const int dof_row = this->quad_to_dof[i_quad];
         for(int entry = 0; entry < NumEntries;entry++)
         {
@@ -3926,15 +3926,15 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
     for(int i_face_quad = 0; i_face_quad < BEtx.NumGlobalRows();i_face_quad++) {
         BEtx.ExtractGlobalRowCopy(i_face_quad,BEtx.NumGlobalCols(),boundaryNumEntries,boundary_row.data(),boundary_indices.data());
         const int dof_col = this->solution.size()+i_face_quad*nstate;
-        // if(i_face_quad == 0) {
-        //     boundaryNumEntries = 1;
-        //     boundary_row[0] = 1.0;
-        //     boundary_indices[0] = 0;
-        // } else if (i_face_quad == 1) {
-        //     boundaryNumEntries = 1;
-        //     boundary_row[0] = -1.0;
-        //     boundary_indices[0] = BEtx.NumGlobalCols()-1;
-        // }
+        if(i_face_quad == 0) {
+            boundaryNumEntries = 1;
+            boundary_row[0] = 1.0;
+            boundary_indices[0] = 0;
+        } else if (i_face_quad == 1) {
+            boundaryNumEntries = 1;
+            boundary_row[0] = -1.0;
+            boundary_indices[0] = BEtx.NumGlobalCols()-1;
+        }
         for(int entry = 0; entry < boundaryNumEntries;entry++) {
             const int dof_row = this->quad_to_dof[boundary_indices[entry]];
             const double val = boundary_row[entry]*1.0;
@@ -4160,6 +4160,9 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                             //Compute the physical flux
                             std::array<dealii::Tensor<1,dim,real>,nstate> conv_phys_flux_2pt;
                             conv_phys_flux_2pt = this->pde_physics_double->convective_numerical_split_flux(soln_state, soln_state_flux_basis);
+                            if(current_dofs_indices[1] == 7 && flux_dofs_indices[1] == 7) {
+                                std::cout << "BREAK" <<std::endl;
+                            }
                             for(int istate=0; istate<nstate; istate++){
                                 int current_flux_dofs_index = flux_dofs_indices[flux_quad+n_quad_pts*(nstate-istate-1)];
                                 dealii::Tensor<1,dim,real> conv_ref_flux_2pt;
@@ -4597,11 +4600,11 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
             } // end of if statement for faces
         }
         dealii::FullMatrix<double> ETBx(n_quad_pts,n_quad_pts_face*2);
-        dealii::FullMatrix<double> BEx(n_quad_pts,n_quad_pts_face*2);
+        dealii::FullMatrix<double> BEx(n_quad_pts_face*2,n_quad_pts);
         dealii::FullMatrix<double> ETBy(n_quad_pts,n_quad_pts_face*2);
-        chi_fx.mTmult(ETBx,Bx);
+        chi_fx.Tmmult(ETBx,Bx);
         Bx.mmult(BEx,chi_fx);
-        chi_fy.mTmult(ETBy,By);
+        chi_fy.Tmmult(ETBy,By);
         if(dim != 1) {
             ETBx *= 0.5;
             ETBy *= 0.5;
@@ -4642,12 +4645,12 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                         }
                         int neighbour_local_quad = tangential_face_mapping[iface][global_point];
                         int neighbour_global_quad = this->dofs_to_quad[neighbour_cells[neighbour_local_quad]];
-                        //double zero = 0.0;
+                        double zero = 0.0;
                         for(unsigned int i_quad = 0; i_quad < n_quad_pts; i_quad++) {
                             const int row_index = this->dofs_to_quad[current_dofs_indices[i_quad]];
-                            double value = ETBx(i_quad,local_col);
-                            Qx.InsertGlobalValues(row_index,1,&value,&neighbour_global_quad);
-                            //Qx.InsertGlobalValues(row_index,1,&zero,&neighbour_global_quad);
+                            //double value = ETBx(i_quad,local_col);
+                            //Qx.InsertGlobalValues(row_index,1,&value,&neighbour_global_quad);
+                            Qx.InsertGlobalValues(row_index,1,&zero,&neighbour_global_quad);
                         }
                     } else if(i_dim == 1) {
                         unsigned int local_col = n_quad_pts_face*i_face_1D+i_quad_oneD;
@@ -4866,15 +4869,15 @@ Epetra_CrsMatrix  DGHyper<dim,nstate,real,MeshType>::calculate_hyper_reduced_Bx(
     for(int i_face_quad = 0; i_face_quad < BEt.NumGlobalRows();i_face_quad++) {
         BEt.ExtractGlobalRowCopy(i_face_quad,BEt.NumGlobalCols(),boundaryNumEntries,boundary_row.data(),boundary_indices.data());
         const int dof_row = i_face_quad*nstate;
-        // if(i_face_quad == 0) {
-        //     boundaryNumEntries = 1;
-        //     boundary_row[0] = -1.0;
-        //     boundary_indices[0] = 0;
-        // } else if (i_face_quad == 1) {
-        //     boundaryNumEntries = 1;
-        //     boundary_row[0] = 1.0;
-        //     boundary_indices[0] = BEt.NumGlobalCols()-1;
-        // }
+        if(i_face_quad == 0) {
+            boundaryNumEntries = 1;
+            boundary_row[0] = -1.0;
+            boundary_indices[0] = 0;
+        } else if (i_face_quad == 1) {
+            boundaryNumEntries = 1;
+            boundary_row[0] = 1.0;
+            boundary_indices[0] = BEt.NumGlobalCols()-1;
+        }
         for(int entry = 0; entry < boundaryNumEntries;entry++) {
             const int dof_col = this->quad_to_dof[boundary_indices[entry]];
             const double val = boundary_row[entry]*-1.0;
@@ -5088,7 +5091,7 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_boundary_flux() {
             }
             else {
                 // cell has neighbour
-                continue;
+                //continue;
                 dealii::Vector<real> current_cell_rhs (n_dofs_curr_cell);
                 const auto neighbor_cell = (current_cell->has_periodic_neighbor(iface)) ? current_cell->periodic_neighbor(iface) : current_cell->neighbor(iface);
                 if(!this->current_cell_should_do_the_work_hyper(current_cell,neighbor_cell)) continue;

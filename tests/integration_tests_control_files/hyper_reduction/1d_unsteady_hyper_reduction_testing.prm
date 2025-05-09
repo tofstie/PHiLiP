@@ -37,7 +37,7 @@ end
 
 subsection flow_solver
   set flow_case_type = reflective_shock_tube
-  set poly_degree = 1
+  set poly_degree = 2
   set final_time = 0.75
   set courant_friedrichs_lewy_number = 0.1
   set unsteady_data_table_filename = riemann_problem_time_table

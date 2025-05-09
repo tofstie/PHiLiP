@@ -4285,6 +4285,25 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     EpetraExt::MatrixMatrix::Multiply(LHSVt, false, quad_mass_matrix,false,projection_matrix);
     this->test_projection_matrix[idim] = std::make_shared<Epetra_CrsMatrix>(projection_matrix);
 }
+
+template<int dim, typename real, typename MeshType>
+void DGBase<dim, real, MeshType>::set_default_weights() {
+    for(auto cell = dof_handler.begin_active(); cell != dof_handler.end(); ++cell) {
+        if(!(cell->is_locally_owned())) continue;
+        const unsigned int poly_degree = cell->active_fe_index();
+        std::vector<double> cell_weights = volume_quadrature_collection[poly_degree].get_weights();
+        const unsigned int n_dofs_cell = fe_collection[poly_degree].n_dofs_per_cell();
+        const int n_quad_pts = n_dofs_cell / nstate;
+        std::vector<dealii::types::global_dof_index> current_dofs_indices;
+        current_dofs_indices.resize(n_dofs_cell);
+        cell->get_dof_indices (current_dofs_indices);
+        for(int iquad = 0; iquad < n_quad_pts; iquad++) {
+            const int current_quad = this->dofs_to_quad[current_dofs_indices[iquad]];
+            this->reduced_mesh_weights[current_quad] = cell_weights[iquad];
+        }
+    }
+}
+
 #if PHILIP_DIM!=1
 template class DGBase <PHILIP_DIM, double, dealii::parallel::distributed::Triangulation<PHILIP_DIM>>;
 #endif
