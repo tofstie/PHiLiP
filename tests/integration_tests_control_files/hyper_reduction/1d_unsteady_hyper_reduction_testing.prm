@@ -28,7 +28,7 @@ subsection ODE solver
   set ode_solver_type = runge_kutta
   set runge_kutta_method = rk4_ex
   set initial_time_step = 0.001
-  set output_solution_every_x_steps = 2
+  set output_solution_every_x_steps = 30
 end
 
 subsection linear solver
@@ -51,8 +51,8 @@ end
 
 subsection reduced order
     set output_snapshot_every_x_timesteps = 10
-    #set singular_value_threshold = 0.999999
-    set number_modes = 100
+    set singular_value_threshold = 0.999999
+    #set number_modes = 100
     set path_to_search = .
 end
 
@@ -61,5 +61,5 @@ subsection hyperreduction
     set NNLS_tol = 1e-9
     set NNLS_max_iter = 1000
     set training_data = residual
-    set read_in_weights = true
+    set read_in_weights = false
 end

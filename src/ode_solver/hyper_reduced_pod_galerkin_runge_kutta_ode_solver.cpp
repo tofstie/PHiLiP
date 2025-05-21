@@ -49,14 +49,14 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->solver.solve(dt*this->butcher_tableau->get_a(istage,istage), this->rk_stage[istage]);
         this->rk_stage[istage] = this->solver.current_solution_estimate;
     }
-    std::ofstream rk_stage_file("rk_stage_file_stage_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) + ".txt");
-    for(unsigned int i = 0 ; i < this->rk_stage[istage].size(); i++){
-        if (this->rk_stage[istage].in_local_range(i)){
-            rk_stage_file << this->rk_stage[istage][i] << '\n';
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
-    rk_stage_file.close();
+    // std::ofstream rk_stage_file("rk_stage_file_stage_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) + ".txt");
+    // for(unsigned int i = 0 ; i < this->rk_stage[istage].size(); i++){
+    //     if (this->rk_stage[istage].in_local_range(i)){
+    //         rk_stage_file << this->rk_stage[istage][i] << '\n';
+    //     }
+    //     MPI_Barrier(MPI_COMM_WORLD);
+    // }
+    // rk_stage_file.close();
     std::cout << "Stage: " << istage << '\n';
     this->dg->solution = this->rk_stage[istage];
     // int num;
@@ -76,29 +76,29 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->dg->assemble_residual();
     }
      //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
-    std::ofstream rhs_file("rhs_before_hyper_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
-    for(unsigned int i = 0 ; i < this->dg->right_hand_side.size(); i++){
-        if (this->dg->right_hand_side.in_local_range(i)){
-            rhs_file << this->dg->right_hand_side[i] << '\n';
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
-    rhs_file.close();
+    // std::ofstream rhs_file("rhs_before_hyper_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
+    // for(unsigned int i = 0 ; i < this->dg->right_hand_side.size(); i++){
+    //     if (this->dg->right_hand_side.in_local_range(i)){
+    //         rhs_file << this->dg->right_hand_side[i] << '\n';
+    //     }
+    //     MPI_Barrier(MPI_COMM_WORLD);
+    // }
+    // rhs_file.close();
     Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_trial_basis->RowMap(), this->dg->right_hand_side.begin());
     std::ofstream epetra_right_hand_side_file("epetra_right_hand_side"+std::to_string(istage)+".txt");
     epetra_right_hand_side.Print(epetra_right_hand_side_file);
     std::shared_ptr<Epetra_Vector> hyper_reduced_rhs = generate_hyper_reduced_residual(epetra_right_hand_side, *epetra_trial_basis);
     hyper_reduced_rhs->Scale(1.0);
-    std::ofstream hyper_reduced_rhs_file("hyper_reduced_rhs"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
-    hyper_reduced_rhs->Print(hyper_reduced_rhs_file);
+    // std::ofstream hyper_reduced_rhs_file("hyper_reduced_rhs"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
+    // hyper_reduced_rhs->Print(hyper_reduced_rhs_file);
     if(this->all_parameters->use_inverse_mass_on_the_fly){
         assert(1 == 0 && "Not Implemented: use_inverse_mass_on_the_fly=true && ode_solver_type=pod_galerkin_rk_solver\n Please set use_inverse_mass_on_the_fly=false and try again");
     } else{
         // Creating Reduced RHS
         dealii::LinearAlgebra::distributed::Vector<double> dealii_reduced_stage_i;
 
-        //Epetra_Vector epetra_reduced_rhs(*hyper_reduced_rhs); // Flip to range map?
-        Epetra_Vector epetra_reduced_rhs(epetra_right_hand_side);
+        Epetra_Vector epetra_reduced_rhs(*hyper_reduced_rhs); // Flip to range map?
+        //Epetra_Vector epetra_reduced_rhs(epetra_right_hand_side);
 
         //int rank = dealii::Utilities::MPI::this_mpi_process(this->dg->solution.get_mpi_communicator());
         //std::ofstream dealii_rhs("rhs_dealii_"+ std::to_string(rank)+ ".txt");
@@ -122,14 +122,14 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         Solver.Solve();
         epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, this->reduced_rk_stage[istage]);
         this->reduced_rk_stage[istage] = dealii_reduced_stage_i;
-        std::ofstream reduced_stages_file("reduced_stages"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
-        for(unsigned int i = 0 ; i < this->reduced_rk_stage[istage].size(); i++){
-            if (this->reduced_rk_stage[istage].in_local_range(i)){
-                reduced_stages_file << this->reduced_rk_stage[istage][i] << '\n';
-            }
-            MPI_Barrier(MPI_COMM_WORLD);
-        }
-        reduced_stages_file.close();
+        // std::ofstream reduced_stages_file("reduced_stages"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
+        // for(unsigned int i = 0 ; i < this->reduced_rk_stage[istage].size(); i++){
+        //     if (this->reduced_rk_stage[istage].in_local_range(i)){
+        //         reduced_stages_file << this->reduced_rk_stage[istage][i] << '\n';
+        //     }
+        //     MPI_Barrier(MPI_COMM_WORLD);
+        // }
+        // reduced_stages_file.close();
     }
     return;
 }
@@ -194,7 +194,7 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         weights_dealii[i] = ECSW_weights[i];
     }
     this->dg->reduced_mesh_weights = weights_dealii;
-    this->dg->set_default_weights();
+    //this->dg->set_default_weights();
     // Initialize the Mass Matrix
     Epetra_CrsMatrix epetra_mass_matrix(this->dg->global_mass_matrix.trilinos_matrix());
     std::ofstream global_mass_matrix_file("global_mass_matrix_file.txt");

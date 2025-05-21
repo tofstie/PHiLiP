@@ -391,7 +391,11 @@ public:
     void assemble_volume_basis();
     void calculate_boundary_flux();
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> volume_basis;
+    template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
+    int at_cell_interface(const DoFCellAccessorType1 &current_cell, const DoFCellAccessorType2 &flux_cell,
+        const unsigned int iquad, const unsigned int flux_quad);
 
+    std::vector<std::map<int,int>> tangential_face_mapping;
 };
 }
 #endif //__HYPERREDUCED_DISCONTINUOUSGALERKIN_H__

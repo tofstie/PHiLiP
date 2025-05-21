@@ -35,12 +35,30 @@ int UnsteadyHyperReduction<dim, nstate>::run_test() const {
     const double final_FOM_entropy = flow_solver_case->compute_entropy(flow_solver_full_order->dg);
     const double FOM_entropy_diff = final_FOM_entropy - initial_FOM_entropy;
 
+    // Create ESROM Parameters
+    Parameters::AllParameters ROM_param = *(TestsBase::all_parameters);
+    ROM_param.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::ODESolverEnum::pod_galerkin_runge_kutta_solver;
+    ROM_param.ode_solver_param.allocate_matrix_dRdW = true;
+    ROM_param.flow_solver_param.unsteady_data_table_filename = "ESROM_"+ROM_param.flow_solver_param.unsteady_data_table_filename;
+    ROM_param.reduced_order_param.entropy_variables_in_snapshots = true;
+    const Parameters::AllParameters Entropy_ROM_param_const = ROM_param;
+    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver_entropy_galerkin = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&Entropy_ROM_param_const, parameter_handler);
+    dealii::LinearAlgebra::distributed::Vector<double> entropy_intial_solution(flow_solver_entropy_galerkin->dg->solution);
+    const double initial_entropy = flow_solver_case->compute_entropy(flow_solver_entropy_galerkin->dg);
+    try {
+        static_cast<void>(flow_solver_entropy_galerkin->run());
+    } catch (double end) {
+        this->pcout << "ESROM Failed at t = " << end << std::endl;
+    }
+    const double final_entropy = flow_solver_case->compute_entropy(flow_solver_entropy_galerkin->dg);
+    const double ESROM_entropy_diff = final_entropy - initial_entropy;
+
     // Create HROM Parameters
     Parameters::AllParameters HROM_param = *(TestsBase::all_parameters);
     HROM_param.ode_solver_param.ode_solver_type = Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver;
     HROM_param.ode_solver_param.allocate_matrix_dRdW = true;
     HROM_param.reduced_order_param.entropy_variables_in_snapshots = true;
-    HROM_param.flow_solver_param.unsteady_data_table_filename = "HROM_" + HROM_param.flow_solver_param.unsteady_data_table_filename;
+    HROM_param.flow_solver_param.unsteady_data_table_filename = "HESROM_" + HROM_param.flow_solver_param.unsteady_data_table_filename;
     const Parameters::AllParameters HROM_param_const = HROM_param;
 
     // Create HROM Flow Solver
@@ -51,6 +69,7 @@ int UnsteadyHyperReduction<dim, nstate>::run_test() const {
     const double HROM_entropy_diff = final_HROM_entropy - initial_HROM_entropy;
 
     std::cout << "FOM Entropy: " << FOM_entropy_diff << std::endl;
+    std::cout << "ESROM Entropy: " << ESROM_entropy_diff << std::endl;
     std::cout << "HROM Entropy: " << HROM_entropy_diff << std::endl;
 
     return test_fail;

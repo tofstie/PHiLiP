@@ -37,6 +37,7 @@ DGHyper<dim, nstate, real, MeshType>::DGHyper(
     const std::shared_ptr<Triangulation> triangulation_input)
     :   DGBaseState<dim,nstate,real,MeshType>::DGBaseState(parameters_input, degree, max_degree_input, grid_degree_input, triangulation_input)
     ,   volume_basis(std::make_shared<dealii::TrilinosWrappers::SparseMatrix>())
+    ,   tangential_face_mapping(dealii::GeometryInfo<dim>::faces_per_cell)
 {}
 template<int dim, int nstate, typename real, typename MeshType>
 void DGHyper<dim, nstate, real, MeshType>::assemble_volume_term_and_build_operators(
@@ -154,12 +155,12 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
      std::ofstream Betx_file ("Betx.txt");
      BEtx.Print(Betx_file);
     // Fz.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
-     const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-     std::ofstream flux_file("x_flux"+std::to_string(this->current_time)+".txt");
-     Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Fx);
-     if (flux_file.is_open()){
-         flux_file << Qx_eig.format(CSVFormat);
-     }
+     // const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+     // std::ofstream flux_file("x_flux"+std::to_string(this->current_time)+".txt");
+     // Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Fx);
+     // if (flux_file.is_open()){
+     //     flux_file << Qx_eig.format(CSVFormat);
+     // }
     // flux_file.close();
     // std::ofstream yflux_file("y_flux"+std::to_string(this->current_time)+".txt");
     // Eigen::MatrixXd Qy_eig = epetra_to_eig_matrix(Fy);
@@ -3901,8 +3902,8 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
     const int n_quad_pts = this->volume_quadrature_collection[this->all_parameters->flow_solver_param.poly_degree].size();
     for(int i_quad = 0; i_quad < hyper_reduced_Q.NumGlobalRows();i_quad++)
     {
-        //hyper_reduced_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
-        Global_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
+        hyper_reduced_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
+        //Global_Q.ExtractGlobalRowCopy(i_quad,hyper_reduced_Q.NumGlobalCols(),NumEntries,global_row.data(),indicies.data());
         const int dof_row = this->quad_to_dof[i_quad];
         for(int entry = 0; entry < NumEntries;entry++)
         {
@@ -3926,15 +3927,15 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
     for(int i_face_quad = 0; i_face_quad < BEtx.NumGlobalRows();i_face_quad++) {
         BEtx.ExtractGlobalRowCopy(i_face_quad,BEtx.NumGlobalCols(),boundaryNumEntries,boundary_row.data(),boundary_indices.data());
         const int dof_col = this->solution.size()+i_face_quad*nstate;
-        if(i_face_quad == 0) {
-            boundaryNumEntries = 1;
-            boundary_row[0] = 1.0;
-            boundary_indices[0] = 0;
-        } else if (i_face_quad == 1) {
-            boundaryNumEntries = 1;
-            boundary_row[0] = -1.0;
-            boundary_indices[0] = BEtx.NumGlobalCols()-1;
-        }
+        // if(i_face_quad == 0) {
+        //     boundaryNumEntries = 1;
+        //     boundary_row[0] = 1.0;
+        //     boundary_indices[0] = 0;
+        // } else if (i_face_quad == 1) {
+        //     boundaryNumEntries = 1;
+        //     boundary_row[0] = -1.0;
+        //     boundary_indices[0] = BEtx.NumGlobalCols()-1;
+        // }
         for(int entry = 0; entry < boundaryNumEntries;entry++) {
             const int dof_row = this->quad_to_dof[boundary_indices[entry]];
             const double val = boundary_row[entry]*1.0;
@@ -4142,52 +4143,94 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                         mapping_basis, //Will have to remake these later
                         this->all_parameters->use_invariant_curl_form);
                     for(unsigned int flux_quad=0; flux_quad<n_quad_pts; ++flux_quad){
+                        dealii::Tensor<2,dim,real> metric_cofactor_flux_basis;
+                        for(int idim=0; idim<dim; idim++){
+                            for(int jdim=0; jdim<dim; jdim++){
+                                metric_cofactor_flux_basis[idim][jdim] = flux_metric_oper.metric_cofactor_vol[idim][jdim][flux_quad];
+                            }
+                        }
+                        std::array<real,nstate> soln_state_flux_basis;
+                        std::array<real,nstate> entropy_var_flux_basis;
+                        for(int istate=0; istate<nstate; istate++){
+                            //entropy_var_flux_basis[istate] = this->projected_entropy[flux_dofs_indices[istate*n_quad_pts+flux_quad]];
+                            entropy_var_flux_basis[istate] = this->projected_entropy[flux_dofs_indices[istate*n_quad_pts+flux_quad]];
+                        }
+                        soln_state_flux_basis = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_flux_basis);
                         //if (this->reduced_mesh_weights[this->dofs_to_quad[flux_dofs_indices[flux_quad]]] == 0) continue;
-                        for (int ref_dim =0;ref_dim<dim;ref_dim++) {
-                            dealii::Tensor<2,dim,real> metric_cofactor_flux_basis;
+
+                        int iface = at_cell_interface(current_cell,flux_current_cell,iquad,flux_quad);
+                        if(iface != -1) {
+                            metric_oper.build_facet_metric_operators(
+                               iface,
+                               this->face_quadrature_collection[poly_degree].size(),
+                               n_grid_nodes,
+                               mapping_support_points,
+                               mapping_basis,
+                               this->all_parameters->use_invariant_curl_form);
+                            const dealii::Tensor<1,dim,double> unit_ref_normal_int = dealii::GeometryInfo<dim>::unit_normal_vector[iface];
+                            dealii::Tensor<2,dim,real> metric_cofactor_surf;
                             for(int idim=0; idim<dim; idim++){
                                 for(int jdim=0; jdim<dim; jdim++){
-                                    metric_cofactor_flux_basis[idim][jdim] = flux_metric_oper.metric_cofactor_vol[idim][jdim][flux_quad];
+                                    metric_cofactor_surf[idim][jdim] = metric_oper.metric_cofactor_surf[idim][jdim][iquad];
                                 }
                             }
-                            std::array<real,nstate> soln_state_flux_basis;
-                            std::array<real,nstate> entropy_var_flux_basis;
-                            for(int istate=0; istate<nstate; istate++){
-                                //entropy_var_flux_basis[istate] = this->projected_entropy[flux_dofs_indices[istate*n_quad_pts+flux_quad]];
-                                entropy_var_flux_basis[istate] = this->projected_entropy[flux_dofs_indices[istate*n_quad_pts+flux_quad]];
+                            // numerical fluxes
+                            dealii::Tensor<1,dim,real> unit_phys_normal_int;
+                            metric_oper.transform_reference_to_physical(unit_ref_normal_int,
+                                                                            metric_cofactor_surf,
+                                                                            unit_phys_normal_int);
+                            const double face_Jac_norm_scaled = unit_phys_normal_int.norm();
+                            unit_phys_normal_int /= face_Jac_norm_scaled;//normalize it.
+                            std::array<real,nstate> conv_num_flux_dot_n_at_q;
+                            conv_num_flux_dot_n_at_q = this->conv_num_flux_double->evaluate_flux(soln_state, soln_state_flux_basis, unit_phys_normal_int);
+                            int iface_1d = iface % 2;
+                            int normal_factor = pow(-1,iface_1d+1);
+                            for (int ref_dim =0;ref_dim<dim;ref_dim++) {
+                                for(int istate=0; istate<nstate; istate++) {
+                                    int current_flux_dofs_index = flux_dofs_indices[flux_quad+n_quad_pts*(nstate-istate-1)];
+                                    if(current_flux_dofs_index == 5 && current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)]  == 12) {
+                                        std::cout << "Oh enlly" << std::endl;
+                                    }
+
+                                    double conv_num_flux_dot_n_at_q_phys = conv_num_flux_dot_n_at_q[nstate-istate-1] * normal_factor;
+                                    if(isnan(conv_num_flux_dot_n_at_q_phys)) conv_num_flux_dot_n_at_q_phys = 0.0;
+                                    if(ref_dim == 0)    Fx.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_num_flux_dot_n_at_q_phys,&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
+                                    if(ref_dim == 1)    Fy.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_num_flux_dot_n_at_q_phys,&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
+                                    if(ref_dim == 2)    Fz.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_num_flux_dot_n_at_q_phys,&current_flux_dofs_index);
+                                }
                             }
-                            soln_state_flux_basis = this->pde_physics_double->compute_conservative_variables_from_entropy_variables (entropy_var_flux_basis);
+                        } else {
                             //Compute the physical flux
                             std::array<dealii::Tensor<1,dim,real>,nstate> conv_phys_flux_2pt;
                             conv_phys_flux_2pt = this->pde_physics_double->convective_numerical_split_flux(soln_state, soln_state_flux_basis);
-                            if(current_dofs_indices[1] == 7 && flux_dofs_indices[1] == 7) {
-                                std::cout << "BREAK" <<std::endl;
-                            }
-                            for(int istate=0; istate<nstate; istate++){
-                                int current_flux_dofs_index = flux_dofs_indices[flux_quad+n_quad_pts*(nstate-istate-1)];
-                                dealii::Tensor<1,dim,real> conv_ref_flux_2pt;
-                                //For each state, transform the physical flux to a reference flux.
-                                metric_oper.transform_physical_to_reference(
-                                    conv_phys_flux_2pt[nstate-istate-1],
-                                    0.5*(metric_cofactor + metric_cofactor_flux_basis),
-                                    conv_ref_flux_2pt);
-                                //write into reference Hadamard flux matrix
-                                if (current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)] == 2 && current_flux_dofs_index == 3) {
-                                    std::cout << conv_ref_flux_2pt[ref_dim] << std::endl;
+                            for (int ref_dim =0;ref_dim<dim;ref_dim++) {
+
+                                for(int istate=0; istate<nstate; istate++){
+                                    int current_flux_dofs_index = flux_dofs_indices[flux_quad+n_quad_pts*(nstate-istate-1)];
+                                    dealii::Tensor<1,dim,real> conv_ref_flux_2pt;
+                                    //For each state, transform the physical flux to a reference flux.
+                                    metric_oper.transform_physical_to_reference(
+                                        conv_phys_flux_2pt[nstate-istate-1],
+                                        0.5*(metric_cofactor + metric_cofactor_flux_basis),
+                                        conv_ref_flux_2pt);
+                                    //write into reference Hadamard flux matrix
+                                    if (current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)] == 2 && current_flux_dofs_index == 3) {
+                                        std::cout << conv_ref_flux_2pt[ref_dim] << std::endl;
+                                    }
+                                    if(isnan(conv_ref_flux_2pt[ref_dim])) conv_ref_flux_2pt[ref_dim] = 0;
+                                    Pos_Fx(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
+                                    Pos_Fy(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
+                                    if(ref_dim == 0)    Fx.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
+                                    if(ref_dim == 1)    Fy.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
+                                    if(ref_dim == 2)    Fz.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
                                 }
-                                if(isnan(conv_ref_flux_2pt[ref_dim])) conv_ref_flux_2pt[ref_dim] = 0;
-                                Pos_Fx(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
-                                Pos_Fy(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
-                                if(ref_dim == 0)    Fx.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
-                                if(ref_dim == 1)    Fy.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
-                                if(ref_dim == 2)    Fz.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
                             }
                         }
                     }
-                }
                 auto flux_cells_end = std::chrono::high_resolution_clock::now();
                 auto flux_cells_duration = std::chrono::duration_cast<std::chrono::microseconds>(flux_cells_end - flux_cells_start);
                 //std::cout << "Flux cells: " << flux_cells_duration.count() << std::endl;
+                }
             }
         }
     auto this_cells_end = std::chrono::high_resolution_clock::now();
@@ -4546,10 +4589,13 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
          // } // end of dim loop
          //Build the face terms
 
-        std::vector<std::map<int,int>> tangential_face_mapping(dealii::GeometryInfo<dim>::faces_per_cell);
+        ;
         if (dim == 1) {
-            tangential_face_mapping[0][0] = n_quad_pts_1D-1;
-            tangential_face_mapping[0][n_quad_pts_1D-1] = 0;
+            this->tangential_face_mapping[0][0] = n_quad_pts_1D-1;
+            //this->tangential_face_mapping[0][n_quad_pts_1D-1] = 0;
+            //this->tangential_face_mapping[1][0] = n_quad_pts_1D-1;
+            this->tangential_face_mapping[1][n_quad_pts_1D-1] = 0;
+
         } else if (dim == 2) {
 
             for (unsigned int idim=0; idim < dim; ++idim) {
@@ -4559,8 +4605,8 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                 if (idim == 1) ending_quad *= n_quad_pts_1D;
                 if (idim == 1) bonus *= n_quad_pts_1D;
                 for (unsigned int i_quad_pts_1D =0; i_quad_pts_1D < n_quad_pts_1D; ++i_quad_pts_1D) {
-                    tangential_face_mapping[2*idim][starting_quad] = ending_quad-bonus;
-                    tangential_face_mapping[2*idim+1][ending_quad] = starting_quad+bonus;
+                    this->tangential_face_mapping[2*idim][starting_quad] = ending_quad-bonus;
+                    this->tangential_face_mapping[2*idim+1][ending_quad] = starting_quad+bonus;
                     if(idim == 0) {
                         starting_quad += n_quad_pts_1D;
                         ending_quad += n_quad_pts_1D;
@@ -4643,19 +4689,24 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
                         } else {
                             global_point = local_col;
                         }
-                        int neighbour_local_quad = tangential_face_mapping[iface][global_point];
+                        int neighbour_local_quad;
+                        if(this->tangential_face_mapping[iface].find(global_point) != this->tangential_face_mapping[iface].end()){
+                            neighbour_local_quad =  this->tangential_face_mapping[iface].at(global_point);
+                        } else { //catch (const std::exception& /*e*/) {
+                            neighbour_local_quad = 0;
+                        }
                         int neighbour_global_quad = this->dofs_to_quad[neighbour_cells[neighbour_local_quad]];
-                        double zero = 0.0;
+                        //double zero = 0.0;
                         for(unsigned int i_quad = 0; i_quad < n_quad_pts; i_quad++) {
                             const int row_index = this->dofs_to_quad[current_dofs_indices[i_quad]];
-                            //double value = ETBx(i_quad,local_col);
-                            //Qx.InsertGlobalValues(row_index,1,&value,&neighbour_global_quad);
-                            Qx.InsertGlobalValues(row_index,1,&zero,&neighbour_global_quad);
+                            double value = ETBx(i_quad,local_col);
+                            Qx.InsertGlobalValues(row_index,1,&value,&neighbour_global_quad);
+                            //Qx.InsertGlobalValues(row_index,1,&zero,&neighbour_global_quad);
                         }
                     } else if(i_dim == 1) {
                         unsigned int local_col = n_quad_pts_face*i_face_1D+i_quad_oneD;
                         unsigned int global_point = local_col;
-                        int neighbour_local_quad = tangential_face_mapping[iface][global_point];
+                        int neighbour_local_quad = this->tangential_face_mapping[iface][global_point];
                         int neighbour_global_quad = this->dofs_to_quad[neighbour_cells[neighbour_local_quad]];
                         for(unsigned int i_quad = 0; i_quad < n_quad_pts; i_quad++) {
                             const int row_index = this->dofs_to_quad[current_dofs_indices[i_quad]];
@@ -4869,15 +4920,15 @@ Epetra_CrsMatrix  DGHyper<dim,nstate,real,MeshType>::calculate_hyper_reduced_Bx(
     for(int i_face_quad = 0; i_face_quad < BEt.NumGlobalRows();i_face_quad++) {
         BEt.ExtractGlobalRowCopy(i_face_quad,BEt.NumGlobalCols(),boundaryNumEntries,boundary_row.data(),boundary_indices.data());
         const int dof_row = i_face_quad*nstate;
-        if(i_face_quad == 0) {
-            boundaryNumEntries = 1;
-            boundary_row[0] = -1.0;
-            boundary_indices[0] = 0;
-        } else if (i_face_quad == 1) {
-            boundaryNumEntries = 1;
-            boundary_row[0] = 1.0;
-            boundary_indices[0] = BEt.NumGlobalCols()-1;
-        }
+        // if(i_face_quad == 0) {
+        //     boundaryNumEntries = 1;
+        //     boundary_row[0] = -1.0;
+        //     boundary_indices[0] = 0;
+        // } else if (i_face_quad == 1) {
+        //     boundaryNumEntries = 1;
+        //     boundary_row[0] = 1.0;
+        //     boundary_indices[0] = BEt.NumGlobalCols()-1;
+        // }
         for(int entry = 0; entry < boundaryNumEntries;entry++) {
             const int dof_col = this->quad_to_dof[boundary_indices[entry]];
             const double val = boundary_row[entry]*-1.0;
@@ -5091,7 +5142,7 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_boundary_flux() {
             }
             else {
                 // cell has neighbour
-                //continue;
+                continue;
                 dealii::Vector<real> current_cell_rhs (n_dofs_curr_cell);
                 const auto neighbor_cell = (current_cell->has_periodic_neighbor(iface)) ? current_cell->periodic_neighbor(iface) : current_cell->neighbor(iface);
                 if(!this->current_cell_should_do_the_work_hyper(current_cell,neighbor_cell)) continue;
@@ -5230,6 +5281,25 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_boundary_flux() {
         MPI_Barrier(MPI_COMM_WORLD);
     }
     rhs_file.close();
+}
+
+
+template<int dim, int nstate, typename real, typename MeshType>
+template<typename DoFCellAccessorType1, typename DoFCellAccessorType2>
+int DGHyper<dim,nstate,real,MeshType>::at_cell_interface(const DoFCellAccessorType1 &current_cell, const DoFCellAccessorType2 &flux_cell,
+        const unsigned int iquad, const unsigned int flux_quad) {
+    for(unsigned int iface = 0; iface < dealii::GeometryInfo<dim>::faces_per_cell; ++iface) {
+        auto current_face = current_cell->face(iface);
+        if((current_face->at_boundary() && !current_cell->has_periodic_neighbor(iface))) continue;
+        const auto neighbor_cell = current_cell->neighbor_or_periodic_neighbor(iface);
+        // If the quad numbering correspond to each other and are on the same cell interface
+        if(this->tangential_face_mapping[iface].find((int) iquad) == this->tangential_face_mapping[iface].end()) continue;
+        if(this->tangential_face_mapping[iface][(int) iquad] == (int) flux_quad && neighbor_cell->index() == flux_cell->index()) {
+            return (int) iface;
+        }
+    }
+    return -1; // Not at cell interface
+
 }
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;
