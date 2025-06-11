@@ -20,13 +20,13 @@ set use_periodic_bc = true
 
 # numerical fluxes
 set conv_num_flux = two_point_flux_with_lax_friedrichs_dissipation
-set two_point_num_flux_type = CH
+set two_point_num_flux_type = Ra
 
 # ODE solver
 subsection ODE solver
   set ode_output = verbose
   set ode_solver_type = runge_kutta
-  set runge_kutta_method = rk4_ex
+  set runge_kutta_method = ssprk3_ex
   #set initial_time_step = 0.001
   set output_solution_every_x_steps = 1
 end
@@ -44,7 +44,7 @@ subsection flow_solver
   subsection grid
     set grid_left_bound = -1
     set grid_right_bound = 1
-    set number_of_grid_elements_per_dimension = 32
+    set number_of_grid_elements_per_dimension = 16
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end
@@ -52,10 +52,11 @@ end
 subsection reduced order
     set output_snapshot_every_x_timesteps = 1
     #set singular_value_threshold = 0.9999999
-    set number_modes = 100
+    set number_modes = 50
     set path_to_search = .
     set adaptation_tolerance = 0.0015
     set entropy_variables_in_snapshots = false
+    set quadrature_POD = true
 end
 
 subsection hyperreduction
@@ -63,6 +64,5 @@ subsection hyperreduction
     set NNLS_tol = 1e-9
     set NNLS_max_iter = 1000
     set training_data = residual
-    set read_in_weights = true
-
+    set read_in_weights = false
 end

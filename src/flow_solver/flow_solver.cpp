@@ -228,9 +228,7 @@ FlowSolver<dim, nstate>::FlowSolver(
     }
 
     // Set the default ECSW Weights (1 vector)
-    dealii::Vector<float> default_weights(dg->solution.size()/nstate);
-    default_weights.add(1.0);
-    this->dg->reduced_mesh_weights = default_weights;
+    this->dg->set_default_weights();
     // Allocate ODE solver after initializing DG
     ode_solver->allocate_ode_system();
 

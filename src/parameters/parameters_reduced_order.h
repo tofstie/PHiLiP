@@ -61,6 +61,9 @@ public:
     /// Use residual/reduced residual for error indicator instead of DWR. False by default.
     bool residual_error_bool;
 
+    /// Use quadrature set up for the POD basis
+    bool quadrature_POD;
+
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
 

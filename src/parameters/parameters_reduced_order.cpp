@@ -52,6 +52,9 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("residual_error_bool", "false",
                           dealii::Patterns::Bool(),
                           "Use residual/reduced residual for error indicator instead of DWR. False by default.");
+        prm.declare_entry("quadrature_POD", "false",
+                        dealii::Patterns::Bool(),
+                        "Boolean to determine whether to do DoF or quadrature approach to constructing ROM. False by default.");
     }
     prm.leave_subsection();
 }
@@ -91,6 +94,7 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
             FOM_error_linear_solver_type = LinearSolverEnum::gmres;
         }
         residual_error_bool = prm.get_bool("residual_error_bool");
+        quadrature_POD = prm.get_bool("quadrature_POD");
     }
     prm.leave_subsection();
 }

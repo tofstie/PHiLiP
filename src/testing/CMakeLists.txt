@@ -51,6 +51,7 @@ set(TESTS_SOURCE
     unsteady_hyper_reduction.cpp
     hyper_reduction_dg.cpp
     h_refinement_reduced_order.cpp
+    unsteady_dof_and_quad_ESROM.cpp
 )
 
 foreach(dim RANGE 1 3)

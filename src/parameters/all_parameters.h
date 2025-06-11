@@ -217,7 +217,8 @@ public:
         pod_unsteady,
         halton_sampling_run,
         hyper_reduction_dg,
-        h_refinement_study_reduced_order
+        h_refinement_study_reduced_order,
+        unsteady_dof_and_quad_esrom
     };
     /// Store selected TestType from the input file.
     TestType test_type;

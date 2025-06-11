@@ -3452,9 +3452,10 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     //Eigen::MatrixXd pinvV = V_eigen.completeOrthogonalDecomposition().pseudoInverse();
     //Eigen::PartialPivLU<Eigen::MatrixXd> lu = Eigen::PartialPivLU<Eigen::MatrixXd>(VTV);
     std::cout << "Calculating PseudeoInv" << std::endl;
-    Eigen::MatrixXd V_eigen_T = V_eigen.transpose();
-    Eigen::MatrixXd VTV = V_eigen_T*V_eigen;
-    Eigen::MatrixXd PsuedoInv = VTV.inverse()*V_eigen_T;
+    Eigen::MatrixXd PsuedoInv = V_eigen;
+    // Eigen::MatrixXd V_eigen_T = V_eigen.transpose();
+    // Eigen::MatrixXd VTV = V_eigen_T*V_eigen;
+    // Eigen::MatrixXd PsuedoInv = VTV.inverse()*V_eigen_T;
 
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     std::cout << "Back to Epetra" << std::endl;

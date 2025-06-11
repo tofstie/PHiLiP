@@ -61,6 +61,10 @@ class NonPeriodicCubeFlow : public CubeFlow_UniformGrid<dim, nstate>
         const int overintegrate=10 // Overintegrate for KE, don't for num. entropy
         ) const;
 
+    /// Function to compute the constant time step
+    /** Calculates based on CFL for Euler, and from parameters otherwise */
+    double get_constant_time_step(std::shared_ptr<DGBase<dim,double>> dg) const override;
+
  private:
 
     /// Storing entropy at first step

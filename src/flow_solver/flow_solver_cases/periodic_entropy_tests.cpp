@@ -82,7 +82,8 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
         quad_weights_ = dg.volume_quadrature_collection[poly_degree].get_weights();
         n_quad_pts_ = dg.volume_quadrature_collection[poly_degree].size();
     }
-    const std::vector<double> &quad_weights = quad_weights_; 
+    const std::vector<double> &quad_weights = quad_weights_;
+
     const unsigned int n_quad_pts = n_quad_pts_; 
 
     // Construct the basis functions and mapping shape functions.
@@ -108,7 +109,6 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
         if (!cell->is_locally_owned()) continue;
         //if (dg.reduced_mesh_weights[cell->active_cell_index()] == 0) continue;
         cell->get_dof_indices (dofs_indices);
-        const dealii::types::global_dof_index cell_index = cell->active_cell_index();
         // We first need to extract the mapping support points (grid nodes) from high_order_grid.
         const dealii::FESystem<dim> &fe_metric = dg.high_order_grid->fe_system;
         const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
@@ -189,7 +189,7 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
 
         // Loop over quadrature nodes, compute quantities to be integrated, and integrate them.
         for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad) {
-
+            double hyper_weight = dg.reduced_mesh_weights[dg.dofs_to_quad[dofs_indices[iquad]]];
             std::array<double,nstate> soln_at_q;
             std::array<dealii::Tensor<1,dim,double>,nstate> soln_grad_at_q;
             // Extract solution and gradient in a way that the physics ca n use them.
@@ -205,16 +205,16 @@ double PeriodicEntropyTests<dim, nstate>::compute_integrated_quantities(DGBase<d
             //#####################################################################
             if (quantity == IntegratedQuantityEnum::kinetic_energy) { 
                 const double KE_integrand = this->euler_physics->compute_kinetic_energy_from_conservative_solution(soln_at_q);
-                integrated_quantity += KE_integrand * quad_weights[iquad] * metric_oper.det_Jac_vol[iquad];
+                integrated_quantity += KE_integrand * hyper_weight * metric_oper.det_Jac_vol[iquad];//quad_weights[iquad] * metric_oper.det_Jac_vol[iquad];
             } else if (quantity == IntegratedQuantityEnum::numerical_entropy) {
                 const double quadrature_entropy = this->euler_physics->compute_numerical_entropy_function(soln_at_q);
                 //Using std::cout because of cell->is_locally_owned check 
                 if (isnan(quadrature_entropy)){  
                     std::cout << "WARNING: NaN entropy detected at a node!"  << std::endl;}
-                integrated_quantity += quadrature_entropy * quad_weights[iquad] * metric_oper.det_Jac_vol[iquad] * dg.reduced_mesh_weights[cell_index];
+                integrated_quantity += quadrature_entropy * hyper_weight * metric_oper.det_Jac_vol[iquad];//quad_weights[iquad] * metric_oper.det_Jac_vol[iquad];
             } else if (quantity == IntegratedQuantityEnum::max_wave_speed) {
                 const double local_wave_speed = this->euler_physics->max_convective_eigenvalue(soln_at_q);
-                if(local_wave_speed > integrated_quantity) integrated_quantity = local_wave_speed;
+                if(local_wave_speed > integrated_quantity) integrated_quantity = local_wave_speed*quad_weights[iquad]/quad_weights[iquad];
             } else {
                 std::cout << "Integrated quantity is not correctly defined." << std::endl;
             }

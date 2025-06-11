@@ -15,7 +15,7 @@ UnsteadyReducedOrder<dim,nstate>::UnsteadyReducedOrder(const Parameters::AllPara
 {}
 
 template<int dim, int nstate>
-int UnsteadyReducedOrder<dim,nstate>::run_test() const 
+int UnsteadyReducedOrder<dim,nstate>::run_test() const
 {
     pcout << "Starting unsteady reduced-order test..." << std::endl;
     int testfail = 0;
@@ -42,7 +42,7 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     try {
         static_cast<void>(flow_solver_galerkin->run());
     } catch (double end) {
-        this->pcout << "ROM Failed at t = " << end << std::endl;
+        this->pcout << "ROM Failed at t = " << flow_solver_galerkin->ode_solver->current_time << std::endl;
     }
 
     // Change Parameters to Entropy-Stable ROM

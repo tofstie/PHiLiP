@@ -30,14 +30,14 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         if(this->butcher_tableau->get_a(istage,j) != 0){
             dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_j;
             multiply(*epetra_test_basis,this->reduced_rk_stage[j],dealii_rk_stage_j,this->dg->solution,false);
-            std::ofstream dealii_rk_stage_j_file("dealii_rk_stage_j_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) + ".txt");
-            for(unsigned int i = 0 ; i < dealii_rk_stage_j.size(); i++){
-                if (dealii_rk_stage_j.in_local_range(i)){
-                    dealii_rk_stage_j_file << dealii_rk_stage_j[i] << '\n';
-                }
-                MPI_Barrier(MPI_COMM_WORLD);
-            }
-            dealii_rk_stage_j_file.close();
+            // std::ofstream dealii_rk_stage_j_file("dealii_rk_stage_j_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) + ".txt");
+            // for(unsigned int i = 0 ; i < dealii_rk_stage_j.size(); i++){
+            //     if (dealii_rk_stage_j.in_local_range(i)){
+            //         dealii_rk_stage_j_file << dealii_rk_stage_j[i] << '\n';
+            //     }
+            //     MPI_Barrier(MPI_COMM_WORLD);
+            // }
+            // dealii_rk_stage_j_file.close();
             this->rk_stage[istage].add(this->butcher_tableau->get_a(istage,j),dealii_rk_stage_j);
         }
     } //sum(a_ij*V*k_j), explicit part
@@ -76,14 +76,14 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->dg->assemble_residual();
     }
      //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*V*k_j) + dt * a_ii * u^(istage)))
-    // std::ofstream rhs_file("rhs_before_hyper_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
-    // for(unsigned int i = 0 ; i < this->dg->right_hand_side.size(); i++){
-    //     if (this->dg->right_hand_side.in_local_range(i)){
-    //         rhs_file << this->dg->right_hand_side[i] << '\n';
-    //     }
-    //     MPI_Barrier(MPI_COMM_WORLD);
-    // }
-    // rhs_file.close();
+    std::ofstream rhs_file("rhs_before_hyper_"+ std::to_string(istage) +":"+ std::to_string(this->current_time+ this->butcher_tableau->get_c(istage)*dt) +  +".txt");
+    for(unsigned int i = 0 ; i < this->dg->right_hand_side.size(); i++){
+        if (this->dg->right_hand_side.in_local_range(i)){
+            rhs_file << this->dg->right_hand_side[i] << '\n';
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+    rhs_file.close();
     Epetra_Vector epetra_right_hand_side(Epetra_DataAccess::View, epetra_trial_basis->RowMap(), this->dg->right_hand_side.begin());
     std::ofstream epetra_right_hand_side_file("epetra_right_hand_side"+std::to_string(istage)+".txt");
     epetra_right_hand_side.Print(epetra_right_hand_side_file);
@@ -235,12 +235,12 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
     this->dg->construct_global_Q(Qx,Qy,Qz,true);
     Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Qx);
-    std::ofstream file("(Q-Qt)x_eig.txt");
+    /*std::ofstream file("(Q-Qt)x_eig.txt");
     const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file.is_open()){
         file << Qx_eig.format(CSVFormat);
     }
-    file.close();
+    file.close();*/
     // Eigen::MatrixXd Qy_eig = epetra_to_eig_matrix(Qy);
     // std::ofstream yfile("(Q-Qt)y_eig.txt");
     // if (yfile.is_open()){
@@ -252,19 +252,19 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     this->dg->test_projection_matrix.resize(dim);
     this->dg->evaluate_hyper_mass_matrices(false,true);
     epetra_mass_matrix = this->dg->global_mass_matrix.trilinos_matrix();
-    std::ofstream mass_dof_new_weight_file("mass_dof_new_weight.txt");
-    epetra_mass_matrix.Print(mass_dof_new_weight_file);
+    // std::ofstream mass_dof_new_weight_file("mass_dof_new_weight.txt");
+    // epetra_mass_matrix.Print(mass_dof_new_weight_file);
     epetra_reduced_lhs = generate_reduced_lhs(epetra_mass_matrix,*epetra_trial_basis,*epetra_trial_basis);
-    std::ofstream lhs_file("lhs_file.txt");
-    epetra_reduced_lhs->Print(lhs_file);
+    // std::ofstream lhs_file("lhs_file.txt");
+    // epetra_reduced_lhs->Print(lhs_file);
     dealii::TrilinosWrappers::SparseMatrix pod_basis;
     pod_basis.reinit(*epetra_trial_basis);
     this->dg->calculate_projection_matrix(*epetra_reduced_lhs,*epetra_trial_basis);//(pod_basis);
     //this->dg->right_hand_side.reinit(this->dg->dof_handler.n_dofs());
     for(int idim = 0; idim < dim; ++idim) {
-        std::ofstream vt_file("vt_file" + std::to_string(idim) + ".txt");
+        // std::ofstream vt_file("vt_file" + std::to_string(idim) + ".txt");
         std::shared_ptr<Epetra_CrsMatrix> hyper_reduced_vt = generate_hyper_test_basis(*this->dg->galerkin_test_basis[idim]);
-        hyper_reduced_vt->Print(vt_file);
+        // hyper_reduced_vt->Print(vt_file);
         std::shared_ptr<Epetra_CrsMatrix> test_lhs = generate_hyper_reduced_lhs(epetra_quad_mass_matrix,*hyper_reduced_vt,*hyper_reduced_vt);
         this->dg->set_test_projection_matrix(test_lhs,hyper_reduced_vt,idim);
         if (idim == 0) {
@@ -281,12 +281,12 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
         this->dg->test_projection_matrix[idim] = nullptr;
     }
     this->dg->boundary_term = std::make_shared<Epetra_Vector>(BEtx->RowMap());
-    Eigen::MatrixXd Qtx_eig = epetra_to_eig_matrix(*Qtx);
-    std::ofstream tfile("Qtx_eig.txt");
-    if (tfile.is_open()){
-        tfile << Qtx_eig.format(CSVFormat);
-    }
-    tfile.close();
+    // Eigen::MatrixXd Qtx_eig = epetra_to_eig_matrix(*Qtx);
+    // std::ofstream tfile("Qtx_eig.txt");
+    // if (tfile.is_open()){
+    //     tfile << Qtx_eig.format(CSVFormat);
+    // }
+    // tfile.close();
     // Eigen::MatrixXd Qty_eig = epetra_to_eig_matrix(*Qty);
     // std::ofstream Qtyfile("Qty_eig.txt");
     // if (Qtyfile.is_open()){

@@ -1758,8 +1758,10 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
 #if PHILIP_DIM>1
     if(this->all_parameters->output_face_results_vtk) output_face_results_vtk (cycle, current_time);
 #endif
+    const bool HYPER_bool = (this->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::hyper_reduced_galerkin_runge_kutta_solver) ? true : false;
     const bool ES_ROM_bool = this->all_parameters->reduced_order_param.entropy_variables_in_snapshots;
-    const bool ROM_bool = (this->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver) ? true : false;
+    const bool ROM_bool = (this->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver ||
+                           HYPER_bool) ? true : false;
     const bool enable_higher_order_vtk_output = this->all_parameters->enable_higher_order_vtk_output;
     dealii::DataOut<dim, dealii::DoFHandler<dim>> data_out;
 
@@ -1866,6 +1868,7 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
 
     const int iproc = dealii::Utilities::MPI::this_mpi_process(mpi_communicator);
     std::string filename = this->all_parameters->solution_vtk_files_directory_name + "/" + "solution-" + dealii::Utilities::int_to_string(dim, 1) +"D_maxpoly"+dealii::Utilities::int_to_string(max_degree, 2)+"-";
+    if (HYPER_bool) filename += "H";
     if (ES_ROM_bool) filename += "ES";
     if (ROM_bool) filename += "ROM-";
     filename += dealii::Utilities::int_to_string(cycle, 4) + ".";
@@ -1879,6 +1882,7 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
         std::vector<std::string> filenames;
         for (unsigned int iproc = 0; iproc < dealii::Utilities::MPI::n_mpi_processes(mpi_communicator); ++iproc) {
             std::string fn = "solution-" + dealii::Utilities::int_to_string(dim, 1) +"D_maxpoly"+dealii::Utilities::int_to_string(max_degree, 2)+"-";
+            if (HYPER_bool) fn += "H";
             if (ES_ROM_bool) fn += "ES";
             if (ROM_bool) fn += "ROM-";
             fn += dealii::Utilities::int_to_string(cycle, 4) + ".";
@@ -1887,6 +1891,7 @@ void DGBase<dim,real,MeshType>::output_results_vtk (const unsigned int cycle, co
             filenames.push_back(fn);
         }
         std::string master_fn = this->all_parameters->solution_vtk_files_directory_name + "/" + "solution-" + dealii::Utilities::int_to_string(dim, 1) +"D_maxpoly"+dealii::Utilities::int_to_string(max_degree, 2)+"-";
+        if (HYPER_bool) master_fn += "H";
         if (ES_ROM_bool) master_fn += "ES";
         if (ROM_bool) master_fn += "ROM-";
         master_fn += dealii::Utilities::int_to_string(cycle, 4) + ".pvtu";
@@ -4004,8 +4009,8 @@ void DGBase<dim, real, MeshType>::set_galerkin_basis(std::shared_ptr<Epetra_CrsM
         EpetraExt::MatrixMatrix::Multiply(inverse_mass_matrix,false,int_step,false,right_hand_test);
         right_hand_test.FillComplete(domain_map, global_map);
         //Epetra_CrsMatrix
-        Epetra_Map input_domain_map(modes*2,0,comm);
-        Epetra_CrsMatrix input_into_svd_epetra(Epetra_DataAccess::Copy,basis->RowMap(),input_domain_map,modes*2);
+        Epetra_Map input_domain_map(2*modes,0,comm);
+        Epetra_CrsMatrix input_into_svd_epetra(Epetra_DataAccess::Copy,basis->RowMap(),input_domain_map,2*modes);
         std::cout << "Adding all this shit into the matrix" << std::endl;
         //double one = 1;
         //int zero = 0;
@@ -4250,6 +4255,7 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(*lhs_matrix);
     //dealii::LAPACKFullMatrix<double> LHS_LAPACK = eig_to_lapack_matrix(LHS_eigen);
     //LHS_LAPACK.print_formatted(lhs_file,16,true,0,"0");
+
     Eigen::MatrixXd LHS_inverse = LHS_eigen.inverse();
     Eigen::EigenSolver<Eigen::MatrixXd> eigensolver2;
     eigensolver2.compute(LHS_eigen);
@@ -4288,6 +4294,7 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
 
 template<int dim, typename real, typename MeshType>
 void DGBase<dim, real, MeshType>::set_default_weights() {
+    this->reduced_mesh_weights.reinit(solution.size()/nstate);
     for(auto cell = dof_handler.begin_active(); cell != dof_handler.end(); ++cell) {
         if(!(cell->is_locally_owned())) continue;
         const unsigned int poly_degree = cell->active_fe_index();

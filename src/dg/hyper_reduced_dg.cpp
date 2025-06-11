@@ -125,6 +125,7 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     Epetra_CrsMatrix &Qtx,Epetra_CrsMatrix &Qty,Epetra_CrsMatrix &/*Qtz*/, Epetra_CrsMatrix &BEtx) {
     std::cout << "Starting Assembly" << std::endl;
     const int global_size = this->solution.size();
+    //const int maximum_size = Qtx.RowMap().MaxElementSize();
     const int grid_degree = this->all_parameters->flow_solver_param.grid_degree;
     Epetra_MpiComm comm(MPI_COMM_WORLD);
     Epetra_Map boundary_map((int)this->number_global_boundaries*nstate,0,comm);
@@ -146,21 +147,21 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
 
     Fx.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
     FBx.FillComplete(BEtx.DomainMap(),BEtx.RowMap());
-    std::ofstream FBx_file ("Fbx.txt");
-    FBx.Print(FBx_file);
+    // std::ofstream FBx_file ("Fbx.txt");
+    // FBx.Print(FBx_file);
     if(dim > 1) {
         Fy.FillComplete(Qty.DomainMap(),Qty.RowMap());
     }
 
-     std::ofstream Betx_file ("Betx.txt");
-     BEtx.Print(Betx_file);
+     // std::ofstream Betx_file ("Betx.txt");
+     // BEtx.Print(Betx_file);
     // Fz.FillComplete(Qtx.DomainMap(),Qtx.RowMap());
-     // const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-     // std::ofstream flux_file("x_flux"+std::to_string(this->current_time)+".txt");
-     // Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Fx);
-     // if (flux_file.is_open()){
-     //     flux_file << Qx_eig.format(CSVFormat);
-     // }
+    //  const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    //  std::ofstream flux_file("x_flux"+std::to_string(this->current_time)+".txt");
+    //  Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Fx);
+    //  if (flux_file.is_open()){
+    //      flux_file << Qx_eig.format(CSVFormat);
+    //  }
     // flux_file.close();
     // std::ofstream yflux_file("y_flux"+std::to_string(this->current_time)+".txt");
     // Eigen::MatrixXd Qy_eig = epetra_to_eig_matrix(Fy);
@@ -168,10 +169,10 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     //     yflux_file << Qy_eig.format(CSVFormat);
     // }
     // yflux_file.close();
-    //std::ofstream qtxfile("Qtx.txt");
-    //Qtx.Print(qtxfile);
-    //std::ofstream qtyfile("Qty.txt");
-    //Qty.Print(qtyfile);
+    // std::ofstream qtxfile("Qtx.txt");
+    // Qtx.Print(qtxfile);
+    // std::ofstream qtyfile("Qty.txt");
+    // Qty.Print(qtyfile);
     //std::ofstream qtzfile("Qtz.txt");
     //Qtz.Print(qtzfile);
     const int max_poly = this->all_parameters->flow_solver_param.max_poly_degree_for_adaptation;
@@ -224,14 +225,7 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     //     BExFB_file.close();
     // }
     //
-    // {
-    //     std::ofstream QtyF_file("QtyF"+std::to_string(this->current_time)+".txt");
-    //     Eigen::MatrixXd QtyF_eig = epetra_to_eig_matrix(QtyF);
-    //     if (QtyF_file.is_open()){
-    //         QtyF_file << QtyF_eig.format(CSVFormat);
-    //     }
-    //     QtyF_file.close();
-    // }
+
     QtxF_deall.reinit(QtxF);
     BExFB_deall.reinit(BExFB);
     //QtzF_deall.reinit(QtzF);
@@ -244,6 +238,14 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
         dealii::TrilinosWrappers::SparseMatrix QtyF_deall;
         QtyF_deall.reinit(QtyF);
         QtyF_deall.vmult_add(temp_rhs,ones);
+        // {
+        //     std::ofstream QtyF_file("QtyF"+std::to_string(this->current_time)+".txt");
+        //     Eigen::MatrixXd QtyF_eig = epetra_to_eig_matrix(QtyF);
+        //     if (QtyF_file.is_open()){
+        //         QtyF_file << QtyF_eig.format(CSVFormat);
+        //     }
+        //     QtyF_file.close();
+        // }
     }
     std::cout << "temp_rhs norm " + std::to_string(temp_rhs.l2_norm()) << std::endl;
 
@@ -255,11 +257,11 @@ void DGHyper<dim,nstate,real,MeshType>::assemble_hyper_reduced_residual (
     //this->right_hand_side = temp_rhs;
     volume_basis->vmult(this->right_hand_side,temp_rhs);
     this->right_hand_side *= -1;
-    std::ofstream filez("AnotherRHS.txt");
-    this->right_hand_side.print(filez);
+    // std::ofstream filez("AnotherRHS.txt");
+    // this->right_hand_side.print(filez);
     this->calculate_boundary_flux();
-    std::ofstream another_file("RHSandBoundary.txt");
-    this->right_hand_side.print(another_file);
+    // std::ofstream another_file("RHSandBoundary.txt");
+    // this->right_hand_side.print(another_file);
     for(unsigned int i = 0; i < this->BExFB_term.size(); i++) {
         this->right_hand_side[this->boundary_term_map[i]] += this->BExFB_term[i];
     }
@@ -3559,9 +3561,10 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tril
     //Eigen::MatrixXd pinvV = V_eigen.completeOrthogonalDecomposition().pseudoInverse();
     //Eigen::PartialPivLU<Eigen::MatrixXd> lu = Eigen::PartialPivLU<Eigen::MatrixXd>(VTV);
     std::cout << "Calculating PseudeoInv" << std::endl;
-    Eigen::MatrixXd V_eigen_T = V_eigen.transpose();
-    Eigen::MatrixXd VTV = V_eigen_T*V_eigen;
-    Eigen::MatrixXd PsuedoInv = VTV.inverse()*V_eigen_T;
+    Eigen::MatrixXd PsuedoInv = V_eigen;
+    // Eigen::MatrixXd V_eigen_T = V_eigen.transpose();
+    // Eigen::MatrixXd VTV = V_eigen_T*V_eigen;
+    // Eigen::MatrixXd PsuedoInv = VTV.inverse()*V_eigen_T;
 
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     std::cout << "Back to Epetra" << std::endl;
@@ -3701,33 +3704,34 @@ Epetra_MpiComm comm( MPI_COMM_WORLD );
     W.FillComplete(row_map,row_map);
     std::cout << "Fill complete" << std::endl;
     chi_v.FillComplete(row_map,row_map);
-    std::ofstream fileio("file_happy22222.txt");
-    chi_v.Print(fileio);
-    std::ofstream wfile("weights_file.txt");
-    W.Print(wfile);
-    std::ofstream LeVFile("LEV_projection.txt");
+    // std::ofstream fileio("file_happy22222.txt");
+    // chi_v.Print(fileio);
+    // std::ofstream wfile("weights_file.txt");
+    // W.Print(wfile);
+    // std::ofstream LeVFile("LEV_projection.txt");
 
-    Eigen::MatrixXd LeV_eig = epetra_to_eig_matrix(LeV);
-    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-    if (LeVFile.is_open()){
-        LeVFile << LeV_eig.format(CSVFormat);
-    }
-    LeVFile.close();
+    // Eigen::MatrixXd LeV_eig = epetra_to_eig_matrix(LeV);
+    // const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    // if (LeVFile.is_open()){
+    //     LeVFile << LeV_eig.format(CSVFormat);
+    // }
+    // LeVFile.close();
 
     std::cout << "Build WChiV" << std::endl;
     Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(LHS);
     //dealii::LAPACKFullMatrix<double> LHS_LAPACK = eig_to_lapack_matrix(LHS_eigen);
     //LHS_LAPACK.print_formatted(lhs_file,16,true,0,"0");
+
     Eigen::MatrixXd LHS_inverse = LHS_eigen.inverse();
     Epetra_CrsMatrix LHS_inverse_epetra = eig_to_epetra_matrix(LHS_inverse,LHS_eigen.cols(),LHS_eigen.rows(),comm);
-    std::ofstream LHS_inverse_file("LHS_inverse_matrix.txt");
-    LHS_inverse_epetra.Print(LHS_inverse_file);
+    // std::ofstream LHS_inverse_file("LHS_inverse_matrix.txt");
+    // LHS_inverse_epetra.Print(LHS_inverse_file);
     Epetra_CrsMatrix LHSVt(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),LeV.NumGlobalRows());
     std::ofstream LHSVt_file("mult1.txt");
     int mult1;
     mult1 = EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,LeV,true,LHSVt);
     std::cout << "First MM: " << mult1 << std::endl;
-    LHSVt.Print(LHSVt_file);
+    // LHSVt.Print(LHSVt_file);
     std::cout << "LHSVt: " + std::to_string(LHSVt.NumGlobalRows()) +"x"+std::to_string(LHSVt.NumGlobalCols()) << std::endl;
     Epetra_CrsMatrix LHSVtChivT(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),chi_v.NumGlobalRows());
     int mult2;
@@ -3739,13 +3743,13 @@ Epetra_MpiComm comm( MPI_COMM_WORLD );
     mult3= EpetraExt::MatrixMatrix::Multiply(LHSVtChivT,false,W,false,epetra_projection_matrix);
     std::cout << "third Mult: " << mult3 << std::endl;
     epetra_projection_matrix.Print(Projec_file);
-    Eigen::MatrixXd P_eigen = epetra_to_eig_matrix(epetra_projection_matrix);
-    std::ofstream pfile("P_eigen.txt");
-    //const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-    if (pfile.is_open()){
-        pfile << P_eigen.format(CSVFormat);
-    }
-    pfile.close();
+    // Eigen::MatrixXd P_eigen = epetra_to_eig_matrix(epetra_projection_matrix);
+    // std::ofstream pfile("P_eigen.txt");
+    // //const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    // if (pfile.is_open()){
+    //     pfile << P_eigen.format(CSVFormat);
+    // }
+    // pfile.close();
     this->projection_matrix.reinit(epetra_projection_matrix);
 }
 
@@ -3798,13 +3802,14 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::
 template<int dim, int nstate, typename real, typename MeshType>
 Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q(Epetra_CrsMatrix &Global_Q, Epetra_CrsMatrix &hyper_Vt, const int idim) {
     if (idim >= dim) return Global_Q;
+    std::cout << "Hyper Q " << idim << std::endl;
     Epetra_MpiComm comm( MPI_COMM_WORLD );
     Epetra_CrsMatrix galerkin_basis_matrix = hyper_Vt;
     Epetra_CrsMatrix proj_epetra = *(this->test_projection_matrix[idim]);
-    std::ofstream proj_file("test_projec_" + std::to_string(idim) + ".txt");
-    proj_epetra.Print(proj_file);
-    std::ofstream basis_file("test_basis_" + std::to_string(idim) + ".txt");
-    galerkin_basis_matrix.Print(basis_file);
+    // std::ofstream proj_file("test_projec_" + std::to_string(idim) + ".txt");
+    // proj_epetra.Print(proj_file);
+    // std::ofstream basis_file("test_basis_" + std::to_string(idim) + ".txt");
+    // galerkin_basis_matrix.Print(basis_file);
     Epetra_Map first_temp_row_map = galerkin_basis_matrix.ColMap();
     Epetra_Map third_temp_row_map = proj_epetra.ColMap();
     Epetra_CrsMatrix first_temp(Epetra_DataAccess::Copy,first_temp_row_map,Global_Q.NumGlobalCols());
@@ -3818,8 +3823,8 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
 
     Epetra_CrsMatrix hyper_reduced_Q(Epetra_DataAccess::Copy,third_temp_row_map,proj_epetra.NumGlobalCols());
     EpetraExt::MatrixMatrix::Multiply(third_temp,false,proj_epetra,false,hyper_reduced_Q);
-    std::ofstream Qtfile("Qt_nquad_"+std::to_string(idim) + ".txt");
-    hyper_reduced_Q.Print(Qtfile);
+    // std::ofstream Qtfile("Qt_nquad_"+std::to_string(idim) + ".txt");
+    // hyper_reduced_Q.Print(Qtfile);
     Epetra_Map row_map((int)this->solution.size(),0,comm);
     const int domain_size = this->solution.size()+this->number_global_boundaries*nstate;
     //const int num_entries_per_row = hyper_reduced_Q.NumGlobalCols()+this->number_global_boundaries*nstate;
@@ -3947,16 +3952,16 @@ Epetra_CrsMatrix DGHyper<dim, nstate, real, MeshType>::calculate_hyper_reduced_Q
             }
         }
     }
-    std::ofstream file_testsing("Global_Hyper_Q.txt");
-    global_hyper_reduced_Q.Print(file_testsing);
+    // std::ofstream file_testsing("Global_Hyper_Q.txt");
+    // global_hyper_reduced_Q.Print(file_testsing);
     global_hyper_reduced_Q.FillComplete(domain_map,row_map);
-    if (idim == 0) {
-        std::ofstream posQxFile("Pos_Qx.txt");
-        pos_Q.print_formatted(posQxFile,14, true, 10, "0", 1., 0.);
-    } else {
-        std::ofstream posQyFile("Pos_Qy.txt");
-        pos_Q.print_formatted(posQyFile,14, true, 10, "0", 1., 0.);
-    }
+    // if (idim == 0) {
+    //     std::ofstream posQxFile("Pos_Qx.txt");
+    //     pos_Q.print_formatted(posQxFile,14, true, 10, "0", 1., 0.);
+    // } else {
+    //     std::ofstream posQyFile("Pos_Qy.txt");
+    //     pos_Q.print_formatted(posQyFile,14, true, 10, "0", 1., 0.);
+    // }
     return global_hyper_reduced_Q;
 }
 
@@ -4013,8 +4018,8 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
     const bool store_surf_flux_nodes = (this->all_parameters->use_periodic_bc) ? false : true;
     //solution.update_ghost_values();
     /*📢 ENSURE DOFS ARE CORRECT*/
-    dealii::Vector<double> Pos_Fx(this->solution.size());
-    dealii::Vector<double> Pos_Fy(this->solution.size());
+    // dealii::Vector<double> Pos_Fx(this->solution.size());
+    // dealii::Vector<double> Pos_Fy(this->solution.size());
 
     /*VOLUME FLUXES*/
     auto metric_cell = this->high_order_grid->dof_handler_grid.begin_active();
@@ -4046,7 +4051,7 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
         const dealii::FESystem<dim,dim> &current_fe_ref = this->fe_collection[i_fele];
         const unsigned int n_dofs_curr_cell = current_fe_ref.n_dofs_per_cell();
         const unsigned int n_quad_pts = this->volume_quadrature_collection[poly_degree].size();
-        //const unsigned int n_quad_pts_1D  = this->oneD_quadrature_collection[poly_degree].size();
+        const unsigned int n_quad_pts_1D  = this->oneD_quadrature_collection[poly_degree].size();
         const dealii::FESystem<dim> &fe_metric = this->high_order_grid->fe_system;
         const unsigned int n_metric_dofs = fe_metric.dofs_per_cell;
         const unsigned int n_grid_nodes  = n_metric_dofs / dim;
@@ -4169,9 +4174,20 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                                this->all_parameters->use_invariant_curl_form);
                             const dealii::Tensor<1,dim,double> unit_ref_normal_int = dealii::GeometryInfo<dim>::unit_normal_vector[iface];
                             dealii::Tensor<2,dim,real> metric_cofactor_surf;
+
+                            int ifacequad = iquad;
+                            if (iface == 0) {
+                                ifacequad = iquad / n_quad_pts_1D;
+                            } else if (iface == 1) {
+                                ifacequad = (iquad-n_quad_pts_1D+1) / n_quad_pts_1D;
+                            } else if (iface == 2) {
+                                ifacequad = iquad;
+                            } else if (iface == 3) {
+                                ifacequad = iquad - n_quad_pts_1D*(n_quad_pts_1D-1);
+                            }
                             for(int idim=0; idim<dim; idim++){
                                 for(int jdim=0; jdim<dim; jdim++){
-                                    metric_cofactor_surf[idim][jdim] = metric_oper.metric_cofactor_surf[idim][jdim][iquad];
+                                    metric_cofactor_surf[idim][jdim] = metric_oper.metric_cofactor_surf[idim][jdim][ifacequad];
                                 }
                             }
                             // numerical fluxes
@@ -4179,6 +4195,7 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                             metric_oper.transform_reference_to_physical(unit_ref_normal_int,
                                                                             metric_cofactor_surf,
                                                                             unit_phys_normal_int);
+                            dealii::Tensor<1,dim,real> copy_unit_phys_normal_int = unit_phys_normal_int;
                             const double face_Jac_norm_scaled = unit_phys_normal_int.norm();
                             unit_phys_normal_int /= face_Jac_norm_scaled;//normalize it.
                             std::array<real,nstate> conv_num_flux_dot_n_at_q;
@@ -4188,11 +4205,12 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                             for (int ref_dim =0;ref_dim<dim;ref_dim++) {
                                 for(int istate=0; istate<nstate; istate++) {
                                     int current_flux_dofs_index = flux_dofs_indices[flux_quad+n_quad_pts*(nstate-istate-1)];
-                                    if(current_flux_dofs_index == 5 && current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)]  == 12) {
-                                        std::cout << "Oh enlly" << std::endl;
+                                    if(current_flux_dofs_index == 5 && current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)]  == 10) {
+                                        std::cout << copy_unit_phys_normal_int[0] << std::endl;
                                     }
 
                                     double conv_num_flux_dot_n_at_q_phys = conv_num_flux_dot_n_at_q[nstate-istate-1] * normal_factor;
+                                    if (dim == 2) conv_num_flux_dot_n_at_q_phys *= face_Jac_norm_scaled;
                                     if(isnan(conv_num_flux_dot_n_at_q_phys)) conv_num_flux_dot_n_at_q_phys = 0.0;
                                     if(ref_dim == 0)    Fx.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_num_flux_dot_n_at_q_phys,&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
                                     if(ref_dim == 1)    Fy.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_num_flux_dot_n_at_q_phys,&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
@@ -4218,8 +4236,8 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
                                         std::cout << conv_ref_flux_2pt[ref_dim] << std::endl;
                                     }
                                     if(isnan(conv_ref_flux_2pt[ref_dim])) conv_ref_flux_2pt[ref_dim] = 0;
-                                    Pos_Fx(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
-                                    Pos_Fy(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
+                                    // Pos_Fx(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
+                                    // Pos_Fy(current_dofs_indices[iquad+n_quad_pts*istate]) = nstate-istate-1;
                                     if(ref_dim == 0)    Fx.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
                                     if(ref_dim == 1)    Fy.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
                                     if(ref_dim == 2)    Fz.InsertGlobalValues(current_dofs_indices[iquad+n_quad_pts*(nstate-istate-1)],1,&conv_ref_flux_2pt[ref_dim],&current_flux_dofs_index);//&flux_dofs_indices[flux_quad+nstate*istate]);
@@ -4431,10 +4449,10 @@ void DGHyper<dim, nstate, real, MeshType>::calculate_convective_flux_matrix(
     auto all_cells_end = std::chrono::high_resolution_clock::now();
     auto all_cells_duration = std::chrono::duration_cast<std::chrono::microseconds>(all_cells_end - all_cells_start);
     std::cout << "All cells: " << all_cells_duration.count() << std::endl;
-    std::ofstream PosFxFile("Pos_Fx.txt");
-    std::ofstream PosFyFile("Pos_Fy.txt");
-    Pos_Fx.print(PosFxFile,16,true,false);
-    Pos_Fy.print(PosFyFile,16,true,false);
+    // std::ofstream PosFxFile("Pos_Fx.txt");
+    // std::ofstream PosFyFile("Pos_Fy.txt");
+    // Pos_Fx.print(PosFxFile,16,true,false);
+    // Pos_Fy.print(PosFyFile,16,true,false);
 }
 
 template<int dim, int nstate, typename real, typename MeshType>
@@ -4521,30 +4539,10 @@ void DGHyper<dim, nstate, real, MeshType>::construct_global_Q(Epetra_CrsMatrix &
         metric_cell->get_dof_indices (metric_dof_indices);
         // Get a flux basis reference gradient operator in a sum-factorized Hadamard product sparse form. Then apply the divergence.
         //Hadamard tensor-product sparsity pattern
-        std::vector<std::array<unsigned int,dim>> Hadamard_rows_sparsity(n_quad_pts * n_quad_pts_1D);//size n^{d+1}
-        std::vector<std::array<unsigned int,dim>> Hadamard_columns_sparsity(n_quad_pts * n_quad_pts_1D);
-        flux_basis_int.sum_factorized_Hadamard_sparsity_pattern(n_quad_pts_1D, n_quad_pts_1D, Hadamard_rows_sparsity, Hadamard_columns_sparsity);
-        std::array<dealii::FullMatrix<real>,dim> flux_basis_stiffness_skew_symm_oper_sparse;
-        dealii::FullMatrix<double> PiV(n_quad_pts);
-        PiV = soln_basis_projection_oper_ext.tensor_product(soln_basis_projection_oper_ext.oneD_vol_operator,soln_basis_projection_oper_ext.oneD_vol_operator,soln_basis_projection_oper_ext.oneD_vol_operator);
-        for(int idim=0; idim<dim; idim++){
-            flux_basis_stiffness_skew_symm_oper_sparse[idim].reinit(n_quad_pts, n_quad_pts_1D);
-        }
         if(skew_symmetric) {
             // Construct chi_v
             //std::cout << "Assembling Volume basis" << std::endl;
             if(this->volume_basis->n_nonzero_elements() == 0) this->assemble_volume_basis();
-            flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
-                                                              Hadamard_rows_sparsity, Hadamard_columns_sparsity,
-                                                              flux_basis_stiffness.oneD_skew_symm_vol_oper,
-                                                              oneD_vol_quad_weights,
-                                                              flux_basis_stiffness_skew_symm_oper_sparse);
-        } else {
-            flux_basis_int.sum_factorized_Hadamard_basis_assembly(n_quad_pts_1D, n_quad_pts_1D,
-                                                   Hadamard_rows_sparsity, Hadamard_columns_sparsity,
-                                                   flux_basis_stiffness.oneD_skew_symm_vol_oper,
-                                                   oneD_vol_quad_weights,
-                                                   flux_basis_stiffness_skew_symm_oper_sparse);
         }
         dealii::FullMatrix<double> W(oneD_vol_quad_weights.size());
         for (unsigned int i =0; i < oneD_vol_quad_weights.size(); i++) {
@@ -5273,14 +5271,14 @@ void DGHyper<dim,nstate,real,MeshType>::calculate_boundary_flux() {
         } //end of face loop
 
     }//end of cell loop
-    std::ofstream rhs_file("boundary_flux_before_hyper_"+ std::to_string(this->current_time) +".txt");
-    for(int i = 0 ; i < this->boundary_term->GlobalLength(); i++){
-
-        rhs_file << (*this->boundary_term)[i] << '\n';
-
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
-    rhs_file.close();
+    // std::ofstream rhs_file("boundary_flux_before_hyper_"+ std::to_string(this->current_time) +".txt");
+    // for(int i = 0 ; i < this->boundary_term->GlobalLength(); i++){
+    //
+    //     rhs_file << (*this->boundary_term)[i] << '\n';
+    //
+    //     MPI_Barrier(MPI_COMM_WORLD);
+    // }
+    // rhs_file.close();
 }
 
 

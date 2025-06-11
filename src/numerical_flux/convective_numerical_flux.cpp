@@ -380,6 +380,7 @@ std::array<real, nstate> RoeBaseRiemannSolverDissipation<dim,nstate,real>
     const real specific_total_enthalpy_ravg = (r*specific_enthalpy_R + specific_enthalpy_L) / rp1;
 
     const real vel2_ravg = euler_physics->compute_velocity_squared (velocities_ravg);
+
     //const real normal_vel_ravg = velocities_ravg*normal_int;
     real normal_vel_ravg = 0.0;
     for (int d=0; d<dim; ++d) {

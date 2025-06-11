@@ -38,9 +38,10 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
         //getPODBasisFromSnapshots();
 
 
-        if(dg->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver) {
-            getHyperEntropyPODBasisFromSnapshots();
-        }
+        // if(dg->all_parameters->ode_solver_param.ode_solver_type == Parameters::ODESolverParam::ODESolverEnum::hyper_reduced_galerkin_runge_kutta_solver) {
+        //     getHyperEntropyPODBasisFromSnapshots();
+        // }
+        getHyperEntropyPODBasisFromSnapshots();
         getEntropyPODBasisFromSnapshots();
         //getEntropyProjPODBasisFromSnapshots();
     } else {
@@ -54,7 +55,7 @@ bool OfflinePOD<dim>::getPODBasisFromSnapshots() {
     bool file_found = false;
     snapshotMatrix.resize(0,0);
     std::string path = dg->all_parameters->reduced_order_param.path_to_search; //Search specified directory for files containing "solutions_table"
-    std::string reference_type = "mean";
+    std::string reference_type = "zero";
     std::vector<std::filesystem::path> files_in_directory;
     std::copy(std::filesystem::directory_iterator(path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
     std::sort(files_in_directory.begin(), files_in_directory.end()); //Sort files so that the order is the same as for the sensitivity basis
@@ -218,6 +219,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(snapshotMatrixCentered);
     // Print Singular Values
     std::string file_name = dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots ? "esrom_singular_values.txt" : "rom_singular_values.txt";
+    file_name = reference_type+"_"+ file_name;
     std::ofstream singular_values_file(file_name);
     VectorXd singular_values = svd_one.singularValues();
     singular_values_file << singular_values << std::endl;
@@ -311,15 +313,7 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
             epetra_basis.InsertGlobalValues(globalRow, 1, &value, &n);
         }
     }
-    int rank = epetra_comm.MyPID();
-    std::ofstream before_file("before_fill_"+std::to_string(rank)+".txt");
-    //epetra_basis.Print(before_file);
-    PrintMapInfo(domain_map);
-    epetra_comm.Barrier();
     epetra_basis.FillComplete(domain_map, system_matrix_map);
-    std::ofstream file("AH" + std::to_string(epetra_comm.MyPID())+".txt");
-    //epetra_basis.Print(file);
-    //PrintMapInfo(epetra_basis.DomainMap());
     if (reference_type == "quad") {
         Vq->reinit(epetra_basis);
     } else {
@@ -617,8 +611,11 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
     calculatePODBasis(snapshotMatrix, reference_type);
     //loadPOD();
     //enrichPOD();
-    quadToDofPOD();
-    //IndentityPOD();
+    //quadToDofPOD();
+    if(dg->all_parameters->reduced_order_param.quadrature_POD) {
+        quadToDofPOD();
+        //IndentityPOD();
+    }
     const unsigned int rank = dealii::Utilities::MPI::this_mpi_process(mpi_comm);
     std::ofstream file("Entropy_snapshot_"+std::to_string(rank)+".txt");
     const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
@@ -1364,9 +1361,10 @@ void OfflinePOD<dim>::CalculateL2Error(std::shared_ptr <dealii::TableHandler> L2
                    Physics::Euler<dim,dim+2,double> euler_physics_double,
                    double current_time,
                    int iteration) {
-    const std::string file_name = dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots ?
+    std::string file_name = dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots ?
                                                                                     "esrom_l2_error.txt" :
-                                                                                      "rom_l2_error.dat" ;
+                                                                                      "rom_l2_error.txt" ;
+    file_name = dg->all_parameters->reduced_order_param.quadrature_POD ? "quad_"+file_name : "dof_"+file_name;
     dealii::LinearAlgebra::distributed::Vector<double> FOM_solution(this->dg->solution);
     dealii::LinearAlgebra::distributed::Vector<double> ROM_solution(this->dg->solution);
     for(int m = 0; m < snapshotMatrix.rows();m++){

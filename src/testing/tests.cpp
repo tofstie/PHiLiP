@@ -60,6 +60,7 @@
 #include "pod_unsteady.h"
 #include "hyper_reduction_dg.h"
 #include "h_refinement_reduced_order.h"
+#include "unsteady_dof_and_quad_ESROM.h"
 
 namespace PHiLiP {
 namespace Tests {
@@ -354,11 +355,12 @@ std::unique_ptr< TestsBase > TestsFactory<dim,nstate,MeshType>
         if constexpr (nstate==dim+2) return std::make_unique<HyperReductionDG<dim, nstate>>(parameters_input, parameter_handler_input);
     } else if(test_type == Test_enum::h_refinement_study_reduced_order) {
         if constexpr (dim+2==nstate && dim!=1) return std::make_unique<HRefinementStudyReducedOrder<dim, nstate>>(parameters_input, parameter_handler_input);
+    } else if(test_type == Test_enum::unsteady_dof_and_quad_esrom){
+        if constexpr (dim+2==nstate) return std::make_unique<UnsteadyDofAndQuadESROM<dim, nstate>>(parameters_input, parameter_handler_input);
     } else {
         std::cout << "Invalid test. You probably forgot to add it to the list of tests in tests.cpp" << std::endl;
         std::abort();
     }
-
     return nullptr;
 }
 
