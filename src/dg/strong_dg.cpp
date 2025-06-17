@@ -3585,7 +3585,7 @@ Epetra_CrsMatrix DGStrong<dim,nstate,real,MeshType>::calculate_hyper_reduced_Q(E
 template <int dim, int nstate, typename real, typename MeshType>
 Epetra_CrsMatrix  DGStrong<dim,nstate,real,MeshType>::calculate_hyper_reduced_Bx(Epetra_CrsMatrix &Vt, const int /*idim*/) {
 return Vt;
-};
+}
 // using default MeshType = Triangulation
 // 1D: dealii::Triangulation<dim>;
 // Otherwise: dealii::parallel::distributed::Triangulation<dim>;
