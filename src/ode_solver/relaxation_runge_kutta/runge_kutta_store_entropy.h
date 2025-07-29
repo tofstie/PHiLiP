@@ -53,11 +53,25 @@ protected:
     /** Note that rk_stage is the time-derivative of the solution */
     std::vector<dealii::LinearAlgebra::distributed::Vector<double>> rk_stage_solution;
 
+    /// Storage for the solution at each Runge-Kutta stage
+    /** Note that rk_stage is the time-derivative of the solution */
+    std::vector<dealii::LinearAlgebra::distributed::Vector<double>> rk_projected_entropy;
+
+    /// Storage for the solution at each Runge-Kutta stage
+    /** Note that rk_stage is the time-derivative of the solution */
+    std::vector<dealii::LinearAlgebra::distributed::Vector<double>> rk_right_hand_side;
+
     /// Update stored quantities at the current stage
     /** Stores solution at stage, rk_stage_solution */
     void store_stage_solutions(const int istage,
-            const dealii::LinearAlgebra::distributed::Vector<double> rk_stage_i) override;
-    
+        const dealii::LinearAlgebra::distributed::Vector<double> rk_stage_i) override;
+
+    void store_projected_entropy(const int istage,
+        const dealii::LinearAlgebra::distributed::Vector<double> projected_entropy) override;
+
+    void store_right_hand_side(const int istage,
+        const dealii::LinearAlgebra::distributed::Vector<double> right_hand_side) override;
+
     /// Return the entropy variables from a solution vector u
     dealii::LinearAlgebra::distributed::Vector<double> compute_entropy_vars(
             const dealii::LinearAlgebra::distributed::Vector<double> &u,

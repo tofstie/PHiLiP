@@ -52,7 +52,7 @@ int UnsteadyHyperReduction<dim, nstate>::run_test() const {
         dealii::LinearAlgebra::distributed::Vector<double> entropy_intial_solution(flow_solver_entropy_galerkin->dg->solution);
         const double initial_entropy = flow_solver_case->compute_entropy(flow_solver_entropy_galerkin->dg);
         try {
-            //static_cast<void>(flow_solver_entropy_galerkin->run());
+            static_cast<void>(flow_solver_entropy_galerkin->run());
         } catch (double end) {
             this->pcout << "ESROM Failed at t = " << end << std::endl;
         }

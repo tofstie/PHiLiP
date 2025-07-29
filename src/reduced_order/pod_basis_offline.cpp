@@ -47,6 +47,17 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
     } else {
         getPODBasisFromSnapshots();
     }
+    // dealii::LinearAlgebra::distributed::Vector<double> location_x;
+    // dealii::LinearAlgebra::distributed::Vector<double> location_y;
+    // dg->location2D(location_x,location_y);
+    // std::ofstream file_x("xlocation.txt");
+    // std::ofstream file_y("ylocation.txt");
+    // for (unsigned int idx = 0; idx < location_x.size(); idx++) {
+    //     file_x << location_x[idx] << '\n';
+    //     file_y << location_y[idx] << '\n';
+    // }
+    // file_x.close();
+    // file_y.close();
 }
 
 
@@ -901,11 +912,11 @@ void OfflinePOD<dim>::quadToDofPOD() {
     const Epetra_Map domain_map = this->basis->trilinos_matrix().DomainMap();
 
     //const int rows_dofs = this->basis->m();
-    const int cols_dofs = this->basis->n();
+    //const int cols_dofs = this->basis->n();
     const int rows_quads = this->Vq->m();
     const int cols_quads = this->Vq->n();
-    const Epetra_Map new_domain_map(cols_dofs*this->dg->nstate,0,comm);
-    Epetra_CrsMatrix Vdof(Epetra_DataAccess::Copy,row_map,new_domain_map,cols_dofs*this->dg->nstate);
+    const Epetra_Map new_domain_map(cols_quads*this->dg->nstate,0,comm);
+    Epetra_CrsMatrix Vdof(Epetra_DataAccess::Copy,row_map,new_domain_map,cols_quads*this->dg->nstate);
     const int n_quad_pts = this->dg->volume_quadrature_collection[this->dg->all_parameters->flow_solver_param.poly_degree].size();
     std::vector<double> values(cols_quads);
     std::vector<int> indices(cols_quads);

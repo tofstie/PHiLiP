@@ -234,13 +234,13 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     Epetra_CrsMatrix Qy(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
     Epetra_CrsMatrix Qz(Epetra_DataAccess::Copy,global_map,epetra_mass_matrix.ColMap().MaxElementSize());
     this->dg->construct_global_Q(Qx,Qy,Qz,true);
-    Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Qx);
-    /*std::ofstream file("(Q-Qt)x_eig.txt");
-    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-    if (file.is_open()){
-        file << Qx_eig.format(CSVFormat);
-    }
-    file.close();*/
+    // Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(Qx);
+    // std::ofstream file("(Q-Qt)x_eig.txt");
+    // const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    // if (file.is_open()){
+    //     file << Qx_eig.format(CSVFormat);
+    // }
+    // file.close();
     // Eigen::MatrixXd Qy_eig = epetra_to_eig_matrix(Qy);
     // std::ofstream yfile("(Q-Qt)y_eig.txt");
     // if (yfile.is_open()){
@@ -282,10 +282,11 @@ void HyperReducedPODGalerkinRungeKuttaODESolver<dim, real, n_rk_stages, MeshType
     }
     this->dg->boundary_term = std::make_shared<Epetra_Vector>(BEtx->RowMap());
     // Eigen::MatrixXd Qtx_eig = epetra_to_eig_matrix(*Qtx);
-    // std::ofstream tfile("Qtx_eig.txt");
-    // if (tfile.is_open()){
-    //     tfile << Qtx_eig.format(CSVFormat);
-    // }
+    // const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    //  std::ofstream tfile("Qtx_eig.txt");
+    //  if (tfile.is_open()){
+    //      tfile << Qtx_eig.format(CSVFormat);
+    //  }
     // tfile.close();
     // Eigen::MatrixXd Qty_eig = epetra_to_eig_matrix(*Qty);
     // std::ofstream Qtyfile("Qty_eig.txt");
@@ -367,8 +368,13 @@ std::shared_ptr<Epetra_CrsMatrix> HyperReducedPODGalerkinRungeKuttaODESolver<dim
         }
     }
     hyper_reduced_basis.FillComplete(basis_domainmap, basis_rowmap);
-    std::ofstream file("HR_Pod_basis.txt");
-    hyper_reduced_basis.Print(file);
+    Eigen::MatrixXd Qtx_eig = epetra_to_eig_matrix(hyper_reduced_basis);
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    std::ofstream tfile("V_hyp_eig.txt");
+    if (tfile.is_open()){
+        tfile << Qtx_eig.format(CSVFormat);
+    }
+    tfile.close();
     return std::make_shared<Epetra_CrsMatrix>(hyper_reduced_basis);
 }
 template <int dim, typename real, int n_rk_stages, typename MeshType>

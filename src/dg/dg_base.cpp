@@ -4289,6 +4289,12 @@ void DGBase<dim, real, MeshType>::set_test_projection_matrix(std::shared_ptr<Epe
     Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),quad_mass_matrix.NumGlobalRows());
     //EpetraExt::MatrixMatrix::Multiply(LHSVtChiV,false,W,false,projection_matrix);
     EpetraExt::MatrixMatrix::Multiply(LHSVt, false, quad_mass_matrix,false,projection_matrix);
+    std::ofstream proj_file("prooj_"+std::to_string(idim)+".txt");
+    Eigen::MatrixXd Qx_eig = epetra_to_eig_matrix(projection_matrix);
+    if (proj_file.is_open()){
+        proj_file << Qx_eig.format(CSVFormat);
+    }
+    proj_file.close();
     this->test_projection_matrix[idim] = std::make_shared<Epetra_CrsMatrix>(projection_matrix);
 }
 

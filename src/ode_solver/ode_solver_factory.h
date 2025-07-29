@@ -62,6 +62,10 @@ public:
     static std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> create_RRKObject(std::shared_ptr< DGBase<dim,real,MeshType> > dg_input,
             std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau);
 
+    /// Creates an POD RRK object with specified RRK type; if no RRK is being used, creates an RRK object with empty functions.
+    static std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> create_RRKObject( std::shared_ptr< DGBase<dim,real,MeshType> > dg_input,
+           std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau,
+           std::shared_ptr<ProperOrthogonalDecomposition::PODBase<dim>> pod);
 };
 
 } // ODE namespace
