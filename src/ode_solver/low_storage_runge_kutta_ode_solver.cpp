@@ -20,7 +20,7 @@ LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::LowStorageRungeKu
         , beta3(this->ode_param.beta3)
 {}
 
-template <int dim, typename real, int n_rk_stages, typename MeshType> 
+template <int dim, typename real, int n_rk_stages, typename MeshType>
 void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::calculate_stage_solution(int istage, real /*dt*/, const bool pseudotime)
 {
     if(istage == 0) prep_for_step_in_time();
@@ -32,7 +32,7 @@ void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::calculate_st
     this->dg->solution = rhs;
 }
 
-template <int dim, typename real, int n_rk_stages, typename MeshType> 
+template <int dim, typename real, int n_rk_stages, typename MeshType>
 void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::calculate_stage_derivative (int istage, real dt)
 {
     this->dg->assemble_residual();
@@ -48,7 +48,7 @@ void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::calculate_st
     rhs = storage_register_1;
 }
 
-template <int dim, typename real, int n_rk_stages, typename MeshType> 
+template <int dim, typename real, int n_rk_stages, typename MeshType>
 void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::sum_stages (real dt, const bool /*pseudotime*/)
 {
     double sum_delta = 0.0;
@@ -62,7 +62,7 @@ void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::sum_stages (
     } else {
         this->dg->solution = rhs;
         // Apply limiter at every RK stage
-        this->apply_limiter();
+        this->apply_limiter(dt);
         this->dg->assemble_residual();
         this->dg->apply_inverse_global_mass_matrix(this->dg->right_hand_side, rhs);
         rhs *= dt;
@@ -78,31 +78,14 @@ void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::sum_stages (
     }
 }
 
-template <int dim, typename real, int n_rk_stages, typename MeshType> 
-void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::apply_limiter ()
-{
-    // Apply limiter at every RK stage
-    if (this->limiter) {
-        this->limiter->limit(this->dg->solution,
-            this->dg->dof_handler,
-            this->dg->fe_collection,
-            this->dg->volume_quadrature_collection,
-            this->dg->high_order_grid->fe_system.tensor_degree(),
-            this->dg->max_degree,
-            this->dg->oneD_fe_collection_1state,
-            this->dg->oneD_quadrature_collection);
-    }
-}
-
-
-template <int dim, typename real, int n_rk_stages, typename MeshType> 
+template <int dim, typename real, int n_rk_stages, typename MeshType>
 real LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::adjust_time_step (real dt)
-{  
-    /*Empty function for now*/ 
+{
+    /*Empty function for now*/
     return dt;
 }
 
-template <int dim, typename real, int n_rk_stages, typename MeshType> 
+template <int dim, typename real, int n_rk_stages, typename MeshType>
 double LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::get_automatic_error_adaptive_step_size (real dt, const bool /*pseudotime*/)
 {
     double error = 0.0;
@@ -212,9 +195,7 @@ void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::allocate_run
         this->pcout << " evaluating inverse mass matrix..." << std::flush;
         this->dg->evaluate_mass_matrices(true); // creates and stores global inverse mass matrix
         //RRK needs both mass matrix and inverse mass matrix
-        using ODEEnum = Parameters::ODESolverParam::ODESolverEnum;
-        ODEEnum ode_type = this->ode_param.ode_solver_type;
-        if (ode_type == ODEEnum::rrk_explicit_solver){
+        if (this->ode_param.use_relaxation_runge_kutta) {
             this->dg->evaluate_mass_matrices(false); // creates and stores global mass matrix
         }
         */
@@ -223,22 +204,21 @@ void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::allocate_run
     this->pcout << std::endl;
 
     this->butcher_tableau->set_tableau();
-   
+
 }
 
 
-template <int dim, typename real, int n_rk_stages, typename MeshType> 
+template <int dim, typename real, int n_rk_stages, typename MeshType>
 void LowStorageRungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::prep_for_step_in_time()
 {
     storage_register_1.reinit(this->solution_update);
     storage_register_2.reinit(this->solution_update);
     storage_register_1 = this->solution_update;
-    storage_register_2 *= 0; // Unsure if this does anything as 2 should be zeroed from reinit function
     storage_register_3 = storage_register_1;
     rhs = storage_register_1;
     if (is_3Sstarplus == true){
         storage_register_4 = storage_register_1;
-    } 
+    }
 }
 template class LowStorageRungeKuttaODESolver<PHILIP_DIM, double,1, dealii::Triangulation<PHILIP_DIM> >;
 template class LowStorageRungeKuttaODESolver<PHILIP_DIM, double,2, dealii::Triangulation<PHILIP_DIM> >;

@@ -25,17 +25,10 @@ public:
     /// Function to return reference state
     virtual dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() = 0;
 
-    /// Function to return reference entropy state
-    virtual dealii::LinearAlgebra::distributed::Vector<double> getEntropyReferenceState() = 0;
 
     /// Function to return snapshot matrix
     virtual MatrixXd getSnapshotMatrix() = 0;
 
-    /// Function to return Skew-Symmetric Q
-    virtual std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getSkewSymmetric() = 0;
-
-    /// Function to return Vt
-    virtual MatrixXd getTestBasis() = 0;
 };
 
 }

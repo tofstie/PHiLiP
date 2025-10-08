@@ -126,7 +126,7 @@ add_test(
         NAME INVISCID_NACA0012_ADAPTIVE_SAMPLING
         COMMAND bash -c
         " 
-        mpirun -np 1 ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_2D -i ${CMAKE_CURRENT_BINARY_DIR}/inviscid_naca0012_adaptive_sampling.prm;
+        mpirun -np ${MPIMAX} ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_2D -i ${CMAKE_CURRENT_BINARY_DIR}/inviscid_naca0012_adaptive_sampling.prm;
         mkdir -p NACA_rom_adapt_results;
         mv rom_table_iteration_final.txt ./NACA_rom_adapt_results ;
         mv snapshot_table_iteration_final.txt ./NACA_rom_adapt_results ;
@@ -140,7 +140,7 @@ set_tests_labels(INVISCID_NACA0012_ADAPTIVE_SAMPLING    REDUCED_ORDER
                                                         IMPLICIT
                                                         WEAK
                                                         UNCOLLOCATED
-                                                        LONG
+                                                        EXTRA-LONG
                                                         INTEGRATION_TEST)
 
 # =======================================
@@ -183,6 +183,7 @@ set_tests_labels(1D_BURGERS_REWIENSKI_MANUFACTURED_SOLUTION REDUCED_ORDER
                                                             CONVERGENCE
                                                             MODERATE
                                                             INTEGRATION_TEST)
+
 # =======================================
 # Unsteady Galerkin POD Runge-Kutta
 # =======================================
@@ -207,7 +208,3 @@ set_tests_labels(2D_UNSTEADY_GALERKIN_RK        REDUCED_ORDER
                                                 COLLOCATED
                                                 MODERATE
                                                 INTEGRATION_TEST)
-
-
-
-

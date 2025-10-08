@@ -3486,7 +3486,7 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
 }
 
 template <int dim, int nstate, typename real, typename MeshType>
-void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V, dealii::LinearAlgebra::distributed::Vector<double> &reference_entropy)
+void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V)
 {
     
     dealii::LinearAlgebra::distributed::Vector<double> temp_val (this->projection_matrix.locally_owned_range_indices(), this->mpi_communicator);
@@ -3503,7 +3503,6 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii:
     //int n_proccesses = dealii::Utilities::MPI::n_mpi_processes(this->mpi_communicator);
     //int rank = dealii::Utilities::MPI::this_mpi_process(this->mpi_communicator);
     //this->projected_entropy /= pow(n_proccesses,1);
-    this->projected_entropy.add(1.0,reference_entropy);
     this->projected_entropy.update_ghost_values();
     //std::ofstream proj_file("proj"+std::to_string(rank)+".txt");
     //this->projected_entropy.print(proj_file);

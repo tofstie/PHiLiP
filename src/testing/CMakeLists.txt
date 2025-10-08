@@ -43,11 +43,11 @@ set(TESTS_SOURCE
     ROM_error_post_sampling.cpp
     HROM_error_post_sampling.cpp
     hyper_adaptive_sampling_new_error.cpp
+    halton_sampling_run.cpp
     bound_preserving_limiter_tests.cpp
     naca0012_unsteady_check_quick.cpp
     vortex_shedding.cpp
-    pod_unsteady.cpp
-    )
+)
 
 foreach(dim RANGE 1 3)
     # Output library

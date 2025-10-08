@@ -5,7 +5,7 @@ namespace ODE {
 
 template <int dim, typename real, int n_rk_stages, typename MeshType> 
 RungeKuttaODESolver<dim,real,n_rk_stages, MeshType>::RungeKuttaODESolver(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input,
-        std::shared_ptr<RKTableauBase<dim,real,MeshType>> rk_tableau_input,
+        std::shared_ptr<RKTableauButcherBase<dim,real,MeshType>> rk_tableau_input,
         std::shared_ptr<EmptyRRKBase<dim,real,MeshType>> RRK_object_input)
         : RungeKuttaBase<dim,real,n_rk_stages,MeshType>(dg_input, RRK_object_input)
         , butcher_tableau(rk_tableau_input)
@@ -98,23 +98,6 @@ void RungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::sum_stages (real dt, co
     }
 }
 
-
-template<int dim, typename real, int n_rk_stages, typename MeshType>
-void RungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::apply_limiter ()
-{
-    // Apply limiter at every RK stage
-    if (this->limiter) {
-        this->limiter->limit(this->dg->solution,
-            this->dg->dof_handler,
-            this->dg->fe_collection,
-            this->dg->volume_quadrature_collection,
-            this->dg->high_order_grid->fe_system.tensor_degree(),
-            this->dg->max_degree,
-            this->dg->oneD_fe_collection_1state,
-            this->dg->oneD_quadrature_collection);
-    }
-}
-
 template<int dim, typename real, int n_rk_stages, typename MeshType>
 real RungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::adjust_time_step (real dt)
 {
@@ -144,9 +127,7 @@ void RungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::allocate_runge_kutta_sy
         this->pcout << " evaluating inverse mass matrix..." << std::flush;
         this->dg->evaluate_mass_matrices(true); // creates and stores global inverse mass matrix
         //RRK needs both mass matrix and inverse mass matrix
-        using ODEEnum = Parameters::ODESolverParam::ODESolverEnum;
-        ODEEnum ode_type = this->ode_param.ode_solver_type;
-        if (ode_type == ODEEnum::rrk_explicit_solver){
+        if (this->ode_param.use_relaxation_runge_kutta) {
             this->dg->evaluate_mass_matrices(false); // creates and stores global mass matrix
         }
     }

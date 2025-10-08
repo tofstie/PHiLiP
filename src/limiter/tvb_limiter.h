@@ -1,6 +1,5 @@
 #ifndef __TVB_LIMITER__
 #define __TVB_LIMITER__
-
 #include "bound_preserving_limiter.h"
 
 namespace PHiLiP {
@@ -72,10 +71,10 @@ public:
         const unsigned int                                      grid_degree,
         const unsigned int                                      max_degree,
         const dealii::hp::FECollection<1>                       oneD_fe_collection_1state,
-        const dealii::hp::QCollection<1>                        oneD_quadrature_collection);
+        const dealii::hp::QCollection<1>                        oneD_quadrature_collection,
+        double                                                  dt) override;
 
 }; // End of TVBLimiter Class
 } // PHiLiP namespace
 
 #endif
-

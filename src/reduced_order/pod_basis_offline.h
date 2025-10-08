@@ -32,34 +32,23 @@ public:
     ///Function to get POD reference state
     dealii::LinearAlgebra::ReadWriteVector<double> getReferenceState() override;
 
-    dealii::LinearAlgebra::distributed::Vector<double> getEntropyReferenceState() override;
-
     /// Function to get snapshot matrix used to build POD basis
     MatrixXd getSnapshotMatrix() override;
-
-    /// Function to return Skew-Symmetric Q
-    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> getSkewSymmetric() override;
-
-    /// Function to return Vt
-    MatrixXd getTestBasis() override;
 
     /// Read snapshots to build POD basis
     bool getPODBasisFromSnapshots();
 
-    /// Read POD from File
-    bool loadPOD();
+    /// Read snapshots to build an entropy stable POD basis
+    bool getEntropyPODBasisFromSnapshots();
 
-    /// POD basis
+    /// Compute POD Basis
     void calculatePODBasis(MatrixXd snapshots, std::string reference_type);
 
-
+    /// POD basis
     std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> basis;
 
     /// Reference state
     dealii::LinearAlgebra::ReadWriteVector<double> referenceState;
-
-    /// Reference Entropy
-    dealii::LinearAlgebra::distributed::Vector<double> referenceEntropy;
 
     /// dg needed for sparsity pattern of system matrix
     std::shared_ptr<DGBase<dim,double>> dg;
@@ -70,12 +59,6 @@ public:
     /// Matrix containing snapshots
     MatrixXd snapshotMatrix;
 
-    /// Q - Symmetric Skew Matrix
-    std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> Q;
-
-    /// Vt - Test Galerkin Matrix
-    Eigen::MatrixXd Vt;
-
     const MPI_Comm mpi_communicator; ///< MPI communicator.
     const int mpi_rank; ///< MPI rank.
 
@@ -83,26 +66,6 @@ public:
     /** Used as std::cout, but only prints if mpi_rank == 0
      */
     dealii::ConditionalOStream pcout;
-
-    //📣 Code below is Hyper-Reduction, maybe move this depending on the requirements later on
-    ///
-
-    bool getEntropyPODBasisFromSnapshots();
-
-    bool getEntropyProjPODBasisFromSnapshots();
-
-    bool enrichPOD();
-
-    void matchQuadratureLocation();
-
-    void debugMatrix(dealii::FullMatrix<double> M);
-
-
-    void PrintMapInfo(const Epetra_Map &map);
-
-    /*
-    void compute_hyper_reduction(MatrixXd V_target, MatrixXd w_target);
-    */
 };
 
 }

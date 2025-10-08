@@ -85,16 +85,16 @@ FlowSolver<dim, nstate>::FlowSolver(
         SetInitialCondition<dim,nstate,double>::set_initial_condition(flow_solver_case->initial_condition_function, dg, &all_param);
     }
     dg->solution.update_ghost_values();
-    if( ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_solver ||
-        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver ||
-        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver)
-    {
+
+    if(ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_solver ||
+       ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver ||
+       ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver){
         std::shared_ptr<ProperOrthogonalDecomposition::OfflinePOD<dim>> pod = std::make_shared<ProperOrthogonalDecomposition::OfflinePOD<dim>>(dg);
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg, pod);
-    }
-    else{
+    } else {
         ode_solver = ODE::ODESolverFactory<dim, double>::create_ODESolver(dg);
     }
+
     // Allocate ODE solver after initializing DG
     ode_solver->allocate_ode_system();
 
@@ -103,10 +103,10 @@ FlowSolver<dim, nstate>::FlowSolver(
        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_petrov_galerkin_solver ||
        ode_param.ode_solver_type == Parameters::ODESolverParam::pod_galerkin_runge_kutta_solver);
     if(unsteady_FOM_POD_bool){
-        std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix = std::make_shared<dealii::TrilinosWrappers::SparseMatrix>();
-        system_matrix->copy_from(dg->system_matrix);
-        // I do not like what I did above. I just copied the system matrix, stored it in a shared pointer, then pass it below.
-        // This will double the memory requirement of the system_matrix...
+        std::shared_ptr<dealii::TrilinosWrappers::SparseMatrix> system_matrix(
+            dg,
+            &dg->system_matrix
+        );
         time_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
         time_pod->addSnapshot(dg->solution);
     }
@@ -529,8 +529,7 @@ int FlowSolver<dim,nstate>::run() const
             // update time step in flow_solver_case
             flow_solver_case->set_time_step(time_step);
 
-            // advance solution
-            ode_solver->step_in_time(time_step,false); // pseudotime==false
+            ode_solver->step_in_time(time_step,false);
 
             // Compute the unsteady quantities, write to the dealii table, and output to file
             flow_solver_case->compute_unsteady_data_and_write_to_table(ode_solver, dg, unsteady_data_table);
@@ -538,7 +537,7 @@ int FlowSolver<dim,nstate>::run() const
             if(flow_solver_param.adaptive_time_step == true) {
                 next_time_step = flow_solver_case->get_adaptive_time_step(dg);
             } else if (flow_solver_param.error_adaptive_time_step == true) {
-                next_time_step = ode_solver->get_automatic_error_adaptive_step_size(time_step,false);
+                next_time_step = ode_solver->get_automatic_error_adaptive_step_size(time_step,false); 
             } else {
                 next_time_step = flow_solver_case->get_constant_time_step(dg);
             }

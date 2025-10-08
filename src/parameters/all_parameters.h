@@ -211,9 +211,8 @@ public:
         ROM_error_post_sampling,
         HROM_error_post_sampling,
         hyper_adaptive_sampling_new_error,
-        low_density,
-        vortex_shedding,
-        pod_unsteady
+        halton_sampling_run,
+        low_density
     };
     /// Store selected TestType from the input file.
     TestType test_type;
