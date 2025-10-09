@@ -28,7 +28,7 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
         , mpi_rank(dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
         , pcout(std::cout, mpi_rank==0)
 {
-    const bool compute_dRdW = true;
+    const bool compute_dRdW = false;
     dg->evaluate_mass_matrices(compute_dRdW);
 
     pcout << "Searching files..." << std::endl;
@@ -281,19 +281,19 @@ bool OfflinePOD<dim>::getEntropyPODBasisFromSnapshots(){
         std::vector<int> front_vector = dealii::Utilities::MPI::all_gather(mpi_comm, front);
 
 
-    for(unsigned int m_proc = 0; m_proc < n_procs; m_proc++) {
-        for(int row = 0; row < global_quad_points; row++){
-            if(row >= front_vector[m_proc] && row <= back_vector[m_proc]){
-                snapshotMatrix(row, col+1*num_of_snapshots) = entropy_vectors[m_proc][row-front_vector[m_proc]];
+        for(unsigned int m_proc = 0; m_proc < n_procs; m_proc++) {
+            for(int row = 0; row < global_quad_points; row++){
+                if(row >= front_vector[m_proc] && row <= back_vector[m_proc]){
+                    snapshotMatrix(row, col+1*num_of_snapshots) = entropy_vectors[m_proc][row-front_vector[m_proc]];
+                }
             }
         }
-    }
 
-    for(int row = 0; row < global_quad_points; row++){
-        if(dg->solution.in_local_range(row)){
-            dg->solution[row] = snapshotMatrix(row, 0);
+        for(int row = 0; row < global_quad_points; row++){
+            if(dg->solution.in_local_range(row)){
+                dg->solution[row] = snapshotMatrix(row, 0);
+            }
         }
-    }
     }
     pcout << "Snapshot matrix generated." << std::endl;
     calculatePODBasis(snapshotMatrix, reference_type);
@@ -315,7 +315,6 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
     International Journal for Numerical Methods in Engineering, 2011
     */
     VectorXd reference_state;
-    VectorXd reference_entropy;
     pcout << "Computing POD basis..." << std::endl;
     if (reference_type == "mean"){
         reference_state = snapshots.rowwise().mean();
@@ -327,73 +326,61 @@ void OfflinePOD<dim>::calculatePODBasis(MatrixXd snapshots, std::string referenc
         referenceState(i) = reference_state(i);
     }
 
-    MatrixXd pod_basis;
-    if(mpi_rank == 0) {
-        MatrixXd snapshotMatrixCentered = snapshots.colwise() - reference_state;
-        Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(snapshotMatrixCentered);
-        pod_basis = svd_one.matrixU();
-        // Reduce POD Size using either number of modes or a singular value threshold
-        if(dg->all_parameters->reduced_order_param.number_modes > 0){
-            const int num_modes = dg->all_parameters->reduced_order_param.number_modes;
-            Assert(num_modes < pod_basis.cols(),
-            dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
-            Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,num_modes));
-            pod_basis = pod_basis_n_modes;
-        }
-        else if (dg->all_parameters->reduced_order_param.singular_value_threshold < 1) {
-            const double threshold = dg->all_parameters->reduced_order_param.singular_value_threshold;
-            Eigen::VectorXd singular_values = svd_one.singularValues();
-            double l1_norm = singular_values.sum();
-            double singular_value_cumm_sum = 0;
-            int iter = 0;
-            while(singular_value_cumm_sum/l1_norm < threshold){
-                singular_value_cumm_sum += singular_values(iter);
-                iter++;
-            }
-            Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,iter));
-            pod_basis = pod_basis_n_modes;
-        }
-        pcout << "Final size of POD: " << pod_basis.cols() << std::endl;
-        fullBasis.reinit(pod_basis.rows(), pod_basis.cols());
 
-        for (unsigned int m = 0; m < pod_basis.rows(); m++) {
-            for (unsigned int n = 0; n < pod_basis.cols(); n++) {
-                fullBasis.set(m, n, pod_basis(m, n));
-            }
-        }
-
-        std::ofstream out_file("POD_basis.txt");
-        unsigned int precision = 16;
-        fullBasis.print_formatted(out_file, precision, true, 0, "0");
-        fullBasis.reinit(0,0); // Clear the memory
+    MatrixXd snapshotMatrixCentered = snapshots.colwise() - reference_state;
+    Eigen::BDCSVD<MatrixXd, Eigen::DecompositionOptions::ComputeThinU> svd_one(snapshotMatrixCentered);
+    MatrixXd pod_basis = svd_one.matrixU();
+    // Reduce POD Size using either number of modes or a singular value threshold
+    if(dg->all_parameters->reduced_order_param.number_modes > 0){
+        const int num_modes = dg->all_parameters->reduced_order_param.number_modes;
+        Assert(num_modes < pod_basis.cols(),
+        dealii::ExcMessage("The number of modes selected must be less than the number of snapshots"));
+        Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,num_modes));
+        pod_basis = pod_basis_n_modes;
     }
+    else if (dg->all_parameters->reduced_order_param.singular_value_threshold < 1) {
+        const double threshold = dg->all_parameters->reduced_order_param.singular_value_threshold;
+        Eigen::VectorXd singular_values = svd_one.singularValues();
+        double l1_norm = singular_values.sum();
+        double singular_value_cumm_sum = 0;
+        int iter = 0;
+        while(singular_value_cumm_sum/l1_norm < threshold){
+            singular_value_cumm_sum += singular_values(iter);
+            iter++;
+        }
+        Eigen::MatrixXd pod_basis_n_modes = pod_basis(Eigen::placeholders::all, Eigen::seqN(0,iter));
+        pod_basis = pod_basis_n_modes;
+    }
+    pcout << "Final size of POD: " << pod_basis.cols() << std::endl;
+    fullBasis.reinit(pod_basis.rows(), pod_basis.cols());
+
+    for (unsigned int m = 0; m < pod_basis.rows(); m++) {
+        for (unsigned int n = 0; n < pod_basis.cols(); n++) {
+            fullBasis.set(m, n, pod_basis(m, n));
+        }
+    }
+
+    std::ofstream out_file("POD_basis_" + reference_type + ".txt");
+    unsigned int precision = 16;
+    //char zero = 48;
+    fullBasis.print_formatted(out_file, precision, true, 0,"0");
     Epetra_MpiComm epetra_comm(MPI_COMM_WORLD);
     const Epetra_CrsMatrix epetra_system_matrix  = this->dg->global_mass_matrix.trilinos_matrix();
-    Epetra_Map system_matrix_map = epetra_system_matrix.RowMap();
-    int GlobalElements = system_matrix_map.NumGlobalElements();
-    Epetra_Map rank_zero_row_map(system_matrix_map.NumGlobalElements(),(mpi_rank == 0) ? GlobalElements : 0,0,epetra_comm);
+    Epetra_Map system_matrix_map((int)pod_basis.rows(),0,epetra_comm);
     //Epetra_Map col_map((int)pod_basis.cols(),(int)pod_basis.cols(), 0, epetra_comm);
-    int pod_basis_cols = (int)pod_basis.cols();
-    epetra_comm.Broadcast(&pod_basis_cols,1,0);
-    Epetra_Map domain_map(pod_basis_cols, 0, epetra_comm);
+    Epetra_Map domain_map((int)pod_basis.cols(), 0, epetra_comm);
+    Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy, system_matrix_map, pod_basis.cols());
 
-    Epetra_Map rank_zero_domain_map(pod_basis_cols, (mpi_rank == 0) ? pod_basis_cols : 0,0,epetra_comm);
-    Epetra_CrsMatrix rank_zero_epetra_basis(Epetra_DataAccess::Copy, rank_zero_row_map, pod_basis_cols);
-
-    const int numMyElements = rank_zero_row_map.NumMyElements(); //Number of elements on the calling processor
+    const int numMyElements = system_matrix_map.NumMyElements(); //Number of elements on the calling processor
 
     for (int localRow = 0; localRow < numMyElements; ++localRow){
-        const int globalRow = rank_zero_row_map.GID(localRow);
+        const int globalRow = system_matrix_map.GID(localRow);
         for(int n = 0 ; n < pod_basis.cols() ; n++){
             double value = pod_basis(globalRow, n);
-            rank_zero_epetra_basis.InsertGlobalValues(globalRow, 1, &value, &n);
+            epetra_basis.InsertGlobalValues(globalRow, 1, &value, &n);
         }
     }
-    rank_zero_epetra_basis.FillComplete(rank_zero_domain_map,rank_zero_row_map);
-    Epetra_Import importer(system_matrix_map,rank_zero_row_map);
-    Epetra_CrsMatrix epetra_basis(Epetra_DataAccess::Copy,system_matrix_map,pod_basis_cols);
-    epetra_basis.Import(rank_zero_epetra_basis,importer,Epetra_CombineMode::Insert);
-    epetra_basis.FillComplete(domain_map,system_matrix_map);
+    epetra_basis.FillComplete(domain_map, system_matrix_map);
     basis->reinit(epetra_basis);
 
     return;

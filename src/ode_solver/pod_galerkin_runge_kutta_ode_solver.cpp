@@ -28,7 +28,7 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
     for(int j = 0; j < istage; ++j){
         if(this->butcher_tableau->get_a(istage,j) != 0){
             dealii::LinearAlgebra::distributed::Vector<double> dealii_rk_stage_j;
-            multiply(*epetra_test_basis,this->reduced_rk_stage[j],dealii_rk_stage_j,solution_index,false);
+            multiply(*epetra_test_basis,this->reduced_rk_stage[j],dealii_rk_stage_j,this->dg->solution,false);
             this->rk_stage[istage].add(this->butcher_tableau->get_a(istage,j),dealii_rk_stage_j);
         }
     } //sum(a_ij*V*k_j), explicit part
@@ -69,7 +69,7 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::calculate_st
     Solver.SymbolicFactorization();
     Solver.NumericFactorization();
     Solver.Solve();
-    epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, reduced_index);
+    epetra_to_dealii(epetra_rk_stage_i,dealii_reduced_stage_i, this->reduced_rk_stage[istage]);
     this->reduced_rk_stage[istage] = dealii_reduced_stage_i;
 
 }
@@ -78,13 +78,14 @@ template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::sum_stages(real dt, const bool /*pseudotime*/)
 {
     dealii::LinearAlgebra::distributed::Vector<double> reduced_sum;
-    reduced_sum.reinit(this->reduced_rk_stage[0]);
-    for (int istage = 0; istage < n_rk_stages; ++istage){
+    reduced_sum = this->reduced_rk_stage[0];
+    reduced_sum *= dt* this->butcher_tableau->get_b(0);
+    for (int istage = 1; istage < n_rk_stages; ++istage){
         reduced_sum.add(dt* this->butcher_tableau->get_b(istage),this->reduced_rk_stage[istage]);
     }
     // Convert Reduced order step to Full order step
     dealii::LinearAlgebra::distributed::Vector<double> dealii_update;
-    multiply(*epetra_test_basis,reduced_sum,dealii_update,solution_index,false);
+    multiply(*epetra_test_basis,reduced_sum,dealii_update,this->dg->solution,false);
     this->solution_update.add(1.0,dealii_update);
 }
 
@@ -112,6 +113,18 @@ void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::allocate_run
     std::vector<int> global_indicies;
     for(auto idx : this->dg->solution.locally_owned_elements()){
         global_indicies.push_back(static_cast<int>(idx));
+    }
+    Epetra_MpiComm epetra_comm(this->mpi_communicator);
+    int solution_size = this->dg->solution.size();
+    // Creating block here for now to auto delete this large matrix
+    Epetra_Map solution_map(solution_size,global_indicies.size(),global_indicies.data(),0,epetra_comm);
+    if(!solution_map.SameAs(epetra_pod_basis.RowMap())) {
+        Epetra_CrsMatrix old_pod_basis = epetra_pod_basis;
+
+        Epetra_Import basis_importer(solution_map, old_pod_basis.RowMap());
+        MPI_Barrier(MPI_COMM_WORLD);
+        epetra_pod_basis = Epetra_CrsMatrix(old_pod_basis, basis_importer);
+
     }
     Epetra_Map reduced_map = epetra_pod_basis.DomainMap();
     // Setting up Mass and Test Matrix
@@ -198,7 +211,7 @@ template<int dim, typename real, int n_rk_stages, typename MeshType>
 int PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::multiply(Epetra_CrsMatrix &epetra_matrix,
                                                                     dealii::LinearAlgebra::distributed::Vector<double> &input_dealii_vector,
                                                                     dealii::LinearAlgebra::distributed::Vector<double> &output_dealii_vector,
-                                                                    const dealii::IndexSet &index_set,
+                                                                    dealii::LinearAlgebra::distributed::Vector<double> &index_vector,
                                                                     const bool transpose //Transpose needs to used with care of maps
                                                                     )
 {
@@ -206,7 +219,7 @@ int PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::multiply(Epet
     Epetra_Vector epetra_output(epetra_matrix.RangeMap());
     if(epetra_matrix.RangeMap().SameAs(epetra_output.Map()) && epetra_matrix.DomainMap().SameAs(epetra_input.Map())){
         epetra_matrix.Multiply(transpose, epetra_input, epetra_output);
-        epetra_to_dealii(epetra_output,output_dealii_vector,index_set);
+        epetra_to_dealii(epetra_output,output_dealii_vector,index_vector);
         return 0;
     } else {
         if(!epetra_matrix.RangeMap().SameAs(epetra_output.Map())){
@@ -221,18 +234,17 @@ int PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::multiply(Epet
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PODGalerkinRungeKuttaODESolver<dim,real,n_rk_stages,MeshType>::epetra_to_dealii(Epetra_Vector &epetra_vector,
                                                                              dealii::LinearAlgebra::distributed::Vector<double> &dealii_vector,
-                                                                             const dealii::IndexSet &index_set)
+                                                                             dealii::LinearAlgebra::distributed::Vector<double> &index_vector)
 {
     const Epetra_BlockMap &epetra_map = epetra_vector.Map();
-    dealii_vector.reinit(index_set,this->mpi_communicator);
+    dealii_vector = index_vector;
     for(int i = 0; i < epetra_map.NumMyElements();++i){
         int global_idx = epetra_map.GID(i);
         if(dealii_vector.in_local_range(global_idx)){
             dealii_vector[global_idx] = epetra_vector[i];
         }
     }
-    dealii_vector.compress(dealii::VectorOperation::insert);
-
+    dealii_vector.update_ghost_values();
 }
 
 template class PODGalerkinRungeKuttaODESolver<PHILIP_DIM, double,1, dealii::Triangulation<PHILIP_DIM> >;

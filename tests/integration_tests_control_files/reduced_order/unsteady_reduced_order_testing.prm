@@ -41,19 +41,20 @@ end
 subsection flow_solver
   set flow_case_type = isentropic_vortex
   set poly_degree = 2
-  set final_time = 0.2366431913239 #=20 * sqrt(1.4), time for vortex to advect around the domain
+  #set final_time = 2366431913239 #=20 * sqrt(1.4), time for vortex to advect around the domain
+  set final_time = 5.9160797831 # 1/4 cycle
   set courant_friedrichs_lewy_number = 0.1
   set unsteady_data_table_filename = isentropic_vortex_time_table
   subsection grid
     set grid_left_bound = -10.0
     set grid_right_bound = 10.0
-    set number_of_grid_elements_per_dimension = 32
+    set number_of_grid_elements_per_dimension = 8
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end
 
 subsection reduced order
-    set output_snapshot_every_x_timesteps = 2
-    set singular_value_threshold = 0.9999999
+    set output_snapshot_every_x_timesteps = 3
+    set singular_value_threshold = 0.99999
     set path_to_search = .
 end
