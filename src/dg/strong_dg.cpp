@@ -3485,6 +3485,19 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     this->projection_matrix.reinit(pinvV);
 }
 
+    template <int dim, int nstate, typename real, typename MeshType>
+void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(Epetra_CrsMatrix &LHS, Epetra_CrsMatrix &V) {
+    Epetra_MpiComm comm(MPI_COMM_WORLD);
+    Eigen::MatrixXd LHS_eigen = epetra_to_eig_matrix(LHS);
+    Eigen::MatrixXd LHS_inverse = LHS_eigen.inverse();
+    Epetra_CrsMatrix LHS_inverse_epetra = eig_to_epetra_matrix(LHS_inverse,LHS_eigen.cols(),LHS_eigen.rows(),comm);
+    Epetra_CrsMatrix LHSLeV(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),V.NumGlobalRows());
+    Epetra_CrsMatrix projection_matrix(Epetra_DataAccess::Copy,LHS_inverse_epetra.RowMap(),V.NumGlobalRows());
+    EpetraExt::MatrixMatrix::Multiply(LHS_inverse_epetra,false,V,true,LHSLeV);
+    EpetraExt::MatrixMatrix::Multiply(LHSLeV,false,this->global_mass_matrix.trilinos_matrix(),false,projection_matrix);
+    this->projection_matrix.reinit(projection_matrix);
+}
+
 template <int dim, int nstate, typename real, typename MeshType>
 void DGStrong<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V)
 {

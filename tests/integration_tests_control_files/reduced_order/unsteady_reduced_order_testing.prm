@@ -27,6 +27,7 @@ subsection ODE solver
   set ode_output = verbose 
   set ode_solver_type = runge_kutta 
   set runge_kutta_method = rk4_ex
+  set output_solution_every_x_steps = 20
 end
 
 subsection linear solver
@@ -48,7 +49,7 @@ subsection flow_solver
   subsection grid
     set grid_left_bound = -10.0
     set grid_right_bound = 10.0
-    set number_of_grid_elements_per_dimension = 8
+    set number_of_grid_elements_per_dimension = 16
   end
   set apply_initial_condition_method = interpolate_initial_condition_function
 end

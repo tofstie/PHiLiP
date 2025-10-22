@@ -942,8 +942,11 @@ public:
     /// Calculates global entropy at quadrature nodes
     virtual void calculate_global_entropy() = 0;
 
-    /// Calculates Projection Matrix from POD 
+    /// Calculates the projection matrix from the POD using the Pseudo-Inverse
     virtual void calculate_projection_matrix(dealii::TrilinosWrappers::SparseMatrix &V) = 0;
+
+    /// Calculates the projection matrix from the POD using matrix multiplication
+    virtual void calculate_projection_matrix(Epetra_CrsMatrix &LHS, Epetra_CrsMatrix &V) = 0;
 
     /// Calculates Reduced Order Projected Entropy 
     virtual void calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &V) = 0;

@@ -3934,6 +3934,11 @@ void DGWeak<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Trili
 {
     //Do Nothing... For now
 }
+
+template <int dim, int nstate, typename real, typename MeshType>
+void DGWeak<dim,nstate,real,MeshType>::calculate_projection_matrix(Epetra_CrsMatrix &/*LHS*/, Epetra_CrsMatrix &/*V*/) {
+    //Do Nothing 😴
+}
 template <int dim, int nstate, typename real, typename MeshType>
 void DGWeak<dim,nstate,real,MeshType>::calculate_ROM_projected_entropy(dealii::TrilinosWrappers::SparseMatrix &/*V*/)
 {
