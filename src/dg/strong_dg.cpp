@@ -1007,7 +1007,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_volume_term_strong(
             soln_basis_projection_oper.matrix_vector_mult_1D(entropy_var_at_q[istate],
                                                              entropy_var_coeff,
                                                              soln_basis_projection_oper.oneD_vol_operator);
-            if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+            if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
                 for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns; i_shape_fns++){
 
                     entropy_var_coeff[i_shape_fns] = this->projected_entropy[cell_dofs_indices[istate*n_shape_fns+i_shape_fns]];
@@ -1570,7 +1570,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_boundary_term_strong(
                                                          entropy_var_coeff,
                                                          soln_basis_projection_oper.oneD_vol_operator);
         // Project ROM HERE
-        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+        if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
             for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns; i_shape_fns++){
                 entropy_var_coeff[i_shape_fns] = this->projected_entropy[dof_indices[istate*n_shape_fns+i_shape_fns]];
             }
@@ -2234,7 +2234,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
                                                              entropy_var_coeff_int,
                                                              soln_basis_projection_oper_int.oneD_vol_operator);
         // ROM Projection here
-        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+        if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
             for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns_int; i_shape_fns++){
                 entropy_var_coeff_int[i_shape_fns] = this->projected_entropy[dof_indices_int[istate*n_shape_fns_int+i_shape_fns]];
             }
@@ -2254,7 +2254,7 @@ void DGStrong<dim,nstate,real,MeshType>::assemble_face_term_strong(
                                                              entropy_var_coeff_ext,
                                                              soln_basis_projection_oper_ext.oneD_vol_operator);
         // ROM Projection Here
-        if(this->all_parameters->reduced_order_param.entropy_varibles_in_snapshots) {
+        if(this->all_parameters->reduced_order_param.entropy_variables_in_snapshots) {
             for(unsigned int i_shape_fns = 0; i_shape_fns<n_shape_fns_ext; i_shape_fns++){
                 entropy_var_coeff_ext[i_shape_fns] = this->projected_entropy[dof_indices_ext[istate*n_shape_fns_ext+i_shape_fns]];
             }
@@ -3472,8 +3472,8 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     Epetra_Map Col_Map = V.trilinos_matrix().RowMap();
     Epetra_Map Row_Map = V.trilinos_matrix().DomainMap();
     Epetra_CrsMatrix pinvV = eig_to_epetra_matrix(PsuedoInv,Col_Map, Row_Map);
-    /*
     std::ofstream file2("pInv" + std::to_string(epetra_comm.MyPID()) + ".txt");
+    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
     if (file2.is_open()){
         file2 << PsuedoInv.format(CSVFormat);
     }
@@ -3481,7 +3481,6 @@ void DGStrong<dim,nstate,real,MeshType>::calculate_projection_matrix(dealii::Tri
     // Storing
     std::ofstream file3("pInv_Epetra"+ std::to_string(epetra_comm.MyPID()) + ".txt");
     pinvV.Print(file3);
-    */
     this->projection_matrix.reinit(pinvV);
 }
 

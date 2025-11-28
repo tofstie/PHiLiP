@@ -32,7 +32,7 @@ OfflinePOD<dim>::OfflinePOD(std::shared_ptr<DGBase<dim,double>> &dg_input)
     dg->evaluate_mass_matrices(compute_dRdW);
 
     pcout << "Searching files..." << std::endl;
-    if(dg->all_parameters->reduced_order_param.entropy_varibles_in_snapshots){
+    if(dg->all_parameters->reduced_order_param.entropy_variables_in_snapshots){
         getEntropyPODBasisFromSnapshots();
     } else {
         getPODBasisFromSnapshots();

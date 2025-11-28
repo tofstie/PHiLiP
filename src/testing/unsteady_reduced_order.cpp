@@ -44,7 +44,7 @@ int UnsteadyReducedOrder<dim,nstate>::run_test() const
     }
 
     // Change Parameters to Entropy-Stable ROM
-    ROM_param.reduced_order_param.entropy_varibles_in_snapshots = true;
+    ROM_param.reduced_order_param.entropy_variables_in_snapshots = true;
     ROM_param.flow_solver_param.unsteady_data_table_filename = table_name + "_ESROM";
     const Parameters::AllParameters Entropy_ROM_param_const = ROM_param;
     // Create ROM and Solve

@@ -59,7 +59,10 @@ public:
     bool residual_error_bool;
 
     /// Whether to include entropy varibles in snapshot
-    bool entropy_varibles_in_snapshots;
+    bool entropy_variables_in_snapshots;
+
+    /// Is the ROM constructed using the DoF construction
+    bool dof_rom_construction;
 
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
