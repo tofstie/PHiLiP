@@ -16,7 +16,7 @@ template<int dim, typename real, int n_rk_stages, typename MeshType>
 void PERKODESolver<dim,real,n_rk_stages, MeshType>::calculate_stage_solution (int istage, real dt, const bool pseudotime)
 {
     stage_solution = 0;
-    for (size_t k = 0; k < this->group_ID.size(); ++k){ // calculate stage solutions corresponding to tableaus
+    for (std::size_t k = 0; k < this->group_ID.size(); ++k){ // calculate stage solutions corresponding to tableaus
         if (this->calc_stage[k][istage]==true){
             for (int j = 0; j < istage; ++j){
                 if (this->butcher_tableau->get_a(istage,j, k+1) != 0){
@@ -32,8 +32,7 @@ void PERKODESolver<dim,real,n_rk_stages, MeshType>::calculate_stage_solution (in
     } 
     stage_solution.add(1.0, this->solution_update);
 
-    this->dg->solution = stage_solution; 
-    //std::cout << "stage soln" <<std::endl;
+    this->dg->solution = stage_solution;
 }
 
 template<int dim, typename real, int n_rk_stages, typename MeshType>
@@ -44,12 +43,8 @@ void PERKODESolver<dim,real,n_rk_stages,MeshType>::calculate_stage_derivative (i
 
     for (size_t k = 0; k < this->group_ID.size(); ++k){
         if (this->calc_stage[k][istage]==true){
-            this->dg->right_hand_side*=0;  
-            //this->dg->assemble_residual();         
+            this->dg->right_hand_side*=0;
             this->dg->assemble_residual(false, false, false, 0.0, this->group_ID[k]); //RHS : du/dt = RHS = F(u_n + dt* sum(a_ij*k_j) + dt * a_ii * u^(istage)))
-        //     int rank = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-        //     std::ofstream file ("right_hand_side_"+std::to_string(rank)+std::to_string(istage)+".txt");
-        //    this->dg->right_hand_side.print(file);
             if(this->all_parameters->use_inverse_mass_on_the_fly){
                 this->dg->apply_inverse_global_mass_matrix(this->dg->right_hand_side, this->rk_stage_k[k][istage]); //rk_stage[istage] = IMM*RHS = F(u_n + dt*sum(a_ij*k_j))
             } else{
@@ -57,11 +52,6 @@ void PERKODESolver<dim,real,n_rk_stages,MeshType>::calculate_stage_derivative (i
             }
          }
     }
-
-    // this->pcout << this->rk_stage_k[0][istage].size() << std::endl;
-    // for (unsigned int i = 0 ; i < this->rk_stage_k[0][istage].size(); ++i){
-    //     this->pcout << this->rk_stage_k[0][istage](i) << " " ;
-    // }
 }
 
 
@@ -137,7 +127,7 @@ void PERKODESolver<dim,real,n_rk_stages,MeshType>::allocate_runge_kutta_system (
         }
     }
 
-    // store whether or not to calculate stage
+    // store whether to calculate stage
     this->calc_stage.resize(this->group_ID.size());
     for (size_t k = 0; k < this->group_ID.size(); ++k) {
         this->calc_stage[k].resize(n_rk_stages);
@@ -153,6 +143,97 @@ void PERKODESolver<dim,real,n_rk_stages,MeshType>::allocate_runge_kutta_system (
         }
    }
    stage_solution.reinit(this->dg->solution);
+}
+
+template <int dim, typename real, int n_rk_stages, typename MeshType>
+void PERKODESolver<dim, real, n_rk_stages, MeshType>::partition_scheme()
+{
+    // Allocate the variables for the partitioning
+    using PartitionEnum = Parameters::ODESolverParam::PartitionTypeEnum;
+    this->dg->assemble_residual();
+    const std::size_t n_groups = this->ode_solver->group_ID.size();
+    const unsigned int n_cells = this->dg->triangulation->n_active_cells();
+
+    std::vector<dealii::LinearAlgebra::distributed::Vector<int>> locations_to_evaluate_rhs_1;
+    std::vector<std::vector<int>> locations_rhs_1;
+    std::vector<std::vector<std::vector<int>>> all_locations_rhs_1;
+
+    locations_to_evaluate_rhs_1.resize(n_groups);
+    locations_rhs_1.resize(n_groups);
+    all_locations_rhs_1.resize(n_groups);
+
+    for (std::size_t i = 0; i < n_groups; ++i) {
+        locations_to_evaluate_rhs_1[i].reinit(this->dg->triangulation->n_active_cells());
+        locations_to_evaluate_rhs_1[i] = 0;
+    }
+    for (std::size_t i = 0; i < n_groups; ++i) {
+        locations_rhs_1[i].resize(this->dg->triangulation->n_active_cells());
+    }
+    // Partitioning Cells
+    if (this->ode_param.partition_type == PartitionEnum::cell_size)
+    {
+        cell_size_partition(n_groups, locations_to_evaluate_rhs_1);
+    }
+    else if (this->ode_param.partition_type == PartitionEnum::cell_number)
+    {
+        cell_number_partition();
+    }
+    else
+    {
+        this->pcout << "Please specify a partition type when using PERK schemes" << std::endl;
+        std::abort();
+    }
+
+    std::vector<unsigned int> indices(n_cells);
+    std::iota(indices.begin(), indices.end(), 0);
+
+    for (std::size_t i = 0; i < n_groups; ++i){
+        // Copy dealii vector to std vector for all_gather
+        for (std::size_t t = 0; t < n_cells; ++t){
+            locations_rhs_1[i][t] = locations_to_evaluate_rhs_1[i][t];
+        }
+        all_locations_rhs_1[i] = dealii::Utilities::MPI::all_gather(MPI_COMM_WORLD, locations_rhs_1[i]);
+        // Copy the data from other cores into the cells. The data has to be the same on every core
+        const std::size_t n_ranks = all_locations_rhs_1[i].size();
+        for (std::size_t idx = 0; idx < n_ranks; ++idx){
+            if (idx != static_cast<std::size_t>(this->mpi_rank))
+                locations_to_evaluate_rhs_1[i].add(indices, all_locations_rhs_1[i][idx]);
+        }
+        locations_to_evaluate_rhs_1[i].compress(dealii::VectorOperation::insert);
+        locations_to_evaluate_rhs_1[i].update_ghost_values();
+        this->dg->set_list_of_cell_group_IDs(locations_to_evaluate_rhs_1[i], this->group_ID[i]);
+    }
+
+}
+template <int dim, typename real, int n_rk_stages, typename MeshType>
+void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_size_partition(
+    const int n_groups,
+    std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate
+)
+{
+    const double local_max = this->dg->cell_volume.linfty_norm();
+    const double max_cell_volume = dealii::Utilities::MPI::max(local_max, this->mpi_communicator);
+
+    for (typename dealii::DoFHandler<dim>::active_cell_iterator cell = this->dg->dof_handler.begin_active(); cell != this->dg->dof_handler.end(); ++cell) {
+        if (!cell->is_locally_owned())
+            continue;
+        const double vol = this->dg->cell_volume[cell->active_cell_index()];
+        for (std::size_t i = 0; i < n_groups; ++i) {
+            if (vol >= 0.05 * max_cell_volume && i == 0) {
+                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
+            } else if (i == 1 && vol >= 0.005 * max_cell_volume && vol < 0.05 * max_cell_volume) {
+                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
+            } else if (i == 2 && vol >= 0.0001 * max_cell_volume && vol < 0.005 * max_cell_volume) {
+                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
+            } else if (i == 3 && vol >= 0.000005 * max_cell_volume && vol < 0.0001 * max_cell_volume) {
+                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
+            } else if (i == 4 && vol >= 0.0000006 * max_cell_volume && vol < 0.000005 * max_cell_volume) {
+                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
+            } else if (i == 5 && vol < 0.0000006 * max_cell_volume) {
+                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
+            }
+        }
+    }
 }
 
 template class PERKODESolver<PHILIP_DIM, double,10, dealii::Triangulation<PHILIP_DIM> >;

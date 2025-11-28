@@ -181,6 +181,20 @@ void ODESolverParam::declare_parameters (dealii::ParameterHandler &prm)
                           "Beta controller 3 for automatic step size controller");
         }
         prm.leave_subsection();
+        prm.enter_subsection("perk solver");
+        {
+            prm.declare_entry("partition_type", "none",
+            dealii::Patterns::Selection(
+                      " none | "
+                      " cell_number | "
+                      " cell_size "),
+                      "Choose the partitioning type for the PERK schemes"
+                      "Choices are "
+                      " < none | "
+                      " cell_number | "
+                      " cell_size  >.");
+        }
+        prm.leave_subsection();
     }
     prm.leave_subsection();
 }
@@ -236,7 +250,7 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
         initial_time = prm.get_double("initial_time");
         initial_iteration = prm.get_integer("initial_iteration");
         initial_desired_time_for_output_solution_every_dt_time_intervals = prm.get_double("initial_desired_time_for_output_solution_every_dt_time_intervals");
-        
+        const std::string rk_method_string = prm.get("runge_kutta_method");
         const std::string rk_method_string = prm.get("runge_kutta_method");
         if (rk_method_string == "rk4_ex"){
             runge_kutta_method = RKMethodEnum::rk4_ex;
@@ -337,6 +351,20 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
         }
         prm.leave_subsection();
 
+        prm.enter_subsection("perk solver");
+        {
+            const std::string partition_string = prm.get("partition_type");
+            if (partition_string == "none")
+            {
+                partition_type = PartitionTypeEnum::none;
+            } else if (partition_string == "cell_number")
+            {
+                partition_type = PartitionTypeEnum::cell_number;
+            } else if (partition_string == "cell_size")
+            {
+                partition_type = PartitionTypeEnum::cell_size;
+            }
+        }
     }
     prm.leave_subsection();
 }

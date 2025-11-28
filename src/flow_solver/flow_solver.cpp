@@ -563,7 +563,7 @@ int FlowSolver<dim,nstate>::run() const
     PHiLiP::Parameters::AllParameters parameters = *(dg->all_parameters);
     using ODESolverEnum = Parameters::ODESolverParam::ODESolverEnum;
     if (parameters.ode_solver_param.ode_solver_type == ODESolverEnum::PERK_solver){
-        perk_partitioning();
+        this->ode_solver->partition_scheme();
     }
 
 

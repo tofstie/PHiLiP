@@ -79,7 +79,15 @@ public:
         PERK_10_2,
         PERK_3_16_3
     };
-    
+
+    /// Types of Partitioning
+    enum PartitionTypeEnum
+    {
+        none, /// No Partitioning
+        cell_size, /// Partitioning based on cell size
+        cell_number /// Partitioning based on cell number
+    };
+
     RKMethodEnum runge_kutta_method; ///< Runge-kutta method.
     int n_rk_stages; ///< Number of stages for an RK method; assigned based on runge_kutta_method
     int rk_order; ///< Order of the RK method; assigned based on runge_kutta_method
@@ -97,6 +105,9 @@ public:
 
     /// Use relaxation runge-kutta
     bool use_relaxation_runge_kutta;
+
+    PartitionTypeEnum partition_type;
+
 
     static void declare_parameters (dealii::ParameterHandler &prm); ///< Declares the possible variables and sets the defaults.
     void parse_parameters (dealii::ParameterHandler &prm); ///< Parses input file and sets the variables.

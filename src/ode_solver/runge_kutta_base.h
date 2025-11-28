@@ -49,6 +49,9 @@ public:
 
     /// Function to adjust time step size
     virtual real adjust_time_step(real dt) = 0;
+
+    /// Function to partition the scheme. Maybe move to ode_solver_base
+    virtual void partition_scheme() = 0;
     
 protected:
 
