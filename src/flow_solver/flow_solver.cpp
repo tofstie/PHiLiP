@@ -560,9 +560,9 @@ int FlowSolver<dim,nstate>::run() const
             dg->output_results_vtk(ode_solver->current_iteration);
         }
     }
-    PHiLiP::Parameters::AllParameters parameters = *(dg->all_parameters);
+
     using ODESolverEnum = Parameters::ODESolverParam::ODESolverEnum;
-    if (parameters.ode_solver_param.ode_solver_type == ODESolverEnum::PERK_solver){
+    if (ode_param.ode_solver_type == ODESolverEnum::PERK_solver){
         this->ode_solver->partition_scheme();
     }
 

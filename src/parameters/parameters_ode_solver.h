@@ -94,19 +94,27 @@ public:
     int num_delta; ///< Number of delta values in low-storage RK methods
     bool is_3Sstarplus; ///< True or false depending on what low-storage RK method is used
 
-    /// Flag to signal that automatic differentiation (AD) matrix dRdW must be allocated
-    bool allocate_matrix_dRdW;
 
-    /// Do output for root solving routine
-    OutputEnum rrk_root_solver_output;
+    bool allocate_matrix_dRdW; ///< Flag to signal that automatic differentiation (AD) matrix dRdW must be allocated
 
-    /// Tolerance for RRK root solver, default value 5E-10
-    double relaxation_runge_kutta_root_tolerance;
+    OutputEnum rrk_root_solver_output; ///< Do output for root solving routine
 
-    /// Use relaxation runge-kutta
-    bool use_relaxation_runge_kutta;
 
-    PartitionTypeEnum partition_type;
+    double relaxation_runge_kutta_root_tolerance; ///< Tolerance for RRK root solver, default value 5E-10
+
+
+    bool use_relaxation_runge_kutta; ///< Use relaxation runge-kutta
+
+
+    PartitionTypeEnum partition_type; ///< Partition Type
+
+    /// Number of groups in the partition
+    int number_of_groups;
+
+    ///
+    std::vector<double> double_group_values;
+
+    std::vector<int> int_group_values;
 
 
     static void declare_parameters (dealii::ParameterHandler &prm); ///< Declares the possible variables and sets the defaults.

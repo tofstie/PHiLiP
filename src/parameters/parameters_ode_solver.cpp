@@ -193,6 +193,18 @@ void ODESolverParam::declare_parameters (dealii::ParameterHandler &prm)
                       " < none | "
                       " cell_number | "
                       " cell_size  >.");
+
+            prm.declare_entry("number_of_groups", "1",
+                dealii::Patterns::Integer(),
+                "The number of groups in the partitioning");
+
+            prm.declare_entry("double_group_values", "1.0",
+                dealii::Patterns::List(dealii::Patterns::Double()),
+                "A list of length group_ID - 1 of double values for partitioning");
+
+            prm.declare_entry("int_group_values", "1",
+                dealii::Patterns::List(dealii::Patterns::Integer()),
+                "A list of length group_ID - 1 of int values for partitioning");
         }
         prm.leave_subsection();
     }
@@ -250,7 +262,6 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
         initial_time = prm.get_double("initial_time");
         initial_iteration = prm.get_integer("initial_iteration");
         initial_desired_time_for_output_solution_every_dt_time_intervals = prm.get_double("initial_desired_time_for_output_solution_every_dt_time_intervals");
-        const std::string rk_method_string = prm.get("runge_kutta_method");
         const std::string rk_method_string = prm.get("runge_kutta_method");
         if (rk_method_string == "rk4_ex"){
             runge_kutta_method = RKMethodEnum::rk4_ex;
@@ -353,8 +364,7 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
 
         prm.enter_subsection("perk solver");
         {
-            const std::string partition_string = prm.get("partition_type");
-            if (partition_string == "none")
+            if (const std::string partition_string = prm.get("partition_type"); partition_string == "none")
             {
                 partition_type = PartitionTypeEnum::none;
             } else if (partition_string == "cell_number")
@@ -364,6 +374,23 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
             {
                 partition_type = PartitionTypeEnum::cell_size;
             }
+
+            number_of_groups = prm.get_integer("number_of_groups");
+
+            const std::vector<std::string> double_tokens = dealii::Utilities::split_string_list(prm.get("double_group_values"));
+            double_group_values.resize(double_tokens.size());
+            for (std::size_t i = 0; i < double_tokens.size(); i++)
+            {
+                double_group_values[i] = dealii::Utilities::string_to_double(double_tokens[i]);
+            }
+
+            const std::vector<std::string> int_tokens = dealii::Utilities::split_string_list(prm.get("int_group_values"));
+            int_group_values.resize(int_tokens.size());
+            for (std::size_t i = 0; i < int_tokens.size(); i++)
+            {
+                int_group_values[i] = dealii::Utilities::string_to_double(int_tokens[i]);
+            }
+
         }
     }
     prm.leave_subsection();

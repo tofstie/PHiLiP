@@ -50,12 +50,15 @@ public:
 private:
     /// Partitions the grid based on cell size
     void cell_size_partition(
-        const int n_groups,
+        const std::size_t n_groups,
         std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate
         );
 
     /// Partitions the grid based on cell number
-    void cell_number_partition();
+    void cell_number_partition(
+        const std::size_t n_groups,
+        std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate
+    );
 
 protected:
     /// Stores Butcher tableau a and b, which specify the RK method

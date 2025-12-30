@@ -151,32 +151,32 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::partition_scheme()
     // Allocate the variables for the partitioning
     using PartitionEnum = Parameters::ODESolverParam::PartitionTypeEnum;
     this->dg->assemble_residual();
-    const std::size_t n_groups = this->ode_solver->group_ID.size();
+    const std::size_t n_groups = this->group_ID.size();
     const unsigned int n_cells = this->dg->triangulation->n_active_cells();
 
-    std::vector<dealii::LinearAlgebra::distributed::Vector<int>> locations_to_evaluate_rhs_1;
-    std::vector<std::vector<int>> locations_rhs_1;
-    std::vector<std::vector<std::vector<int>>> all_locations_rhs_1;
+    std::vector<dealii::LinearAlgebra::distributed::Vector<int>> local_locations_to_evaluate;
+    std::vector<std::vector<int>> locations_rhs_vector;
+    std::vector<std::vector<std::vector<int>>> all_cores_locations_to_evaluate;
 
-    locations_to_evaluate_rhs_1.resize(n_groups);
-    locations_rhs_1.resize(n_groups);
-    all_locations_rhs_1.resize(n_groups);
+    local_locations_to_evaluate.resize(n_groups);
+    locations_rhs_vector.resize(n_groups);
+    all_cores_locations_to_evaluate.resize(n_groups);
 
     for (std::size_t i = 0; i < n_groups; ++i) {
-        locations_to_evaluate_rhs_1[i].reinit(this->dg->triangulation->n_active_cells());
-        locations_to_evaluate_rhs_1[i] = 0;
+        local_locations_to_evaluate[i].reinit(this->dg->triangulation->n_active_cells());
+        local_locations_to_evaluate[i] = 0;
     }
     for (std::size_t i = 0; i < n_groups; ++i) {
-        locations_rhs_1[i].resize(this->dg->triangulation->n_active_cells());
+        locations_rhs_vector[i].resize(this->dg->triangulation->n_active_cells());
     }
     // Partitioning Cells
     if (this->ode_param.partition_type == PartitionEnum::cell_size)
     {
-        cell_size_partition(n_groups, locations_to_evaluate_rhs_1);
+        cell_size_partition(n_groups, local_locations_to_evaluate);
     }
     else if (this->ode_param.partition_type == PartitionEnum::cell_number)
     {
-        cell_number_partition();
+        cell_number_partition(n_groups, local_locations_to_evaluate);
     }
     else
     {
@@ -190,24 +190,24 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::partition_scheme()
     for (std::size_t i = 0; i < n_groups; ++i){
         // Copy dealii vector to std vector for all_gather
         for (std::size_t t = 0; t < n_cells; ++t){
-            locations_rhs_1[i][t] = locations_to_evaluate_rhs_1[i][t];
+            locations_rhs_vector[i][t] = local_locations_to_evaluate[i][t];
         }
-        all_locations_rhs_1[i] = dealii::Utilities::MPI::all_gather(MPI_COMM_WORLD, locations_rhs_1[i]);
+        all_cores_locations_to_evaluate[i] = dealii::Utilities::MPI::all_gather(MPI_COMM_WORLD, locations_rhs_vector[i]);
         // Copy the data from other cores into the cells. The data has to be the same on every core
-        const std::size_t n_ranks = all_locations_rhs_1[i].size();
+        const std::size_t n_ranks = all_cores_locations_to_evaluate[i].size();
         for (std::size_t idx = 0; idx < n_ranks; ++idx){
             if (idx != static_cast<std::size_t>(this->mpi_rank))
-                locations_to_evaluate_rhs_1[i].add(indices, all_locations_rhs_1[i][idx]);
+                local_locations_to_evaluate[i].add(indices, all_cores_locations_to_evaluate[i][idx]);
         }
-        locations_to_evaluate_rhs_1[i].compress(dealii::VectorOperation::insert);
-        locations_to_evaluate_rhs_1[i].update_ghost_values();
-        this->dg->set_list_of_cell_group_IDs(locations_to_evaluate_rhs_1[i], this->group_ID[i]);
+        local_locations_to_evaluate[i].compress(dealii::VectorOperation::insert);
+        local_locations_to_evaluate[i].update_ghost_values();
+        this->dg->set_list_of_cell_group_IDs(local_locations_to_evaluate[i], this->group_ID[i]);
     }
 
 }
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_size_partition(
-    const int n_groups,
+    const std::size_t n_groups,
     std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate
 )
 {
@@ -235,7 +235,29 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_size_partition(
         }
     }
 }
+template <int dim, typename real, int n_rk_stages, typename MeshType>
+void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_number_partition(
+const std::size_t n_groups,
+std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate )
+{
 
+    const int evaluate_until_this_index = local_locations_to_evaluate.size() / 2;
+    const int index_remainder = local_locations_to_evaluate.size() % 2;
+    int curr_idx = 0;
+    for (std::size_t group_idx = 0; group_idx < n_groups; ++group_idx)
+    {
+        for (int i = curr_idx; i < curr_idx + evaluate_until_this_index; ++i){
+            if (local_locations_to_evaluate[group_idx].in_local_range(i))
+                local_locations_to_evaluate[group_idx](i) = 1;
+        }
+        curr_idx += evaluate_until_this_index;
+    }
+    for (int i = 0; i < index_remainder; ++i)
+    {
+        if (local_locations_to_evaluate[n_groups - 1].in_local_range(i+curr_idx))
+            local_locations_to_evaluate[n_groups - 1](i+curr_idx);
+    }
+}
 template class PERKODESolver<PHILIP_DIM, double,10, dealii::Triangulation<PHILIP_DIM> >;
 template class PERKODESolver<PHILIP_DIM, double,10, dealii::parallel::shared::Triangulation<PHILIP_DIM> >;
 template class PERKODESolver<PHILIP_DIM, double,16, dealii::Triangulation<PHILIP_DIM> >;

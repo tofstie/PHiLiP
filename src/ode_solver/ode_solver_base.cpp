@@ -17,10 +17,13 @@ ODESolverBase<dim,real,MeshType>::ODESolverBase(std::shared_ptr< DGBase<dim, rea
         , current_desired_time_for_output_solution_every_dt_time_intervals(ode_param.initial_desired_time_for_output_solution_every_dt_time_intervals)
         , original_time_step(0.0)
         , modified_time_step(0.0)
+        , group_ID(ode_param.number_of_groups)
         , mpi_communicator(MPI_COMM_WORLD)
         , mpi_rank(dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
         , pcout(std::cout, mpi_rank==0)
-{}
+{
+    std::iota(group_ID.begin(), group_ID.end(), 1);
+}
 
 template <int dim, typename real, typename MeshType>
 ODESolverBase<dim,real,MeshType>::ODESolverBase(std::shared_ptr< DGBase<dim, real, MeshType> > dg_input)
@@ -324,6 +327,13 @@ int ODESolverBase<dim,real,MeshType>::advance_solution_time (double time_advance
     return 1;
 }
 
+template <int dim, typename real, typename MeshType>
+void ODESolverBase<dim,real,MeshType>::partition_scheme()
+{
+    /* Empty Function
+     * Used for PERK Schemes
+     */
+}
 template class ODESolverBase<PHILIP_DIM, double, dealii::Triangulation<PHILIP_DIM>>;
 template class ODESolverBase<PHILIP_DIM, double, dealii::parallel::shared::Triangulation<PHILIP_DIM>>;
 #if PHILIP_DIM != 1

@@ -117,9 +117,6 @@ public:
     /** This variable will change when step_in_time() is called. */
     double current_time;
 
-    std::vector<int> group_ID = {1, 2, 3, 4, 5, 6};
-    //std::vector<int> group_ID = {1};
-
     /// Current iteration.
     /** This variable will change when step_in_time() is called. */
     unsigned int current_iteration;
@@ -154,6 +151,18 @@ public:
     /** Used in RRK ODE solver.
      ** This is stored in ode_solver_base such that both flow solver case and ode solver can access it. */
     double relaxation_parameter_RRK_solver=1;
+
+    /// Group ID used for partitioning
+    std::vector<int> group_ID;
+
+    /// Double Group Seperation Values
+    std::vector<double> double_group_values;
+
+    /// Int Group Sepration Values
+    std::vector<int> int_group_values;
+
+    /// Function to partition the scheme
+    virtual void partition_scheme();
 
 protected:
     const MPI_Comm mpi_communicator; ///< MPI communicator.
