@@ -172,11 +172,11 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::partition_scheme()
     // Partitioning Cells
     if (this->ode_param.partition_type == PartitionEnum::cell_size)
     {
-        cell_size_partition(n_groups, local_locations_to_evaluate);
+        cell_size_partition(local_locations_to_evaluate);
     }
     else if (this->ode_param.partition_type == PartitionEnum::cell_number)
     {
-        cell_number_partition(n_groups, local_locations_to_evaluate);
+        cell_number_partition(local_locations_to_evaluate);
     }
     else
     {
@@ -207,10 +207,10 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::partition_scheme()
 }
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_size_partition(
-    const std::size_t n_groups,
     std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate
 )
 {
+    const std::size_t n_groups = this->ode_params.n_groups;
     const double local_max = this->dg->cell_volume.linfty_norm();
     const double max_cell_volume = dealii::Utilities::MPI::max(local_max, this->mpi_communicator);
 
@@ -237,26 +237,34 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_size_partition(
 }
 template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_number_partition(
-const std::size_t n_groups,
 std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate )
 {
-
-    const int evaluate_until_this_index = local_locations_to_evaluate.size() / 2;
-    const int index_remainder = local_locations_to_evaluate.size() % 2;
+    const std::size_t n_groups = this->ode_params.n_groups;
+    // const int evaluate_until_this_index = local_locations_to_evaluate.size() / n_groups;
+    // const int index_remainder = local_locations_to_evaluate.size() % n_groups;
     int curr_idx = 0;
-    for (std::size_t group_idx = 0; group_idx < n_groups; ++group_idx)
+    for (std::size_t i = 0; i < local_locations_to_evaluate.size(); ++i)
     {
-        for (int i = curr_idx; i < curr_idx + evaluate_until_this_index; ++i){
-            if (local_locations_to_evaluate[group_idx].in_local_range(i))
-                local_locations_to_evaluate[group_idx](i) = 1;
-        }
-        curr_idx += evaluate_until_this_index;
+        if (i < this->ode_param.int_group_values[curr_idx])
+            if(local_locations_to_evaluate[curr_idx].in_local_range(i))
+                local_locations_to_evaluate[curr_idx](i) = 1;
+        else
+            curr_idx++;
     }
-    for (int i = 0; i < index_remainder; ++i)
-    {
-        if (local_locations_to_evaluate[n_groups - 1].in_local_range(i+curr_idx))
-            local_locations_to_evaluate[n_groups - 1](i+curr_idx);
-    }
+
+    // for (std::size_t group_idx = 0; group_idx < n_groups; ++group_idx)
+    // {
+    //     for (int i = curr_idx; i < curr_idx + evaluate_until_this_index; ++i){
+    //         if (local_locations_to_evaluate[group_idx].in_local_range(i))
+    //             local_locations_to_evaluate[group_idx](i) = 1;
+    //     }
+    //     curr_idx += evaluate_until_this_index;
+    // }
+    // for (int i = 0; i < index_remainder; ++i)
+    // {
+    //     if (local_locations_to_evaluate[n_groups - 1].in_local_range(i+curr_idx))
+    //         local_locations_to_evaluate[n_groups - 1](i+curr_idx);
+    // }
 }
 template class PERKODESolver<PHILIP_DIM, double,10, dealii::Triangulation<PHILIP_DIM> >;
 template class PERKODESolver<PHILIP_DIM, double,10, dealii::parallel::shared::Triangulation<PHILIP_DIM> >;
