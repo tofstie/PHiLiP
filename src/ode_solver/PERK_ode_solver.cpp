@@ -210,7 +210,7 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_size_partition(
     std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate
 )
 {
-    const std::size_t n_groups = this->ode_params.n_groups;
+    const std::size_t n_groups = this->ode_param.number_of_groups;
     const double local_max = this->dg->cell_volume.linfty_norm();
     const double max_cell_volume = dealii::Utilities::MPI::max(local_max, this->mpi_communicator);
 
@@ -231,13 +231,13 @@ template <int dim, typename real, int n_rk_stages, typename MeshType>
 void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_number_partition(
 std::vector<dealii::LinearAlgebra::distributed::Vector<int>> &local_locations_to_evaluate )
 {
-    const std::size_t n_groups = this->ode_params.n_groups;
+    //const std::size_t n_groups = this->ode_param.number_of_groups;
     // const int evaluate_until_this_index = local_locations_to_evaluate.size() / n_groups;
     // const int index_remainder = local_locations_to_evaluate.size() % n_groups;
     int curr_idx = 0;
     for (std::size_t i = 0; i < local_locations_to_evaluate.size(); ++i)
     {
-        if (i < this->ode_param.int_group_values[curr_idx])
+        if ((int) i < this->ode_param.int_group_values[curr_idx])
             if(local_locations_to_evaluate[curr_idx].in_local_range(i))
                 local_locations_to_evaluate[curr_idx](i) = 1;
         else
