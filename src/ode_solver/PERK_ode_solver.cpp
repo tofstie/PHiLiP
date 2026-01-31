@@ -218,19 +218,11 @@ void PERKODESolver<dim, real, n_rk_stages, MeshType>::cell_size_partition(
         if (!cell->is_locally_owned())
             continue;
         const double vol = this->dg->cell_volume[cell->active_cell_index()];
-        for (std::size_t i = 0; i < n_groups; ++i) {
-            if (vol >= 0.05 * max_cell_volume && i == 0) {
+        for (std::size_t i = n_groups - 1; i-- > 0;) {
+            if (max_cell_volume * this->ode_param.double_group_values[i] < vol)
+            {
                 local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
-            } else if (i == 1 && vol >= 0.005 * max_cell_volume && vol < 0.05 * max_cell_volume) {
-                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
-            } else if (i == 2 && vol >= 0.0001 * max_cell_volume && vol < 0.005 * max_cell_volume) {
-                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
-            } else if (i == 3 && vol >= 0.000005 * max_cell_volume && vol < 0.0001 * max_cell_volume) {
-                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
-            } else if (i == 4 && vol >= 0.0000006 * max_cell_volume && vol < 0.000005 * max_cell_volume) {
-                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
-            } else if (i == 5 && vol < 0.0000006 * max_cell_volume) {
-                local_locations_to_evaluate[i](cell->active_cell_index()) = 1;
+                break;
             }
         }
     }

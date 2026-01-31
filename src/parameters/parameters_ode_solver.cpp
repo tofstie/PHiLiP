@@ -383,6 +383,7 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
             {
                 double_group_values[i] = dealii::Utilities::string_to_double(double_tokens[i]);
             }
+            std::sort(double_group_values.begin(),double_group_values.end());
 
             const std::vector<std::string> int_tokens = dealii::Utilities::split_string_list(prm.get("int_group_values"));
             int_group_values.resize(int_tokens.size());
@@ -390,7 +391,7 @@ void ODESolverParam::parse_parameters (dealii::ParameterHandler &prm)
             {
                 int_group_values[i] = dealii::Utilities::string_to_double(int_tokens[i]);
             }
-
+            std::sort(int_group_values.begin(),int_group_values.end());
         }
     }
     prm.leave_subsection();
